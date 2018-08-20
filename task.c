@@ -11,7 +11,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     //jl_task_t *newt = (jl_task_t*)jl_gc_alloc(ptls, sizeof(jl_task_t),
     //                                       jl_task_type);   // jl_gc_alloc is not exported.
     jl_task_t *newt = (jl_task_t*)jl_gc_allocobj(sizeof(jl_task_t)); // implementation a.
-    //jl_task_t *newt = (jl_task_t*)jl_new_task(t->start, t->ssize); //  Less efficient than a.
+    //jl_task_t *newt = (jl_task_t*)jl_new_task(t->start, t->ssize); //  Not efficient as a.
     memset(newt, 0, sizeof(jl_task_t));
     jl_set_typeof(newt, jl_task_type);
     newt->stkbuf = NULL;
@@ -23,26 +23,22 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     newt->state = t->state;
     newt->start = t->start;
     newt->tls = jl_nothing;
-    newt->consumers = jl_nothing;
+    newt->logstate = ptls->current_task->logstate;    // TODO: need testing.
     newt->result = jl_nothing;
     newt->donenotify = jl_nothing;
     newt->exception = jl_nothing;
     newt->backtrace = jl_nothing;
     newt->eh = t->eh;
     newt->gcstack = t->gcstack;
+    newt->tid = t->tid; // TODO: need testing
+    newt->started = t->started;  // TODO: need testing
 
-    /*
-     jl_printf(JL_STDOUT,"t: %p\n", t);
-     jl_printf(JL_STDOUT,"t->stkbuf: %p\n", t->stkbuf);
-     jl_printf(JL_STDOUT,"t->gcstack: %p\n", t->gcstack);
-     jl_printf(JL_STDOUT,"t->bufsz: %zu\n", t->bufsz);
-     */
 
     memcpy((void*)newt->ctx, (void*)t->ctx, sizeof(jl_jmp_buf));
 //#ifdef COPY_STACKS
     if (t->stkbuf){
         newt->ssize = t->ssize;  // size of saved piece
-        // newt->stkbuf = allocb(t->bufsz); 
+        // newt->stkbuf = allocb(t->bufsz); // needs to be allocb(t->bufsz)
         // newt->bufsz = t->bufsz;
         // memcpy(newt->stkbuf, t->stkbuf, t->bufsz);
         // workaround, newt and t will get new stkbuf when savestack is called.
