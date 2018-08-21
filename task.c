@@ -1,6 +1,6 @@
 /*
  task.c
- lightweight processes (symmetric coroutines)
+ task copying (aka continuation) for lightweight processes (symmetric coroutines)
  */
 
 #include "julia.h"
@@ -10,8 +10,8 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     jl_ptls_t ptls = jl_get_ptls_states();
     //jl_task_t *newt = (jl_task_t*)jl_gc_alloc(ptls, sizeof(jl_task_t),
     //                                       jl_task_type);   // jl_gc_alloc is not exported.
-    jl_task_t *newt = (jl_task_t*)jl_gc_allocobj(sizeof(jl_task_t)); // implementation a.
-    //jl_task_t *newt = (jl_task_t*)jl_new_task(t->start, t->ssize); //  Not efficient as a.
+    jl_task_t *newt = (jl_task_t*)jl_gc_allocobj(sizeof(jl_task_t)); //  Implementation a.
+    //jl_task_t *newt = (jl_task_t*)jl_new_task(t->start, t->ssize); //  Less efficient than a.
     memset(newt, 0, sizeof(jl_task_t));
     jl_set_typeof(newt, jl_task_type);
     newt->stkbuf = NULL;
@@ -23,14 +23,14 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     newt->state = t->state;
     newt->start = t->start;
     newt->tls = jl_nothing;
-    newt->logstate = ptls->current_task->logstate;    // TODO: need testing.
+    newt->logstate = ptls->current_task->logstate;    
     newt->result = jl_nothing;
     newt->donenotify = jl_nothing;
     newt->exception = jl_nothing;
     newt->backtrace = jl_nothing;
     newt->eh = t->eh;
     newt->gcstack = t->gcstack;
-    newt->tid = t->tid; // TODO: need testing
+    newt->tid = t->tid;          // TODO: need testing
     newt->started = t->started;  // TODO: need testing
 
 
@@ -51,7 +51,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
         newt->stkbuf = NULL;
     }
 //#else
-//#error task copying not supported yet.
+//#error Task switching mechanism other than task copying is not supported yet.
 //#endif
     JL_GC_POP();
     jl_gc_wb_back(newt);
