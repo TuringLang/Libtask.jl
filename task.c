@@ -38,7 +38,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
 //#ifdef COPY_STACKS
     if (t->stkbuf){
         newt->ssize = t->ssize;  // size of saved piece
-        // newt->stkbuf = allocb(t->bufsz); // needs to be allocb(t->bufsz)
+        // newt->stkbuf = allocb(t->bufsz); 
         // newt->bufsz = t->bufsz;
         // memcpy(newt->stkbuf, t->stkbuf, t->bufsz);
         // workaround, newt and t will get new stkbuf when savestack is called.
@@ -51,7 +51,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
         newt->stkbuf = NULL;
     }
 //#else
-//#error Task switching mechanism other than task copying is not supported yet.
+//#error Task copying mechanism other than stack copying is not supported yet.
 //#endif
     JL_GC_POP();
     jl_gc_wb_back(newt);
