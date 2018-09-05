@@ -1,5 +1,5 @@
 # Libtask
-C shim for task copying in Turing
+C shim for [task copying](https://github.com/JuliaLang/julia/issues/4085) in Turing
 
 ```julia
 using Libtask
