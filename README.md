@@ -20,6 +20,8 @@ consume(t) == 1
 a = copy(t);
 consume(a) == 2
 consume(a) == 3
+consume(t) == 2
+consume(t) == 3
 
 # Heap allocated objects are shallowly copied.
 
@@ -38,4 +40,6 @@ consume(t) == 1
 a = copy(t);
 consume(a) == 2
 consume(a) == 3
+consume(t) == 4
+consume(t) == 5
 ```
