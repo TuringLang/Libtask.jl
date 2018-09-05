@@ -42,4 +42,25 @@ consume(a) == 2
 consume(a) == 3
 consume(t) == 4
 consume(t) == 5
+
+# TArray objects are deep copied. 
+
+function f_cta()
+  t = TArray(Int, 1);
+  t[1] = 0;
+  while true
+    produce(t[1])
+    t[1] = 1 + t[1]
+  end
+end
+
+t = Task(f_cta)
+
+consume(t) == 0
+consume(t) == 1
+a = copy(t);
+consume(a) == 2
+consume(a) == 3
+consume(t) == 2
+consume(t) == 3
 ```
