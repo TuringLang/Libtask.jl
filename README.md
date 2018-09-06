@@ -1,4 +1,7 @@
 # Libtask
+[![Build Status](https://travis-ci.org/TuringLang/Libtask.jl.svg?branch=master)](https://travis-ci.org/TuringLang/Libtask.jl)
+[![Build status](https://ci.appveyor.com/api/projects/status/9oj4lh1bdya2ofjm/branch/master?svg=true)](https://ci.appveyor.com/project/TuringLang/libtask-jl/branch/master)
+
 C shim for [task copying](https://github.com/JuliaLang/julia/issues/4085) in Turing
 
 ```julia
