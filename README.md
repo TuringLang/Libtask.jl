@@ -26,7 +26,7 @@ consume(a) == 3
 consume(t) == 2
 consume(t) == 3
 
-# Heap allocated objects are shallowly copied.
+# Heap allocated objects are shallow copied.
 
 function f_ct2()
   t = [0 1 2];
