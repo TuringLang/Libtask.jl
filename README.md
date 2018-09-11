@@ -67,3 +67,5 @@ consume(a) == 3
 consume(t) == 2
 consume(t) == 3
 ```
+
+Disclaimer: Task copying is experimental and should only be used with caution. Some discussions on this topic can be found [here](https://github.com/JuliaLang/julia/pull/15078).
