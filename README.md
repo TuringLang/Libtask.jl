@@ -46,7 +46,9 @@ consume(a) == 3
 consume(t) == 4
 consume(t) == 5
 
-# TArray objects are deep copied. 
+# `TArray` implements a copy-on-write array. This is useful for task copying. 
+#  In constrast to standard arrays, which arr only shallow copied during task copying, 
+#  `TArray` are deep copied after task copying. 
 
 function f_cta()
   t = TArray(Int, 1);
@@ -68,4 +70,6 @@ consume(t) == 2
 consume(t) == 3
 ```
 
-Disclaimer: Task copying is experimental and should only be used with caution. Some discussions on this topic can be found [here](https://github.com/JuliaLang/julia/pull/15078).
+Note: The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming language uses this task copying feature in an efficient implementation of the [particle filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling algorithm for arbitary order [Markov processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model). 
+
+Disclaimer: This feature is still experimental and should only be used with caution. Some discussions on its potential caveats can be found [here](https://github.com/JuliaLang/julia/pull/15078).
