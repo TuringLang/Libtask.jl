@@ -83,13 +83,22 @@ end
 
 consume(p::Task, values...) = begin
 
+    if nothing != p.exception
+        throw(p.exception)
+    end
+
     if p.storage == nothing
         p.storage = IdDict()
     end
     haskey(p.storage, :consumers) || (p.storage[:consumers] = nothing)
 
     if istaskdone(p)
-        return wait(p)
+        p_wait = try
+            wait(p)
+        catch e
+            @error e
+        end
+        return p_wait
     end
 
     ct = current_task()
@@ -113,5 +122,13 @@ consume(p::Task, values...) = begin
         push!(p.storage[:consumers].waitq, ct)
     end
 
-    p.state == :runnable ? Base.schedule_and_wait(p) : wait() # don't attempt to queue it twice
+    if p.state == :runnable
+        try
+            Base.schedule_and_wait(p)
+        catch e
+            @error e
+        end
+    else
+        wait() # don't attempt to queue it twice
+    end
 end
