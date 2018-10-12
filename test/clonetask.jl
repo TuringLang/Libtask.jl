@@ -41,3 +41,17 @@ a = copy(t);
 @test consume(t) == 5
 @test consume(a) == 6
 @test consume(a) == 7
+
+# Breaking test
+function g_break()
+    t = 0
+    while true
+        t[3] = 1
+        produce(t)
+        t = t + 1
+    end
+end
+
+t = Task(g_break)
+
+@test_throws MethodError consume(t)
