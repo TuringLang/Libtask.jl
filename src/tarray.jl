@@ -42,30 +42,27 @@ function TArray(T::Type, dim)
   res
 end
 
+'''
+Indexing Interface Implementation
+'''
 # pass through getindex and setindex!
 # duplicate TArray if task id does not match current_task
 function Base.getindex(S::TArray, i::Real)
-  t, d = task_local_storage(S.ref)
-  newd = d
-#   ct = current_task()
-#   if t != ct
-#     # println("[getindex]: $(S.ref ) copying data")
-#     newd = deepcopy(d)
-#     task_local_storage(S.ref, (ct, newd))
-#   end
-  getindex(newd, i)
+    t, d = task_local_storage(S.ref)
+    newd = d
+    getindex(newd, i)
 end
 
 function Base.setindex!(S::TArray, x, i::Real)
-  n, d = task_local_storage(S.ref)
-  cn   = n_copies()
-  newd = d
-  if cn > n
-    # println("[setindex!]: $(S.ref) copying data")
-    newd = deepcopy(d)
-    task_local_storage(S.ref, (cn, newd))
-  end
-  setindex!(newd, x, i)
+    n, d = task_local_storage(S.ref)
+    cn   = n_copies()
+    newd = d
+    if cn > n
+        # println("[setindex!]: $(S.ref) copying data")
+        newd = deepcopy(d)
+        task_local_storage(S.ref, (cn, newd))
+    end
+    setindex!(newd, x, i)
 end
 
 function Base.firstindex(S::TArray)
