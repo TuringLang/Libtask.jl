@@ -23,7 +23,7 @@ for i in 1:4 ta[i] = i end  # assign
 Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 ```
 """
-struct TArray{T,N} <: DenseArray{T,N}
+struct TArray{T,N} <: AbstractArray{T,N}
   ref :: Symbol  # object_id
   TArray{T,N}() where {T,N} = new(gensym())
 end
