@@ -47,7 +47,7 @@ consume(t) == 4
 consume(t) == 5
 
 # `TArray` implements a copy-on-write array. This is useful for task copying. 
-#  In constrast to standard arrays, which arr only shallow copied during task copying, 
+#  In constrast to standard arrays, which are only shallow copied during task copying, 
 #  `TArray` are deep copied after task copying. 
 
 function f_cta()
