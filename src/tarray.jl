@@ -42,15 +42,12 @@ function TArray(T::Type, dim)
   res
 end
 
-'''
-Indexing Interface Implementation
-'''
-# pass through getindex and setindex!
-# duplicate TArray if task id does not match current_task
+#
+# Indexing Interface Implementation
+#
 function Base.getindex(S::TArray, i::Real)
     t, d = task_local_storage(S.ref)
-    newd = d
-    getindex(newd, i)
+    getindex(d, i)
 end
 
 function Base.setindex!(S::TArray, x, i::Real)
@@ -73,6 +70,14 @@ end
 function Base.lastindex(S::TArray)
     _, d = task_local_storage(S.ref)
     lastindex(d)
+end
+
+#
+# Iterator Interface Implementation
+#
+function Base.iterate(S::TArray, state=1)
+    _, d = task_local_storage(S.ref)
+    return iterate(d, state)
 end
 
 function Base.push!(S::TArray, x)
