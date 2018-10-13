@@ -124,6 +124,17 @@ Base.ndims(S::TArray) = Base.ndims(task_local_storage(S.ref)[2])
 # Base.get(t::Task, S::TArray) = (t.storage[S.ref][2])
 Base.get(S::TArray) = (current_task().storage[S.ref][2])
 
+#
+# Similarity implementation
+#
+function Base.eltype(S::TArray)
+    _, d = task_local_storage(S.ref)
+    return eltype(d)
+end
+
+Base.similar(S::TArray) = tzeros(eltype(S), size(S))
+Base.similar(S::TArray, ::Type{T}) where {T} = tzeros(T, size(S))
+Base.similar(S::TArray, dims::Dims) = tzeros(eltype(S), dims)
 
 ##########
 # tzeros #
