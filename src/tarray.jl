@@ -68,6 +68,16 @@ function Base.setindex!(S::TArray, x, i::Real)
   setindex!(newd, x, i)
 end
 
+function Base.firstindex(S::TArray)
+    _, d = task_local_storage(S.ref)
+    firstindex(d)
+end
+
+function Base.lastindex(S::TArray)
+    _, d = task_local_storage(S.ref)
+    lastindex(d)
+end
+
 function Base.push!(S::TArray, x)
   n, d = task_local_storage(S.ref)
   cn   = n_copies()
