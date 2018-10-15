@@ -24,8 +24,9 @@ Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 ```
 """
 struct TArray{T,N} <: AbstractArray{T,N}
-  ref :: Symbol  # object_id
-  TArray{T,N}() where {T,N} = new(gensym())
+    ref :: Symbol  # object_id
+    orig_task :: Task
+    TArray{T,N}() where {T,N} = new(gensym(), current_task())
 end
 
 TArray{T}() where T = TArray(T,  d)
@@ -35,11 +36,11 @@ TArray{T,N}(d::Integer...) where {T,N} = length(d)==N ? TArray(T, convert(Tuple{
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 
 function TArray(T::Type, dim)
-  res = TArray{T,length(dim)}();
-  n = n_copies()
-  d = Array{T}(undef, dim)
-  task_local_storage(res.ref, (n,d))
-  res
+    res = TArray{T,length(dim)}();
+    n = n_copies()
+    d = Array{T}(undef, dim)
+    task_local_storage(res.ref, (n,d))
+    res
 end
 
 #
@@ -81,40 +82,44 @@ function Base.iterate(S::TArray, state=1)
 end
 
 function Base.push!(S::TArray, x)
-  n, d = task_local_storage(S.ref)
-  cn   = n_copies()
-  newd = d
-  if cn > n
-    newd = deepcopy(d)
-    task_local_storage(S.ref, (cn, newd))
-  end
-  push!(newd, x)
+    n, d = task_local_storage(S.ref)
+    cn   = n_copies()
+    newd = d
+    if cn > n
+        newd = deepcopy(d)
+        task_local_storage(S.ref, (cn, newd))
+    end
+    push!(newd, x)
 end
 
 function Base.pop!(S::TArray)
-  n, d = task_local_storage(S.ref)
-  cn   = n_copies()
-  newd = d
-  if cn > n
-    newd = deepcopy(d)
-    task_local_storage(S.ref, (cn, newd))
-  end
-  pop!(d)
+    n, d = task_local_storage(S.ref)
+    cn   = n_copies()
+    newd = d
+    if cn > n
+        newd = deepcopy(d)
+        task_local_storage(S.ref, (cn, newd))
+    end
+    pop!(d)
 end
 
 function Base.convert(::Type{TArray}, x::Array)
-  res = TArray{typeof(x[1]),ndims(x)}();
-  n   = n_copies()
-  task_local_storage(res.ref, (n,x))
-  res
+    res = TArray{typeof(x[1]),ndims(x)}();
+    n   = n_copies()
+    task_local_storage(res.ref, (n,x))
+    return res
 end
 
 function Base.convert(::Array, x::Type{TArray})
-  n,d = task_local_storage(S.ref)
-  c = deepcopy(d)
-  return c
+    n,d = task_local_storage(S.ref)
+    c = deepcopy(d)
+    return c
 end
 
+function Base.display(S::TArray)
+    arr = S.orig_task.storage[S.ref][2]
+    display(arr)
+end
 
 Base.show(io::IO, S::TArray) = Base.show(io::IO, task_local_storage(S.ref)[2])
 Base.size(S::TArray) = Base.size(task_local_storage(S.ref)[2])
@@ -158,11 +163,11 @@ Array(tz)                   # convert to 4-element Array{Int64,1}: [0, 0, 0, 0]
 ```
 """
 function tzeros(T::Type, dim)
-  res = TArray{T,length(dim)}();
-  n = n_copies()
-  d = zeros(T,dim)
-  task_local_storage(res.ref, (n,d))
-  res
+    res = TArray{T,length(dim)}();
+    n = n_copies()
+    d = zeros(T,dim)
+    task_local_storage(res.ref, (n,d))
+    return res
 end
 
 tzeros(::Type{T}, d1::Integer, drest::Integer...) where T = tzeros(T, convert(Dims, tuple(d1, drest...)))
