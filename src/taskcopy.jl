@@ -32,7 +32,7 @@ function Base.copy(t::Task)
   newt
 end
 
-produce(v) = begin
+function produce(v)
     ct = current_task()
 
     if ct.storage == nothing
@@ -56,7 +56,12 @@ produce(v) = begin
         wait()
     end
 
+    
+    @info "[produce]: Got task $t and value: $v"
+    
+    # TODO: Do something else here?
     t.state == :runnable || throw(AssertionError("producer.consumer.state == :runnable"))
+    
     if empty
         Base.schedule_and_wait(t, v)
         ct = current_task() # When a task is copied, ct should be updated to new task ID.
@@ -81,24 +86,22 @@ produce(v) = begin
     end
 end
 
-consume(p::Task, values...) = begin
+function consume(p::Task, values...)
 
-    if nothing != p.exception
-        throw(p.exception)
-    end
+    p.exception != nothing ? rethrow(p.exception) : nothing
 
     if p.storage == nothing
         p.storage = IdDict()
     end
+    
     haskey(p.storage, :consumers) || (p.storage[:consumers] = nothing)
 
     if istaskdone(p)
-        p_wait = try
-            wait(p)
-        catch e
-            @error e
+        try
+            return wait(p)
+        catch ex
+            rethrow(e)
         end
-        return p_wait
     end
 
     ct = current_task()
@@ -122,13 +125,51 @@ consume(p::Task, values...) = begin
         push!(p.storage[:consumers].waitq, ct)
     end
 
+    @info "[consume]: Consumers of task p: $(p.storage[:consumers])"
+    @info "[consume]: Using task $p"
     if p.state == :runnable
-        try
-            Base.schedule_and_wait(p)
-        catch e
-            @error e
+        @info "[consume]: Starting task $p"
+
+        # Start the task. This is probably very problematic.
+        yield(p)
+        p.exception != nothing ? rethrow(p.exception) : nothing
+
+        @info "[consume]: Before schedule and wait for task: $p"
+        Base.schedule_and_wait(p)
+
+
+        # NOTE: The lines below are not sufficient to catch the exceptions.
+        """
+        if isempty(Base.Workqueue)
+            @info "yieldto"
+            try
+                yieldto(p)
+            catch ex
+                rethrow(ex)
+                Base.throwto(p, InterruptException())
+            end
+        else
+            @info "schedule"
+            try
+                Base.schedule(p)
+            catch ex
+                rethrow(ex)
+                Base.throwto(p, InterruptException())
+            end
         end
+        @info "before wait"
+        try
+            Base.wait()
+        catch ex
+            rethrow(ex)
+            Base.throwto(p, InterruptException())
+        end
+        """
     else
-        wait() # don't attempt to queue it twice
+        try
+            Base.wait()
+        catch ex
+            rethrow(ex)
+        end
     end
 end
