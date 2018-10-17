@@ -46,12 +46,17 @@ end
 #
 # Indexing Interface Implementation
 #
-function Base.getindex(S::TArray, i::Real)
+# function Base.getindex(S::TArray, i::Real)
+#     t, d = task_local_storage(S.ref)
+#     return getindex(d, i)
+# end
+
+function Base.getindex(S::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
     t, d = task_local_storage(S.ref)
-    getindex(d, i)
+    return d[I...]
 end
 
-function Base.setindex!(S::TArray, x, i::Real)
+function Base.setindex!(S::TArray{T, N}, x, I::Vararg{Int,N}) where {T, N}
     n, d = task_local_storage(S.ref)
     cn   = n_copies()
     newd = d
@@ -60,7 +65,7 @@ function Base.setindex!(S::TArray, x, i::Real)
         newd = deepcopy(d)
         task_local_storage(S.ref, (cn, newd))
     end
-    setindex!(newd, x, i)
+    newd[I...] = x
 end
 
 function Base.firstindex(S::TArray)
@@ -173,3 +178,27 @@ end
 tzeros(::Type{T}, d1::Integer, drest::Integer...) where T = tzeros(T, convert(Dims, tuple(d1, drest...)))
 tzeros(d1::Integer, drest::Integer...) = tzeros(Float64, convert(Dims, tuple(d1, drest...)))
 tzeros(d::Dims) = tzeros(Float64, d)
+
+"""
+     tfill(val, dim, ...)
+
+Construct a TArray of a specified value.
+
+```julia
+tfill(val, dim)
+```
+
+Example:
+
+```julia
+tz = tfill(9.0, 4)            # construct
+Array(tz)                     # convert to 4-element Array{Float64,1}:  [9.0  9.0  9.0  9.0]
+```
+"""
+function tfill(val::Real, dim)
+    res = TArray{typeof(val),length(dim)}();
+    n = n_copies()
+    d = fill(val,dim)
+    task_local_storage(res.ref, (n,d))
+    return res
+end
