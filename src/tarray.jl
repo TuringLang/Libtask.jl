@@ -29,10 +29,9 @@ struct TArray{T,N} <: AbstractArray{T,N}
     TArray{T,N}() where {T,N} = new(gensym(), current_task())
 end
 
-TArray{T}() where T = TArray(T,  d)
 TArray{T,1}(d::Integer) where T = TArray(T,  d)
-TArray{T}(d::Integer...) where T = TArray(T, convert(Tuple{Vararg{Int}}, d))
-TArray{T,N}(d::Integer...) where {T,N} = length(d)==N ? TArray(T, convert(Tuple{Vararg{Int}}, d)) : error("malformed dims")
+TArray{T}(d::Integer...) where T = TArray(T, d)
+TArray{T,N}(d::Integer...) where {T,N} = length(d)==N ? TArray(T,d) : error("Malformed dims")
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 
 function TArray(T::Type, dim)
@@ -46,10 +45,6 @@ end
 #
 # Indexing Interface Implementation
 #
-# function Base.getindex(S::TArray, i::Real)
-#     t, d = task_local_storage(S.ref)
-#     return getindex(d, i)
-# end
 
 function Base.getindex(S::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
     t, d = task_local_storage(S.ref)
@@ -66,24 +61,6 @@ function Base.setindex!(S::TArray{T, N}, x, I::Vararg{Int,N}) where {T, N}
         task_local_storage(S.ref, (cn, newd))
     end
     newd[I...] = x
-end
-
-function Base.firstindex(S::TArray)
-    _, d = task_local_storage(S.ref)
-    firstindex(d)
-end
-
-function Base.lastindex(S::TArray)
-    _, d = task_local_storage(S.ref)
-    lastindex(d)
-end
-
-#
-# Iterator Interface Implementation
-#
-function Base.iterate(S::TArray, state=1)
-    _, d = task_local_storage(S.ref)
-    return iterate(d, state)
 end
 
 function Base.push!(S::TArray, x)
@@ -134,13 +111,15 @@ Base.ndims(S::TArray) = Base.ndims(task_local_storage(S.ref)[2])
 # Base.get(t::Task, S::TArray) = (t.storage[S.ref][2])
 Base.get(S::TArray) = (current_task().storage[S.ref][2])
 
+# Implements eltype, firstindex, lastindex, and iterate
+# functions.
+for F in (:eltype, :firstindex, :lastindex, :iterate)
+    @eval Base.$F(a::TArray, args...) = $F(get(a), args...)
+end
+
 #
 # Similarity implementation
 #
-function Base.eltype(S::TArray)
-    _, d = task_local_storage(S.ref)
-    return eltype(d)
-end
 
 Base.similar(S::TArray) = tzeros(eltype(S), size(S))
 Base.similar(S::TArray, ::Type{T}) where {T} = tzeros(T, size(S))
