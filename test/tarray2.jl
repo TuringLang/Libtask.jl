@@ -29,3 +29,6 @@ for i in 1:4 ta6[i] = i / 10 end
 @test Array(ta6) == [0.1, 0.2, 0.3, 0.4]
 
 ta7 = TArray{Int, 2}((2, 2));   # TODO: add test for use this multi-dim array
+
+ta8 = tfill(19, (5,5,5,5))
+@test ta8[1,1,1,1] == 19

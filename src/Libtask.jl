@@ -1,6 +1,6 @@
 module Libtask
 
-export consume, produce, TArray, get, tzeros
+export consume, produce, TArray, get, tzeros, tfill
 
 include("../deps/deps.jl"); check_deps();
 include("taskcopy.jl")
