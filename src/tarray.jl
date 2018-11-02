@@ -100,6 +100,7 @@ end
 
 function Base.display(S::TArray)
     arr = S.orig_task.storage[S.ref][2]
+    @warn "display(::TArray) prints the originating task's storage, not the current task's storage. Please use show(::TArray) to display the current task's version of a TArray."
     display(arr)
 end
 
