@@ -40,12 +40,12 @@ function TRef(x)
     return res
 end
 
-function Base.getindex(S::TRef, I::Vararg{Int,N}) where {N}
+function Base.getindex(S::TRef, I::Vararg{Any,N}) where {N}
     _, d = task_local_storage(S.ref)
     return d[][I...]
 end
 
-function Base.setindex!(S::TRef, x, I::Vararg{Int,N}) where {N}
+function Base.setindex!(S::TRef, x, I::Vararg{Any,N}) where {N}
     n, d = task_local_storage(S.ref)
     cn   = n_copies()
     newd = d
@@ -58,13 +58,13 @@ function Base.setindex!(S::TRef, x, I::Vararg{Int,N}) where {N}
     if isa(newd[], Real)
         newd[] = x
     else
-        newd[][I...] = x
+        setindex!(newd[], x, I...)
     end
+    return newd[]
 end
 
 function Base.display(S::TRef)
-    arr = S.orig_task.storage[S.ref][2][]
-    display(arr)
+    display("Please use show(::TRef) instead.")
 end
 
 Base.show(io::IO, S::TRef) = Base.show(io::IO, task_local_storage(S.ref)[2][])
