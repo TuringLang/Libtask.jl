@@ -18,7 +18,6 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     newt->gcstack = NULL;
     JL_GC_PUSH1(&newt);
 
-    newt->parent = ptls->current_task;
     newt->current_module = t->current_module;
     newt->state = t->state;
     newt->start = t->start;
