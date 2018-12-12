@@ -25,7 +25,6 @@ function Base.copy(t::Task)
   newt.code = t.code
   newt.state = t.state
   newt.result = t.result
-  newt.parent = t.parent
   if :last in fieldnames(typeof(t))
     newt.last = nothing
   end
