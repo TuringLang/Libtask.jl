@@ -17,6 +17,10 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     newt->stkbuf = NULL;
     newt->gcstack = NULL;
     JL_GC_PUSH1(&newt);
+ 
+    // Enable stack copying implementation for cloned tasks, see
+    //   https://github.com/JuliaLang/julia/pull/29578
+    newt->copy_stack = 1;
 
     newt->current_module = t->current_module;
     newt->state = t->state;
