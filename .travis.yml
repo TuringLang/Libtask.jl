@@ -1,21 +1,27 @@
 language: julia
+
 os:
 - linux
 - osx
+
 julia:
 - 0.7
 - 1.0
 - nightly
+
 matrix:
   allow_failures:
   - julia: nightly
   - julia: 0.7
   fast_finish: true
-  notifications: 
+
+  notifications:
   email: false
+
 stages:
 - name: dylib
 - name: test
+
 jobs:
   include:
   - stage: dylib
@@ -26,7 +32,7 @@ jobs:
     deploy:
       provider: releases
       api_key:
-        secure: pDVeQtN4VOE6MnJBRHZRGxoYqM5k4ylUow6NbRlqjZrVqrJ7pAw5yh5+HTvZJSIrTHN0/jauSN0a48mbwRaWFRg/pIYRNeMtb2euRrF9MvasG33sYvCiEZPmOLfOb65Vm9OG5rptK9qgq4fK0NscduH+0c0bVC7AtHSVbJp4UfO3zinF52T4X5I2+udJ8AfZh+UXlt51q7rYsUqGRrD6F57rarug4Z4S97hsXgMBnGiuYAwUtfMfRuCTS5GtWeAmGEZu/cINRZi0+jY5PjWNM9wuxdba9U/tsdDCF0lifnkdP0bAZ0xCSdul0SWc06pIr11k4yYTPirVhstWwqqUOAaElDw+6LrtUA+arzV0o3rFanR3wscew84ds/M12tOcHcREMuCIBzPVx/Kv71DZRyCpAmZsn+dsva0VHBwz9GUiWF/eEhy3c+l6yZUiA4ZPXDZodFOODxBdvwjdWPHr/umF3BoBiiAmqs954Gcw032Uo+z0YxW/tTwmdcKBq0wQwnP1PUC2GmPk0KU7XKlmz0JCfIsZGgxyNblVhabpv7L9lasLHMDg67x5AMVMIPgORPHZIwnPjB1cueALWMBkP4d4ERlWaOlSgKR2w05Xs0vH+o1EJD8kmjo3TV+6u8hiTn1EZXt777lqXFlDoX4+ocazTY+Um3rUzuMj0Sr5ktM=
+        secure: Bgz6GD7kcWQQRijf/zn8nD8wcyhjrjm9c4YBIDAdxPENiem3UOgmUjQCUieGxHFAjyCqmITyjNv9I4xPtjJqJQG1dpH9tlnzPmFGz2YqdYOyh6c9GbSLuMSy+ypVX88VA9KAahCgtPnF7MT07MX4JfMZo8X9piyRTPEV/0AX8P5EPNvg9PjdRtTk0zowMXlF30TYmsZb6vu+j4Ry9Bmn2oQhzGfqEgzoMI+Zp0w0ySjjKtHwoVerGB4zEAysq+RUcoCb3BxXROyD9mj6hL66KZCjlsTUAZ3paFDVqVTOy+b5Rul/7RM0iUKPpYAv0FDyw1rPhtbQpHFUY1VJmHJRWVCudrywJXiqti6IllTteR6RB1yb3a8KP7pX6cg2/zr96yXKiUtNcV5mzt1Ubaue2aESW1r3JoMmvHj7i9vjvW+IazPkY4Sx3iQ5TmCNMNnXZg1EzFFlEkn3DM206Ao9AVyxbGnjf63zNB5FSRh6MLGP4RKeSGTdYdryTPEt30Jhu9wPIT7d2cC2lIt2fqU8aS8PCL03NYHw6MOITM/xqFYYusC+XYSxt7WvQIYHyvIkNUjA7LxbMEuEy9Nd/HlWWQsxuegYb9jKInWiTfdUIEn5/eG7hvJ5XfpMZlaNZODeId+0MTq1foQTehriXrnkSJrWeRjyOXFAEWGs67EJwAQ=
       file_glob: true
       skip_cleanup: true
       file: products/*
@@ -36,14 +42,5 @@ jobs:
   - stage: test
     script:
     - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-    - julia -e ' using Pkg; Pkg.clone(pwd(), "Libtask"); Pkg.build("Libtask"); Pkg.test("Libtask";
-      coverage=true)'
-    - julia -e ' using Pkg; cd(Pkg.dir("Libtask")); Pkg.add("Coverage"); using Coverage;
-      Coveralls.submit(process_folder())'
-deploy:
-  provider: releases
-  api_key:
-    secure: Bgz6GD7kcWQQRijf/zn8nD8wcyhjrjm9c4YBIDAdxPENiem3UOgmUjQCUieGxHFAjyCqmITyjNv9I4xPtjJqJQG1dpH9tlnzPmFGz2YqdYOyh6c9GbSLuMSy+ypVX88VA9KAahCgtPnF7MT07MX4JfMZo8X9piyRTPEV/0AX8P5EPNvg9PjdRtTk0zowMXlF30TYmsZb6vu+j4Ry9Bmn2oQhzGfqEgzoMI+Zp0w0ySjjKtHwoVerGB4zEAysq+RUcoCb3BxXROyD9mj6hL66KZCjlsTUAZ3paFDVqVTOy+b5Rul/7RM0iUKPpYAv0FDyw1rPhtbQpHFUY1VJmHJRWVCudrywJXiqti6IllTteR6RB1yb3a8KP7pX6cg2/zr96yXKiUtNcV5mzt1Ubaue2aESW1r3JoMmvHj7i9vjvW+IazPkY4Sx3iQ5TmCNMNnXZg1EzFFlEkn3DM206Ao9AVyxbGnjf63zNB5FSRh6MLGP4RKeSGTdYdryTPEt30Jhu9wPIT7d2cC2lIt2fqU8aS8PCL03NYHw6MOITM/xqFYYusC+XYSxt7WvQIYHyvIkNUjA7LxbMEuEy9Nd/HlWWQsxuegYb9jKInWiTfdUIEn5/eG7hvJ5XfpMZlaNZODeId+0MTq1foQTehriXrnkSJrWeRjyOXFAEWGs67EJwAQ=
-  file: ''
-  on:
-    repo: TuringLang/Libtask.jl
+    - julia -e ' using Pkg; Pkg.clone(pwd(), "Libtask"); Pkg.build("Libtask"); Pkg.test("Libtask"; coverage=true)'
+    - julia -e ' using Pkg; cd(Pkg.dir("Libtask")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(process_folder())'
