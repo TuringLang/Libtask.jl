@@ -1,7 +1,27 @@
+function find_prev_tag(tag)
+    project_root = (@__DIR__) |> dirname |> abspath
+    tags = readlines(`git -C $project_root tag`)
+    sort!(tags)
+    idx = indexin([tag], tags)[1]
+    if idx == nothing return "NO-PREV-TAG" end
+    return get(tags, idx - 1, "NO-PREV-TAG")
+end
+
+function include_build_script(version_str, try_prev=false)
+    build_script_url = "https://github.com/TuringLang/Libtask.jl/releases/download/v$(version_str)/build_LibtaskDylib.v$(version_str).jl"
+    build_script = joinpath(@__DIR__, "tmp-build.jl")
+    build_script = try download(build_script_url, build_script) catch end
+    if build_script == nothing && try_prev # no such file
+        version_str = find_prev_tag("v$version_str") |> strip |> (x) -> lstrip(x, ['v'])
+        return include_build_script(version_str, false)
+    end
+    include(build_script)
+end
+
 @static if Sys.isapple()
     println("BinaryBuilder has a problem of its macOS support, so we build the dylib by ourselves.")
     using Libdl
-    julia_root = Libdl.dlpath("libjulia") |> dirname |> dirname |>abspath
+    julia_root = Libdl.dlpath("libjulia") |> dirname |> dirname |> abspath
     LIBS = "$(julia_root)/lib"
     LIBSJL = "$(julia_root)/lib/julia"
     INCLUDES = "$(julia_root)/include/julia"
@@ -18,10 +38,5 @@
     end;
 else
     version_str = read(joinpath(@__DIR__, "../VERSION"), String) |> strip |> (x) -> lstrip(x, ['v'])
-    # TODO CHANGE URL
-    # https://github.com/KDr2/Libtask.jl/releases/download/T001/build_LibtaskDylib.v1.0.0.jl
-    build_script_url = "https://github.com/TuringLang/Libtask.jl/releases/download/v$(version_str)/build_LibtaskDylib.v$(version_str).jl"
-    build_script = joinpath(@__DIR__, "tmp-build.jl")
-    download(build_script_url, build_script)
-    include(build_script)
+    include_build_script(version_str, true)
 end
