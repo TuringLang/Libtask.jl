@@ -15,8 +15,18 @@ matrix:
   - julia: 0.7
   fast_finish: true
 
-  notifications:
+notifications:
   email: false
+
+cache:
+  timeout: 1000
+  directories:
+  - downloads
+
+env:
+  global:
+  - BINARYBUILDER_DOWNLOADS_CACHE=downloads
+  - BINARYBUILDER_AUTOMATIC_APPLE=true
 
 stages:
 - name: dylib
@@ -42,5 +52,5 @@ jobs:
   - stage: test
     script:
     - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-    - julia -e ' using Pkg; Pkg.clone(pwd(), "Libtask"); Pkg.build("Libtask"); Pkg.test("Libtask"; coverage=true)'
-    - julia -e ' using Pkg; cd(Pkg.dir("Libtask")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(process_folder())'
+    - julia -e 'using Pkg; Pkg.clone(pwd(), "Libtask"); Pkg.build("Libtask"); Pkg.test("Libtask"; coverage=true)'
+    - julia -e 'using Pkg; cd(Pkg.dir("Libtask")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(process_folder())'

@@ -20,7 +20,7 @@ platforms = [
     Linux(:i686, :glibc),
     Linux(:x86_64, :glibc),
     Linux(:armv7l, :glibc, :eabihf),
-    # MacOS(:x86_64), # The macOS support of BinaryBuilder.jl is broken now.
+    MacOS(:x86_64),
     Windows(:i686),
     Windows(:x86_64)
 ]

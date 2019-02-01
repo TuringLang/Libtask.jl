@@ -88,7 +88,7 @@ if [ $target = "x86_64-apple-darwin14" ]; then
     LIBSJL="`pwd`/julia/Contents/Resources/julia/lib/julia"
     INCLUDES="`pwd`/julia/Contents/Resources/julia/include/julia"
     cd Libtask.jl/deps
-    gcc -O2 -shared -std=gnu99 -I$INCLUDES -DJULIA_ENABLE_THREADING=1 -fPIC -L$LIBSJL -L$LIBS -ljulia task.c -o libtask.dylib
+    $CC -O2 -shared -std=gnu99 -I$INCLUDES -DJULIA_ENABLE_THREADING=1 -fPIC -L$LIBSJL -L$LIBS -ljulia task.c -o libtask.dylib
     mkdir $prefix/lib
     mv libtask.dylib $prefix/lib
     exit
