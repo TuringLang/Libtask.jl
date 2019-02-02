@@ -17,13 +17,17 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     newt->stkbuf = NULL;
     newt->gcstack = NULL;
     JL_GC_PUSH1(&newt);
-
+#if JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1
+    newt->copy_stack = 1;
+#else
     newt->parent = ptls->current_task;
     newt->current_module = t->current_module;
+#endif
+
     newt->state = t->state;
     newt->start = t->start;
     newt->tls = jl_nothing;
-    newt->logstate = ptls->current_task->logstate;    
+    newt->logstate = ptls->current_task->logstate;
     newt->result = jl_nothing;
     newt->donenotify = jl_nothing;
     newt->exception = jl_nothing;
@@ -34,11 +38,17 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     newt->started = t->started;  // TODO: need testing
 
 
+#if JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1
+    memcpy(&newt->ctx, &t->ctx, sizeof(jl_ucontext_t));
+#else
     memcpy((void*)newt->ctx, (void*)t->ctx, sizeof(jl_jmp_buf));
+#endif
 //#ifdef COPY_STACKS
     if (t->stkbuf){
+#if !(JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1)
         newt->ssize = t->ssize;  // size of saved piece
-        // newt->stkbuf = allocb(t->bufsz); 
+#endif
+        // newt->stkbuf = allocb(t->bufsz);
         // newt->bufsz = t->bufsz;
         // memcpy(newt->stkbuf, t->stkbuf, t->bufsz);
         // workaround, newt and t will get new stkbuf when savestack is called.
@@ -46,7 +56,9 @@ jl_task_t *jl_clone_task(jl_task_t *t)
         newt->bufsz = 0;
         newt->stkbuf = t->stkbuf;
     }else{
+#if !(JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1)
         newt->ssize = 0;
+#endif
         newt->bufsz = 0;
         newt->stkbuf = NULL;
     }

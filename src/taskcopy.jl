@@ -1,4 +1,11 @@
 # Utility function for self-copying mechanism
+
+@static if VERSION >= v"1.1.0"
+  libtask = libtask_v1_1
+else
+  libtask = libtask_v1_0
+end
+
 n_copies() = n_copies(current_task())
 n_copies(t::Task) = begin
   isa(t.storage, Nothing) && (t.storage = IdDict())
@@ -25,7 +32,7 @@ function Base.copy(t::Task)
   newt.code = t.code
   newt.state = t.state
   newt.result = t.result
-  if :parent in fieldnames(typeof(t))
+  @static if VERSION < v"1.1"
     newt.parent = t.parent
   end
   if :last in fieldnames(typeof(t))
