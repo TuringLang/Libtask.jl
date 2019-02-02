@@ -1,9 +1,9 @@
 # Utility function for self-copying mechanism
 
 @static if VERSION >= v"1.1.0"
-  libtask = libtask_v1_1
+  const libtask = libtask_v1_1
 else
-  libtask = libtask_v1_0
+  const libtask = libtask_v1_0
 end
 
 n_copies() = n_copies(current_task())
