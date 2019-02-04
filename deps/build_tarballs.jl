@@ -7,9 +7,16 @@ version_str = read(joinpath(@__DIR__, "../VERSION"), String) |> strip |> (x) -> 
 version = VersionNumber(version_str)
 
 # Collection of sources required to build Libtask
+function get_commit_id()
+    is_pr = get(ENV, "TRAVIS_PULL_REQUEST", "false")
+    if is_pr != "false"
+        return get(ENV, "TRAVIS_PULL_REQUEST_SHA", "")
+    end
+    return readlines(`git rev-parse HEAD`)[1]
+end
+
 sources = [
-    # "https://github.com/TuringLang/Libtask.jl.git" => readlines(`git rev-list -n 1 v$(version_str)`)[1],
-    "https://github.com/TuringLang/Libtask.jl.git" => readlines(`git rev-parse HEAD`)[1], # always use the head
+    "https://github.com/TuringLang/Libtask.jl.git" => get_commit_id(),
 ]
 
 
