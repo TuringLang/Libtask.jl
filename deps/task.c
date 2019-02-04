@@ -32,8 +32,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
 
 #if JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1
     newt->copy_stack = t->copy_stack;
-    //memcpy(&newt->ctx, &ptls->base_ctx, sizeof(t->ctx));
-    memcpy(&newt->ctx, &t->ctx, sizeof(t->ctx));
+    memcpy((void*)newt->ctx.uc_mcontext, (void*)t->ctx.uc_mcontext, sizeof(jl_jmp_buf));
 #else
     newt->parent = ptls->current_task;
     newt->current_module = t->current_module;
@@ -41,10 +40,24 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     memcpy((void*)newt->ctx, (void*)t->ctx, sizeof(jl_jmp_buf));
 #endif
 
-    // workaround, newt and t will get new stkbuf when savestack is called.
-    // t->bufsz    = 0;
-    newt->bufsz = 0;
-    newt->stkbuf = t->stkbuf;
+    if (t->stkbuf){
+#if !(JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1)
+        newt->ssize = t->ssize;  // size of saved piece
+#endif
+        // newt->stkbuf = allocb(t->bufsz);
+        // newt->bufsz = t->bufsz;
+        // memcpy(newt->stkbuf, t->stkbuf, t->bufsz);
+        // workaround, newt and t will get new stkbuf when savestack is called.
+        t->bufsz    = 0;
+        newt->bufsz = 0;
+        newt->stkbuf = t->stkbuf;
+    }else{
+#if !(JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1)
+        newt->ssize = 0;
+#endif
+        newt->bufsz = 0;
+        newt->stkbuf = NULL;
+    }
 
     JL_GC_POP();
     jl_gc_wb_back(newt);
