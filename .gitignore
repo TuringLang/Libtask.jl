@@ -58,3 +58,4 @@ deps/build.log
 deps/deps.jl
 deps/usr/
 deps/tmp-build.jl
+*.cov
