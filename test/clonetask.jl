@@ -19,6 +19,8 @@ t = Task(f_ct) |> enable_stack_copying
 a = copy(t);
 @test consume(a) == 2
 @test consume(a) == 3
+@test consume(t) == 2
+@test consume(t) == 3
 
 # Test case 2: heap allocated objects are shallowly copied.
 
