@@ -12,7 +12,7 @@ function f_ct()
   end
 end
 
-t = Task(f_ct)
+t = Task(f_ct) |> enable_stack_copying
 
 @test consume(t) == 0
 @test consume(t) == 1
@@ -30,7 +30,7 @@ function f_ct2()
   end
 end
 
-t = Task(f_ct2)
+t = Task(f_ct2) |> enable_stack_copying
 
 @test consume(t) == 0
 @test consume(t) == 1

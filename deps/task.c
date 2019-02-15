@@ -5,6 +5,19 @@
 
 #include "julia.h"
 
+jl_task_t *jl_enable_stack_copying(jl_task_t *t)
+{
+#if JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1
+    if (!t->copy_stack) {
+        jl_ptls_t ptls = jl_get_ptls_states();
+        t->copy_stack = 1;
+        t->bufsz = 0;
+        memcpy(&t->ctx, &ptls->base_ctx, sizeof(t->ctx));
+    }
+#endif
+    return t;
+}
+
 jl_task_t *jl_clone_task(jl_task_t *t)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
@@ -40,7 +53,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
     memcpy((void*)newt->ctx, (void*)t->ctx, sizeof(jl_jmp_buf));
 #endif
 
-    if (t->stkbuf){
+    if (t->stkbuf) {
 #if !(JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1)
         newt->ssize = t->ssize;  // size of saved piece
 #endif
@@ -51,7 +64,7 @@ jl_task_t *jl_clone_task(jl_task_t *t)
         t->bufsz    = 0;
         newt->bufsz = 0;
         newt->stkbuf = t->stkbuf;
-    }else{
+    } else {
 #if !(JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1)
         newt->ssize = 0;
 #endif

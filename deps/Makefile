@@ -1,7 +1,7 @@
 JULIA_HOME ?= $(PWD)
 target ?= x86_64-linux-gnu
 prefix ?= $(PWD)
-JULIA_VERSION ?= v1_0
+JULIA_VERSION ?= v1_1
 
 INCLUDES = -I$(JULIA_HOME)/include/julia
 
