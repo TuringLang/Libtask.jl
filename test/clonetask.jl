@@ -32,7 +32,7 @@ function f_ct2()
   end
 end
 
-t = Task(f_ct2) |> enable_stack_copying
+t = CTask(f_ct2)
 
 @test consume(t) == 0
 @test consume(t) == 1

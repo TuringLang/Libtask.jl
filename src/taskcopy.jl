@@ -22,6 +22,8 @@ function enable_stack_copying(t::Task)
     return ccall((:jl_enable_stack_copying, libtask), Any, (Any,), t)::Task
 end
 
+CTask(func) = Task(func) |> enable_stack_copying
+
 function Base.copy(t::Task)
   t.state != :runnable && t.state != :done &&
     error("Only runnable or finished tasks can be copied.")
