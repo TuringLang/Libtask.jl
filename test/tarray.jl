@@ -13,7 +13,7 @@ function f_cta()
   end
 end
 
-t = Task(f_cta)
+t = Task(f_cta) |> enable_stack_copying
 
 consume(t); consume(t)
 a = copy(t);

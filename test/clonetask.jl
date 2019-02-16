@@ -12,13 +12,15 @@ function f_ct()
   end
 end
 
-t = Task(f_ct)
+t = Task(f_ct) |> enable_stack_copying
 
 @test consume(t) == 0
 @test consume(t) == 1
 a = copy(t);
 @test consume(a) == 2
 @test consume(a) == 3
+@test consume(t) == 2
+@test consume(t) == 3
 
 # Test case 2: heap allocated objects are shallowly copied.
 
@@ -30,7 +32,7 @@ function f_ct2()
   end
 end
 
-t = Task(f_ct2)
+t = CTask(f_ct2)
 
 @test consume(t) == 0
 @test consume(t) == 1
