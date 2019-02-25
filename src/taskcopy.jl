@@ -72,7 +72,10 @@ produce(v) = begin
         wait()
     end
 
-    t.state == :runnable || throw(AssertionError("producer.consumer.state == :runnable"))
+    if !(t.state in [:runnable, :queued])
+        throw(AssertionError("producer.consumer.state in [:runnable, :queued]"))
+    end
+    if t.state == :queued yield() end
     if empty
         Base.schedule_and_wait(t, v)
         ct = current_task() # When a task is copied, ct should be updated to new task ID.
@@ -129,5 +132,13 @@ consume(p::Task, values...) = begin
         push!(p.storage[:consumers].waitq, ct)
     end
 
-    p.state == :runnable ? Base.schedule_and_wait(p) : wait() # don't attempt to queue it twice
+    if p.state == :runnable
+        Base.schedule(p)
+        yield()
+
+        if p.exception != nothing
+            throw(p.exception)
+        end
+    end
+    wait()
 end
