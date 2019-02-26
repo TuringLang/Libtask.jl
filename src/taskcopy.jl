@@ -41,13 +41,17 @@ function task_wrapper(func)
         res = func()
         ct = current_task()
         ct.result = res
-        ct.state = :done
+        @static if VERSION >= v"1.1.0"
+            ct.state = :done
+        end
         wait()
     catch ex
         ct = current_task()
         ct.exception = ex
         ct.result = ex
-        ct.state = :failed
+        @static if VERSION >= v"1.1.0"
+            ct.state = :failed
+        end
         ct.backtrace = catch_backtrace()
         wait()
     end
@@ -168,6 +172,9 @@ consume(p::Task, values...) = begin
         yield()
 
         if p.exception != nothing
+            @static if VERSION < v"1.1.0"
+                p.state = :failed
+            end
             throw(p.exception)
         end
     end
