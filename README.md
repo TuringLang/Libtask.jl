@@ -21,7 +21,6 @@ function f_ct()
 end
 
 t = CTask(f_ct)
-# or t = Task(f_ct) |> enable_stack_copying
 
 consume(t) == 0
 consume(t) == 1
@@ -42,8 +41,6 @@ function f_ct2()
 end
 
 t = CTask(f_ct2)
-# or t = Task(f_ct2) |> enable_stack_copying
-
 
 consume(t) == 0
 consume(t) == 1
@@ -66,7 +63,7 @@ function f_cta()
   end
 end
 
-t = Task(f_cta) |> enable_stack_copying
+t = CTask(f_cta)
 
 consume(t) == 0
 consume(t) == 1

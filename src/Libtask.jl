@@ -1,6 +1,6 @@
 module Libtask
 
-export enable_stack_copying, CTask, consume, produce, TArray, get, tzeros, tfill, TRef
+export CTask, consume, produce, TArray, get, tzeros, tfill, TRef
 
 include("../deps/deps.jl"); check_deps();
 include("taskcopy.jl")

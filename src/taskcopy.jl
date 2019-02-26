@@ -22,7 +22,38 @@ function enable_stack_copying(t::Task)
     return ccall((:jl_enable_stack_copying, libtask), Any, (Any,), t)::Task
 end
 
-CTask(func) = Task(func) |> enable_stack_copying
+"""
+
+task_wrapper is a wordaround for set the result/exception to the
+correct task which maybe copied/forked from another one(the original
+one). Without this, the result/exception is always sent to the
+original task. That is done in `JULIA_PROJECT/src/task.c`, the
+function `start_task` and `finish_task`.
+
+This workaround is not the proper way to do the work it does. The
+proper way is refreshing the current_task (the variable `t`) in
+`start_task` after the call to `jl_apply` returns.
+
+"""
+function task_wrapper(func)
+    () ->
+    try
+        res = func()
+        ct = current_task()
+        ct.result = res
+        ct.state = :done
+        wait()
+    catch ex
+        ct = current_task()
+        ct.exception = ex
+        ct.result = ex
+        ct.state = :failed
+        ct.backtrace = catch_backtrace()
+        wait()
+    end
+end
+
+CTask(func) = Task(task_wrapper(func)) |> enable_stack_copying
 
 function Base.copy(t::Task)
   t.state != :runnable && t.state != :done &&
