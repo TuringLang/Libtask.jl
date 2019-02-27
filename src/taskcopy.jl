@@ -24,14 +24,16 @@ end
 
 """
 
-task_wrapper is a wordaround for set the result/exception to the
+    task_wrapper()
+
+`task_wrapper` is a wordaround for set the result/exception to the
 correct task which maybe copied/forked from another one(the original
 one). Without this, the result/exception is always sent to the
 original task. That is done in `JULIA_PROJECT/src/task.c`, the
 function `start_task` and `finish_task`.
 
 This workaround is not the proper way to do the work it does. The
-proper way is refreshing the current_task (the variable `t`) in
+proper way is refreshing the `current_task` (the variable `t`) in
 `start_task` after the call to `jl_apply` returns.
 
 """
