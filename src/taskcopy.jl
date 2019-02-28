@@ -43,18 +43,16 @@ function task_wrapper(func)
         res = func()
         ct = current_task()
         ct.result = res
-        @static if VERSION >= v"1.1.0"
-            ct.state = :done
-        end
+        isa(ct.storage, Nothing) && (ct.storage = IdDict())
+        ct.storage[:_libtask_state] = :done
         wait()
     catch ex
         ct = current_task()
         ct.exception = ex
         ct.result = ex
-        @static if VERSION >= v"1.1.0"
-            ct.state = :failed
-        end
         ct.backtrace = catch_backtrace()
+        isa(ct.storage, Nothing) && (ct.storage = IdDict())
+        ct.storage[:_libtask_state] = :failed
         wait()
     end
 end
@@ -173,10 +171,10 @@ consume(p::Task, values...) = begin
         Base.schedule(p)
         yield()
 
+        isa(p.storage, IdDict) && haskey(p.storage, :_libtask_state) &&
+            (p.state = p.storage[:_libtask_state])
+
         if p.exception != nothing
-            @static if VERSION < v"1.1.0"
-                p.state = :failed
-            end
             throw(p.exception)
         end
     end
