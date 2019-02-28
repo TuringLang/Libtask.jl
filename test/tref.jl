@@ -12,7 +12,7 @@ function f_cta()
   end
 end
 
-t = Task(f_cta) |> enable_stack_copying
+t = CTask(f_cta)
 
 consume(t); consume(t)
 a = copy(t);
@@ -32,7 +32,7 @@ function dict_test()
   end
 end
 
-t = Task(dict_test) |> enable_stack_copying
+t = CTask(dict_test)
 
 consume(t); consume(t)
 a = copy(t);

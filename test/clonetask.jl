@@ -12,7 +12,7 @@ function f_ct()
   end
 end
 
-t = Task(f_ct) |> enable_stack_copying
+t = CTask(f_ct)
 
 @test consume(t) == 0
 @test consume(t) == 1
@@ -43,3 +43,17 @@ a = copy(t);
 @test consume(t) == 5
 @test consume(a) == 6
 @test consume(a) == 7
+
+
+# Breaking test
+function g_break()
+    t = 0
+    while true
+        t[3] = 1
+        produce(t)
+        t = t + 1
+    end
+end
+
+t = CTask(g_break)
+@test_throws MethodError consume(t)

@@ -22,7 +22,42 @@ function enable_stack_copying(t::Task)
     return ccall((:jl_enable_stack_copying, libtask), Any, (Any,), t)::Task
 end
 
-CTask(func) = Task(func) |> enable_stack_copying
+"""
+
+    task_wrapper()
+
+`task_wrapper` is a wordaround for set the result/exception to the
+correct task which maybe copied/forked from another one(the original
+one). Without this, the result/exception is always sent to the
+original task. That is done in `JULIA_PROJECT/src/task.c`, the
+function `start_task` and `finish_task`.
+
+This workaround is not the proper way to do the work it does. The
+proper way is refreshing the `current_task` (the variable `t`) in
+`start_task` after the call to `jl_apply` returns.
+
+"""
+function task_wrapper(func)
+    () ->
+    try
+        res = func()
+        ct = current_task()
+        ct.result = res
+        isa(ct.storage, Nothing) && (ct.storage = IdDict())
+        ct.storage[:_libtask_state] = :done
+        wait()
+    catch ex
+        ct = current_task()
+        ct.exception = ex
+        ct.result = ex
+        ct.backtrace = catch_backtrace()
+        isa(ct.storage, Nothing) && (ct.storage = IdDict())
+        ct.storage[:_libtask_state] = :failed
+        wait()
+    end
+end
+
+CTask(func) = Task(task_wrapper(func)) |> enable_stack_copying
 
 function Base.copy(t::Task)
   t.state != :runnable && t.state != :done &&
@@ -72,7 +107,10 @@ produce(v) = begin
         wait()
     end
 
-    t.state == :runnable || throw(AssertionError("producer.consumer.state == :runnable"))
+    if !(t.state in [:runnable, :queued])
+        throw(AssertionError("producer.consumer.state in [:runnable, :queued]"))
+    end
+    if t.state == :queued yield() end
     if empty
         Base.schedule_and_wait(t, v)
         ct = current_task() # When a task is copied, ct should be updated to new task ID.
@@ -129,5 +167,16 @@ consume(p::Task, values...) = begin
         push!(p.storage[:consumers].waitq, ct)
     end
 
-    p.state == :runnable ? Base.schedule_and_wait(p) : wait() # don't attempt to queue it twice
+    if p.state == :runnable
+        Base.schedule(p)
+        yield()
+
+        isa(p.storage, IdDict) && haskey(p.storage, :_libtask_state) &&
+            (p.state = p.storage[:_libtask_state])
+
+        if p.exception != nothing
+            throw(p.exception)
+        end
+    end
+    wait()
 end
