@@ -174,6 +174,9 @@ consume(p::Task, values...) = begin
         isa(p.storage, IdDict) && haskey(p.storage, :_libtask_state) &&
             (p.state = p.storage[:_libtask_state])
 
+        if p.state == :done
+            return p.result
+        end
         if p.exception != nothing
             throw(p.exception)
         end
