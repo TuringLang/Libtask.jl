@@ -1,9 +1,10 @@
 # Note that this script can accept some limited command-line arguments, run
 # `julia build_tarballs.jl --help` to see a usage message.
+using Pkg
 using BinaryBuilder
 
 name = "LibtaskDylib"
-version_str = read(joinpath(@__DIR__, "../VERSION"), String) |> strip |> (x) -> lstrip(x, ['v'])
+version_str = Pkg.TOML.parsefile(joinpath(@__DIR__, "../Project.toml"))["version"] |> strip |> (x) -> lstrip(x, ['v'])
 version = VersionNumber(version_str)
 
 # Collection of sources required to build Libtask

@@ -18,5 +18,17 @@ function include_build_script(version_str, try_prev=false)
     include(build_script)
 end
 
-version_str = read(joinpath(@__DIR__, "../VERSION"), String) |> strip |> (x) -> lstrip(x, ['v'])
+function get_version_str()
+    path = joinpath(@__DIR__, "../Project.toml")
+    version_reg = r"version\s*=\s*\"(.*)\""
+    open(path) do file
+        lines = readlines(file)
+        for line in lines
+            m = match(version_reg, line)
+            if isa(m, RegexMatch) return m.captures[1] end
+        end
+    end
+end
+
+version_str = get_version_str() |> strip |> (x) -> lstrip(x, ['v'])
 include_build_script(version_str, true)
