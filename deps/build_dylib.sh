@@ -5,6 +5,8 @@ cd $WORKSPACE/srcdir
 
 RELEASES=(
     arm-linux-gnueabihf@v1_0@https://julialang-s3.julialang.org/bin/linux/armv7l/1.0/julia-1.0.0-linux-armv7l.tar.gz
+    aarch64-linux-gnu@v1_0@https://julialang-s3.julialang.org/bin/linux/aarch64/1.0/julia-1.0.4-linux-aarch64.tar.gz
+    aarch64-linux-gnu@v1_1@https://julialang-s3.julialang.org/bin/linux/aarch64/1.1/julia-1.1.1-linux-aarch64.tar.gz
     i686-linux-gnu@v1_0@https://julialang-s3.julialang.org/bin/linux/x86/1.0/julia-1.0.0-linux-i686.tar.gz
     i686-linux-gnu@v1_1@https://julialang-s3.julialang.org/bin/linux/x86/1.1/julia-1.1.0-linux-i686.tar.gz
     x86_64-linux-gnu@v1_0@https://julialang-s3.julialang.org/bin/linux/x64/1.0/julia-1.0.0-linux-x86_64.tar.gz
