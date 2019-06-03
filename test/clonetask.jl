@@ -56,4 +56,4 @@ function g_break()
 end
 
 t = CTask(g_break)
-@test_throws MethodError consume(t)
+@test_throws Libtask.CTaskException consume(t)

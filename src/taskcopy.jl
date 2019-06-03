@@ -84,6 +84,7 @@ function Base.copy(t::Task)
 end
 
 struct CTaskException
+    etype
     msg::String
     backtrace::Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}
 end
@@ -191,7 +192,12 @@ consume(p::Task, values...) = begin
             return p.result
         end
         if p.exception != nothing
-            throw(CTaskException(p.exception.msg, p.backtrace))
+            msg = if :msg in fieldnames(typeof(p.exception))
+                p.exception.msg
+            else
+                string(typeof(p.exception))
+            end
+            throw(CTaskException(typeof(p.exception), msg, p.backtrace))
         end
     end
     wait()
