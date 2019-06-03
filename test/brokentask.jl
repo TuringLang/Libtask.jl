@@ -17,7 +17,7 @@ r = @testset "Broken Functions Tests" begin
         try
             consume(t)
         catch ex
-            @test isa(ex, ErrorException)
+            @test ex.etype == ErrorException
         end
         @test isa(t.exception, ErrorException)
     end
@@ -37,7 +37,7 @@ r = @testset "Broken Functions Tests" begin
         try
             consume(t)
         catch ex
-            @test isa(ex, BoundsError)
+            @test ex.etype == BoundsError
         end
         @test isa(t.exception, BoundsError)
     end
@@ -58,7 +58,7 @@ r = @testset "Broken Functions Tests" begin
         try
             consume(t)
         catch ex
-            @test isa(ex, BoundsError)
+            @test ex.etype == BoundsError
         end
         @test isa(t.exception, BoundsError)
     end
@@ -80,7 +80,7 @@ r = @testset "Broken Functions Tests" begin
         try
             consume(t_copy)
         catch ex
-            @test isa(ex, BoundsError)
+            @test ex.etype == BoundsError
         end
         @test isa(t_copy.exception, BoundsError)
     end

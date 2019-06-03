@@ -40,8 +40,8 @@ proper way is refreshing the `current_task` (the variable `t`) in
 function task_wrapper(func)
     () ->
     try
-        res = func()
         ct = current_task()
+        res = func()
         ct.result = res
         isa(ct.storage, Nothing) && (ct.storage = IdDict())
         ct.storage[:_libtask_state] = :done
@@ -81,6 +81,20 @@ function Base.copy(t::Task)
     newt.last = nothing
   end
   newt
+end
+
+struct CTaskException
+    etype
+    msg::String
+    backtrace::Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}
+end
+
+function Base.show(io::IO, exc::CTaskException)
+    println(io, "Stacktrace in the failed task:\n")
+    println(io, exc.msg * "\n")
+    for line in stacktrace(exc.backtrace)
+        println(io, string(line))
+    end
 end
 
 produce(v) = begin
@@ -178,7 +192,12 @@ consume(p::Task, values...) = begin
             return p.result
         end
         if p.exception != nothing
-            throw(p.exception)
+            msg = if :msg in fieldnames(typeof(p.exception))
+                p.exception.msg
+            else
+                string(typeof(p.exception))
+            end
+            throw(CTaskException(typeof(p.exception), msg, p.backtrace))
         end
     end
     wait()
