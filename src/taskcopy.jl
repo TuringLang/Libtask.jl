@@ -4,8 +4,10 @@
     const libtask = libtask_v1_0
 elseif VERSION < v"1.2" # [v1.1, v1.2)
     const libtask = libtask_v1_1
-else # [v1.2, +)
-  const libtask = libtask_v1_2
+elseif VERSION < v"1.3" # [v1.2, v1.3)
+    const libtask = libtask_v1_2
+else # [v1.3, +)
+  const libtask = libtask_v1_3
 end
 
 n_copies() = n_copies(current_task())

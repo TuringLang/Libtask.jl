@@ -30,5 +30,20 @@ function get_version_str()
     end
 end
 
+function remove_dlopen()
+    lines = open(joinpath(@__DIR__, "deps.jl")) do io
+        read(io, String) |> x -> split(x, "\n")
+    end
+    open(joinpath(@__DIR__, "deps.jl"), "w") do io
+        for line in lines
+            if occursin("if Libdl.dlopen_e(", line)
+                line = "if false"
+            end
+            write(io, line * "\n")
+        end
+    end
+end
+
 version_str = get_version_str() |> strip |> (x) -> lstrip(x, ['v'])
 include_build_script(version_str, true)
+remove_dlopen()

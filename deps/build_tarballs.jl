@@ -41,6 +41,7 @@ products(prefix) = [
     LibraryProduct(prefix, "libtask_v1_0", :libtask_v1_0)
     LibraryProduct(prefix, "libtask_v1_1", :libtask_v1_1)
     LibraryProduct(prefix, "libtask_v1_2", :libtask_v1_2)
+    LibraryProduct(prefix, "libtask_v1_3", :libtask_v1_3)
 ]
 
 # Dependencies that must be installed before this package can be built
