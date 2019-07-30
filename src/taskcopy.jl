@@ -1,9 +1,11 @@
 # Utility function for self-copying mechanism
 
-@static if VERSION >= v"1.1.0"
-  const libtask = libtask_v1_1
-else
-  const libtask = libtask_v1_0
+@static if VERSION < v"1.1" # (-, v1.1)
+    const libtask = libtask_v1_0
+elseif VERSION < v"1.2" # [v1.1, v1.2)
+    const libtask = libtask_v1_1
+else # [v1.2, +)
+  const libtask = libtask_v1_2
 end
 
 n_copies() = n_copies(current_task())
@@ -124,9 +126,14 @@ produce(v) = begin
     if !(t.state in [:runnable, :queued])
         throw(AssertionError("producer.consumer.state in [:runnable, :queued]"))
     end
-    if t.state == :queued yield() end
+    @static if VERSION < v"1.2"
+        if t.state == :queued yield() end
+    else
+        if t.queue != nothing yield() end
+    end
     if empty
-        Base.schedule_and_wait(t, v)
+        schedule(t, v)
+        wait()
         ct = current_task() # When a task is copied, ct should be updated to new task ID.
         while true
             # wait until there are more consumers

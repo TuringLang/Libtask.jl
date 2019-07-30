@@ -7,10 +7,13 @@ RELEASES=(
     arm-linux-gnueabihf@v1_0@https://julialang-s3.julialang.org/bin/linux/armv7l/1.0/julia-1.0.0-linux-armv7l.tar.gz
     aarch64-linux-gnu@v1_0@https://julialang-s3.julialang.org/bin/linux/aarch64/1.0/julia-1.0.4-linux-aarch64.tar.gz
     aarch64-linux-gnu@v1_1@https://julialang-s3.julialang.org/bin/linux/aarch64/1.1/julia-1.1.1-linux-aarch64.tar.gz
+    aarch64-linux-gnu@v1_2@https://julialang-s3.julialang.org/bin/linux/aarch64/1.2/julia-1.2.0-rc2-linux-aarch64.tar.gz
     i686-linux-gnu@v1_0@https://julialang-s3.julialang.org/bin/linux/x86/1.0/julia-1.0.0-linux-i686.tar.gz
     i686-linux-gnu@v1_1@https://julialang-s3.julialang.org/bin/linux/x86/1.1/julia-1.1.0-linux-i686.tar.gz
+    i686-linux-gnu@v1_2@https://julialang-s3.julialang.org/bin/linux/x86/1.2/julia-1.2.0-rc2-linux-i686.tar.gz
     x86_64-linux-gnu@v1_0@https://julialang-s3.julialang.org/bin/linux/x64/1.0/julia-1.0.0-linux-x86_64.tar.gz
     x86_64-linux-gnu@v1_1@https://julialang-s3.julialang.org/bin/linux/x64/1.1/julia-1.1.0-linux-x86_64.tar.gz
+    x86_64-linux-gnu@v1_2@https://julialang-s3.julialang.org/bin/linux/x64/1.2/julia-1.2.0-rc2-linux-x86_64.tar.gz
     x86_64-w64-mingw32@v1_0@http://mlg.eng.cam.ac.uk/hong/julia/julia-1.0.0-win64.tar.gz
     x86_64-w64-mingw32@v1_1@http://mlg.eng.cam.ac.uk/hong/julia/julia-1.1.0-win64.tar.gz
     i686-w64-mingw32@v1_0@http://mlg.eng.cam.ac.uk/hong/julia/julia-1.0.0-win32.tar.gz
