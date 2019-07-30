@@ -20,8 +20,12 @@ RELEASES=(
     x86_64-linux-gnu@v1_3@https://julialang-s3.julialang.org/bin/linux/x64/1.3/julia-1.3.0-alpha-linux-x86_64.tar.gz
     x86_64-w64-mingw32@v1_0@http://cxan.kdr2.com/julia/releases/julia-1.0.0-win64.tar.gz
     x86_64-w64-mingw32@v1_1@http://cxan.kdr2.com/julia/releases/julia-1.1.0-win64.tar.gz
+    x86_64-w64-mingw32@v1_2@http://cxan.kdr2.com/julia/releases/julia-1.2.0-rc2-win64.tar.gz
+    x86_64-w64-mingw32@v1_3@http://cxan.kdr2.com/julia/releases/julia-1.3.0-alpha-win64.tar.gz
     i686-w64-mingw32@v1_0@http://cxan.kdr2.com/julia/releases/julia-1.0.0-win32.tar.gz
     i686-w64-mingw32@v1_1@http://cxan.kdr2.com/julia/releases/julia-1.1.0-win32.tar.gz
+    i686-w64-mingw32@v1_2@http://cxan.kdr2.com/julia/releases/julia-1.2.0-rc2-win32.tar.gz
+    i686-w64-mingw32@v1_3@http://cxan.kdr2.com/julia/releases/julia-1.3.0-alpha-win32.tar.gz
     x86_64-apple-darwin14@v1_0@http://cxan.kdr2.com/julia/releases/julia-1.0.0-mac64.tar.gz
     x86_64-apple-darwin14@v1_1@http://cxan.kdr2.com/julia/releases/julia-1.1.0-mac64.tar.gz
     x86_64-apple-darwin14@v1_2@http://cxan.kdr2.com/julia/releases/julia-1.2.0-rc2-mac64.tar.gz
