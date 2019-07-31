@@ -40,6 +40,8 @@ platforms = [
 products(prefix) = [
     LibraryProduct(prefix, "libtask_v1_0", :libtask_v1_0)
     LibraryProduct(prefix, "libtask_v1_1", :libtask_v1_1)
+    LibraryProduct(prefix, "libtask_v1_2", :libtask_v1_2)
+    LibraryProduct(prefix, "libtask_v1_3", :libtask_v1_3)
 ]
 
 # Dependencies that must be installed before this package can be built
@@ -48,4 +50,5 @@ dependencies = [
 ]
 
 # Build the tarballs, and possibly a `build.jl` as well.
+# build_file = "products/build_$(name).v$(version_str).jl"
 build_tarballs(ARGS, name, version, sources, script, platforms, products, dependencies)

@@ -46,6 +46,10 @@ jl_task_t *jl_clone_task(jl_task_t *t)
 #if JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1
     newt->copy_stack = t->copy_stack;
     memcpy((void*)newt->ctx.uc_mcontext, (void*)t->ctx.uc_mcontext, sizeof(jl_jmp_buf));
+#if JULIA_VERSION_MINOR >= 2
+    newt->queue = t->queue;
+    newt->sticky = t->sticky;
+#endif
 #else
     newt->parent = ptls->current_task;
     newt->current_module = t->current_module;
