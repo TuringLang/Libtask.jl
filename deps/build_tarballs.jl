@@ -50,4 +50,5 @@ dependencies = [
 ]
 
 # Build the tarballs, and possibly a `build.jl` as well.
+# build_file = "products/build_$(name).v$(version_str).jl"
 build_tarballs(ARGS, name, version, sources, script, platforms, products, dependencies)
