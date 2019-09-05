@@ -5,11 +5,11 @@ using Test
 
 # Test case 1: stack allocated objects are deep copied.
 function f_ct()
-  t = 0;
-  while true
-    produce(t)
-    t = 1 + t
-  end
+    t = 0;
+    while true
+        produce(t)
+        t = 1 + t
+    end
 end
 
 t = CTask(f_ct)
@@ -25,11 +25,11 @@ a = copy(t);
 # Test case 2: heap allocated objects are shallowly copied.
 
 function f_ct2()
-  t = [0 1 2];
-  while true
-    produce(t[1])
-    t[1] = 1 + t[1]
-  end
+    t = [0 1 2];
+    while true
+        produce(t[1])
+        t[1] = 1 + t[1]
+    end
 end
 
 t = CTask(f_ct2)
@@ -57,3 +57,14 @@ end
 
 t = CTask(g_break)
 @test_throws Libtask.CTaskException consume(t)
+
+# with io and without `produce`
+function f_non_produce()
+    t = [0 1 2];
+    for i in t
+        @show i
+    end
+    t[3]
+end
+
+@test consume(CTask(f_non_produce)) == 2

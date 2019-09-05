@@ -42,21 +42,24 @@ proper way is refreshing the `current_task` (the variable `t`) in
 
 """
 function task_wrapper(func)
-    () ->
-    try
+    () -> begin
         ct = current_task()
-        res = func()
-        ct.result = res
-        isa(ct.storage, Nothing) && (ct.storage = IdDict())
-        ct.storage[:_libtask_state] = :done
-        wait()
-    catch ex
-        ct = current_task()
-        ct.exception = ex
-        ct.result = ex
-        ct.backtrace = catch_backtrace()
-        isa(ct.storage, Nothing) && (ct.storage = IdDict())
-        ct.storage[:_libtask_state] = :failed
+        try
+            res = func()
+            ct.result = res
+            isa(ct.storage, Nothing) && (ct.storage = IdDict())
+            ct.storage[:_libtask_state] = :done
+        catch ex
+            ct.exception = ex
+            ct.result = ex
+            ct.backtrace = catch_backtrace()
+            isa(ct.storage, Nothing) && (ct.storage = IdDict())
+            ct.storage[:_libtask_state] = :failed
+        end
+        consumer = next_consumer(ct)
+        if consumer != nothing && consumer.state == :runnable
+            schedule(consumer, :_libtask_signal_done)
+        end
         wait()
     end
 end
@@ -101,6 +104,21 @@ function Base.show(io::IO, exc::CTaskException)
     end
 end
 
+function next_consumer(ct::Task)
+    if !haskey(ct.storage, :consumers)
+        return
+    end
+
+    q = ct.storage[:consumers]
+    if isa(q, Task)
+        t = q
+        ct.storage[:consumers] = nothing
+        return t
+    elseif isa(q, Condition) && !isempty(q.waitq)
+        return popfirst!(q.waitq)
+    end
+end
+
 produce(v) = begin
     ct = current_task()
 
@@ -112,12 +130,12 @@ produce(v) = begin
     local empty, t, q
     while true
         q = ct.storage[:consumers]
-        if isa(q,Task)
+        if isa(q, Task)
             t = q
             ct.storage[:consumers] = nothing
             empty = true
             break
-        elseif isa(q,Condition) && !isempty(q.waitq)
+        elseif isa(q, Condition) && !isempty(q.waitq)
             t = popfirst!(q.waitq)
             empty = isempty(q.waitq)
             break
@@ -140,9 +158,9 @@ produce(v) = begin
         while true
             # wait until there are more consumers
             q = ct.storage[:consumers]
-            if isa(q,Task)
+            if isa(q, Task)
                 return q.result
-            elseif isa(q,Condition) && !isempty(q.waitq)
+            elseif isa(q, Condition) && !isempty(q.waitq)
                 return q.waitq[1].result
             end
             wait()
@@ -179,7 +197,7 @@ consume(p::Task, values...) = begin
     #push!(P.consumers.waitq, ct)
     # optimized version that avoids the queue for 1 consumer
     consumers = p.storage[:consumers]
-    if consumers === nothing || (isa(consumers,Condition)&&isempty(consumers.waitq))
+    if consumers === nothing || (isa(consumers, Condition) && isempty(consumers.waitq))
         p.storage[:consumers] = ct
     else
         if isa(consumers, Task)
@@ -190,13 +208,13 @@ consume(p::Task, values...) = begin
         push!(p.storage[:consumers].waitq, ct)
     end
 
+    @label check_done
     if p.state == :runnable
         Base.schedule(p)
-        yield()
+        yield() # may be resumed before `p` is done if p yields(e.g., on IO)
 
         isa(p.storage, IdDict) && haskey(p.storage, :_libtask_state) &&
             (p.state = p.storage[:_libtask_state])
-
         if p.state == :done
             return p.result
         end
@@ -209,5 +227,10 @@ consume(p::Task, values...) = begin
             throw(CTaskException(typeof(p.exception), msg, p.backtrace))
         end
     end
-    wait()
+    res = wait()
+    if res == :_libtask_signal_done
+         @goto check_done
+    else
+        return res
+    end
 end

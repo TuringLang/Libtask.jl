@@ -22,7 +22,7 @@ r = @testset "Broken Functions Tests" begin
         @test isa(t.exception, ErrorException)
     end
 
-    @testset "OutOfBounds Test Before" begin
+    @testset "OutOfBounds Test Before `produce`" begin
         function ftest()
             x = zeros(2)
             while true
@@ -63,26 +63,46 @@ r = @testset "Broken Functions Tests" begin
         @test isa(t.exception, BoundsError)
     end
 
-    @testset "OutOfBounds Test After `copy`" begin
+#     @testset "OutOfBounds Test After `copy`" begin
+#         function ftest()
+#             x = zeros(2)
+#             while true
+#                 x[1] = 1
+#                 x[2] = 2
+#                 produce(x[2])
+#                 x[3] = 3
+#             end
+#         end
+#
+#         t = CTask(ftest)
+#         @test consume(t) == 2
+#         t_copy = copy(t)
+#         try
+#             consume(t_copy)
+#         catch ex
+#             @test ex.etype == BoundsError
+#         end
+#         @test isa(t_copy.exception, BoundsError)
+#     end
+
+    @testset "OutOfBounds Test without `produce`" begin
         function ftest()
             x = zeros(2)
             while true
+                @show x
                 x[1] = 1
                 x[2] = 2
-                produce(x[2])
                 x[3] = 3
             end
         end
 
         t = CTask(ftest)
-        @test consume(t) == 2
-        t_copy = copy(t)
         try
-            consume(t_copy)
+            consume(t)
         catch ex
             @test ex.etype == BoundsError
         end
-        @test isa(t_copy.exception, BoundsError)
+        @test isa(t.exception, BoundsError)
     end
 end
 Test.print_test_results(r)
