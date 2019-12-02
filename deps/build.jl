@@ -9,9 +9,11 @@ end
 
 # modify build-tmp.jl to only check correct version libs
 function install_products_filter(build_file)
-    prod_filter = raw"""products = filter(products) do prod
+    prod_filter = raw"""products_tmp = filter(products) do prod
     endswith(prod.libnames[1], "$(VERSION.major)_$(VERSION.minor)")
 end
+length(products_tmp) == 0 && (products_tmp = [products[end]])
+products = products_tmp
 """
     lines = open(build_file) do io
         read(io, String) |> x -> split(x, "\n")
