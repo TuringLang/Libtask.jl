@@ -57,8 +57,15 @@ function task_wrapper(func)
             ct.storage[:_libtask_state] = :failed
         end
         consumer = next_consumer(ct)
-        if consumer != nothing && consumer.state == :runnable
-            schedule(consumer, :_libtask_signal_done)
+        @static if VERSION < v"1.1.9999"
+            if consumer != nothing && consumer.state == :runnable
+                schedule(consumer, :_libtask_signal_done)
+            end
+        else
+            println(consumer.state)
+            if consumer != nothing && consumer.state == :runnable
+                schedule(consumer, :_libtask_signal_done)
+            end
         end
         wait()
     end
