@@ -7,13 +7,31 @@ name = "LibtaskDylib"
 version_str = Pkg.TOML.parsefile(joinpath(@__DIR__, "../Project.toml"))["version"] |> strip |> (x) -> lstrip(x, ['v'])
 version = VersionNumber(version_str)
 
+event_file = get(ENV, "GITHUB_EVENT_PATH", "")
+# run(`cat $event_file`)
+
 # Collection of sources required to build Libtask
 function get_commit_id()
     is_pr = get(ENV, "TRAVIS_PULL_REQUEST", "false")
     if is_pr != "false"
         return get(ENV, "TRAVIS_PULL_REQUEST_SHA", "")
     end
-    return readlines(`git rev-parse HEAD`)[1]
+
+    ref = "HEAD"
+
+    gaction = get(ENV, "GITHUB_ACTIONS", "")
+    if !isempty(gaction)
+        # .pull_request.head.sha, .release.tag_name,
+        ref = readlines(`jq --raw-output '.pull_request.head.sha' $event_file`)[1]
+        if ref == "null"
+            ref = readlines(`jq --raw-output '.release.tag_name' $event_file`)[1]
+        end
+    end
+
+    if ref == "null"
+        ref = "HEAD"
+    end
+    return readlines(`git rev-parse $ref`)[1]
 end
 
 sources = [

@@ -1,7 +1,6 @@
 # Libtask
-[![Build Status](https://travis-ci.org/TuringLang/Libtask.jl.svg?branch=master)](https://travis-ci.org/TuringLang/Libtask.jl)
-[![Build status](https://ci.appveyor.com/api/projects/status/9oj4lh1bdya2ofjm/branch/master?svg=true)](https://ci.appveyor.com/project/TuringLang/libtask-jl/branch/master)
-
+![Libtask Testing](https://github.com/TuringLang/Libtask.jl/workflows/Libtask%20Testing/badge.svg)
+![Dylib Build](https://github.com/TuringLang/Libtask.jl/workflows/Build%20Dylib/badge.svg)
 
 
 C shim for [task copying](https://github.com/JuliaLang/julia/issues/4085) in Turing
@@ -84,4 +83,4 @@ Disclaimer: This feature is still experimental and should only be used with caut
     1. Update the new version number in `Project.toml`;
     2. Commit all the changes;
     3. Tag the current commit with git, the tag name should be version number with a preceding "v";
-    4. Push the tag to the repo on GitHub.
+    4. Push the tag to the repo on GitHub, then make a release on the tag.
