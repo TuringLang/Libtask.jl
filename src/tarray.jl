@@ -53,7 +53,7 @@ function Base.getindex(S::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
     return d[I...]
 end
 
-function Base.setindex!(S::TArray{T, N}, x, I::Vararg{Int,N}) where {T, N}
+function Base.setindex!(S::TArray{T, N}, x::T, I::Vararg{Int,N}) where {T, N}
     n, d = task_local_storage(S.ref)
     cn   = n_copies()
     newd = d
@@ -65,7 +65,7 @@ function Base.setindex!(S::TArray{T, N}, x, I::Vararg{Int,N}) where {T, N}
     newd[I...] = x
 end
 
-function Base.push!(S::TArray, x)
+function Base.push!(S::TArray{T}, x::T) where T
     n, d = task_local_storage(S.ref)
     cn   = n_copies()
     newd = d
@@ -102,21 +102,27 @@ end
 
 function Base.display(S::TArray)
     arr = S.orig_task.storage[S.ref][2]
-    @warn "display(::TArray) prints the originating task's storage, not the current task's storage. Please use show(::TArray) to display the current task's version of a TArray."
+    @warn "display(::TArray) prints the originating task's storage, " *
+        "not the current task's storage. " *
+        "Please use show(::TArray) to display the current task's version of a TArray."
     display(arr)
 end
 
 Base.show(io::IO, S::TArray) = Base.show(io::IO, task_local_storage(S.ref)[2])
-Base.size(S::TArray) = Base.size(task_local_storage(S.ref)[2])
-Base.ndims(S::TArray) = Base.ndims(task_local_storage(S.ref)[2])
 
 # Base.get(t::Task, S) = S
 # Base.get(t::Task, S::TArray) = (t.storage[S.ref][2])
 Base.get(S::TArray) = (current_task().storage[S.ref][2])
 
-# Implements eltype, firstindex, lastindex, and iterate
-# functions.
-for F in (:eltype, :firstindex, :lastindex, :iterate)
+##
+# Iterator Interface
+IteratorSize(::Type{TArray{T, N}}) where {T, N} = HasShape{N}()
+IteratorEltype(::Type{TArray}) = HasEltype()
+
+# Implements iterate, eltype, length, and size functions,
+# as well as firstindex, lastindex, ndims, and axes
+for F in (:iterate, :eltype, :length, :size,
+          :firstindex, :lastindex, :ndims, :axes)
     @eval Base.$F(a::TArray, args...) = $F(get(a), args...)
 end
 
