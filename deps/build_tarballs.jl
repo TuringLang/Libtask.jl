@@ -6,6 +6,8 @@ using BinaryBuilder
 name = "LibtaskDylib"
 version_str = Pkg.TOML.parsefile(joinpath(@__DIR__, "../Project.toml"))["version"] |> strip |> (x) -> lstrip(x, ['v'])
 version = VersionNumber(version_str)
+# see https://github.com/JuliaPackaging/BinaryBuilder.jl/issues/336
+ENV["CI_COMMIT_TAG"] = ENV["TRAVIS_TAG"] = "v" * version_str
 
 event_file = get(ENV, "GITHUB_EVENT_PATH", "")
 # run(`cat $event_file`)
