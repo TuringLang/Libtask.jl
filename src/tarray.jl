@@ -53,7 +53,7 @@ function Base.getindex(S::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
     return d[I...]
 end
 
-function Base.setindex!(S::TArray{T, N}, x::T, I::Vararg{Int,N}) where {T, N}
+function Base.setindex!(S::TArray{T, N}, x, I::Vararg{Int,N}) where {T, N}
     n, d = task_local_storage(S.ref)
     cn   = n_copies()
     newd = d
@@ -65,7 +65,7 @@ function Base.setindex!(S::TArray{T, N}, x::T, I::Vararg{Int,N}) where {T, N}
     newd[I...] = x
 end
 
-function Base.push!(S::TArray{T}, x::T) where T
+function Base.push!(S::TArray{T}, x) where T
     n, d = task_local_storage(S.ref)
     cn   = n_copies()
     newd = d
