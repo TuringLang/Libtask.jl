@@ -80,7 +80,5 @@ Disclaimer: This feature is still experimental and should only be used with caut
 ## For Developer
 
 ### Release a new version
-    1. Update the new version number in `Project.toml`;
-    2. Commit all the changes;
-    3. Tag the current commit with git, the tag name should be version number with a preceding "v";
-    4. Push the tag to the repo on GitHub, then make a release on the tag.
+    Update the new version number in `Project.toml`, a tag to that
+    version will be made by the GitHub Actions after it is pushed.
