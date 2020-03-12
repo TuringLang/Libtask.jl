@@ -1,0 +1,21 @@
+#!/bin/bash
+
+git fetch --tags
+
+TAGS=($(git tag))
+CTAG=$(perl -ne 'print "v$1" if m#version\s*=\s*"(.*)"#' Project.toml)
+COMMIT=$(git rev-parse HEAD)
+
+if [[ ! " ${TAGS[@]} " =~ " ${CTAG} " ]]; then
+    GIT_REFS_URL=$(jq .repository.git_refs_url $GITHUB_EVENT_PATH | tr -d '"' | sed 's/{\/sha}//g')
+
+    curl -s -X POST $GIT_REFS_URL \
+         -H "Authorization: token ${GITHUB_TOKEN}" \
+         -d @- << EOF
+{
+  "ref": "refs/tags/$CTAG",
+  "sha": "$COMMIT"
+}
+EOF
+
+fi

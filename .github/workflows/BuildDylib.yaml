@@ -25,6 +25,10 @@ jobs:
         uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.julia-version }}
+      - name: Tag commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: deps/gh-auto-tag
       - name: Install dependencies
         run: julia -e 'using Pkg; Pkg.add("BinaryProvider"); Pkg.add("BinaryBuilder");'
       - name: Build
