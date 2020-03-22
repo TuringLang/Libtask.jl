@@ -1,6 +1,6 @@
 # Libtask
-![Libtask Testing](https://github.com/TuringLang/Libtask.jl/workflows/Libtask%20Testing/badge.svg)
-![Dylib Build](https://github.com/TuringLang/Libtask.jl/workflows/Build%20Dylib/badge.svg)
+[![Libtask Testing](https://github.com/TuringLang/Libtask.jl/workflows/Libtask%20Testing/badge.svg)](https://github.com/TuringLang/Libtask.jl/actions)
+[![Dylib Build](https://github.com/TuringLang/Libtask.jl/workflows/Build%20Dylib/badge.svg)](https://github.com/TuringLang/Libtask.jl/actions)
 
 
 C shim for [task copying](https://github.com/JuliaLang/julia/issues/4085) in Turing
