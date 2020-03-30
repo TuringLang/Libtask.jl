@@ -1,5 +1,6 @@
 function find_prev_tag(tag)
     project_root = (@__DIR__) |> dirname |> abspath
+    run(`git -C $project_root fetch --tags`)
     tags = readlines(`git -C $project_root tag`)
     sort!(tags)
     idx = indexin([tag], tags)[1]
