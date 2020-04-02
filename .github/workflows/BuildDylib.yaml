@@ -4,10 +4,9 @@ on:
   push:
     branches:
       - master
-    # tags: '*'
-  release:
-    types:
-      - created
+  # release:
+  #   types:
+  #     - created
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -36,7 +35,7 @@ jobs:
           BINARYBUILDER_DOWNLOADS_CACHE: downloads
           BINARYBUILDER_AUTOMATIC_APPLE: true
         run: julia deps/build_tarballs.jl
-      - name: Upload to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: deps/gh-update-to-release
+      # - name: Upload to release
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   run: deps/gh-update-to-release
