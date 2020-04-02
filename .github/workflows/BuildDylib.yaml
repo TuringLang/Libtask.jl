@@ -4,7 +4,7 @@ on:
   push:
     paths:
     - 'deps/Makefile'
-    - 'deps/libtask.c'
+    - 'deps/task.c'
     - 'deps/build_tarballs.jl'
     - 'deps/build_dylib.sh'
 
