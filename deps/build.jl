@@ -3,7 +3,7 @@
 ### ` julia generate_buildjl.jl L/Libtask/build_tarballs.jl`
 ### in the Yggdrasil root directory, with 2 updates:
 ### 1. add prefix tp products, see https://github.com/JuliaPackaging/Yggdrasil#binaryproviderjl,
-### 2. the part of writing deps.jl
+### 2. products filter
 ###
 
 using BinaryProvider # requires BinaryProvider 0.3.0 or later
@@ -17,6 +17,12 @@ products = [
     LibraryProduct(prefix, ["libtask_v1_2"], :libtask_v1_2),
     LibraryProduct(prefix, ["libtask_v1_3"], :libtask_v1_3),
 ]
+
+products_tmp = filter(products) do prod
+    endswith(prod.libnames[1], "$(VERSION.major)_$(VERSION.minor)")
+end
+length(products_tmp) == 0 && (products_tmp = [products[end]])
+products = products_tmp
 
 # Download binaries from hosted location
 bin_prefix = "https://github.com/JuliaBinaryWrappers/Libtask_jll.jl/releases/download/Libtask-v0.3.0+0"
@@ -49,35 +55,4 @@ if unsatisfied || !isinstalled(dl_info...; prefix=prefix)
 end
 
 # Write out a deps.jl file that will contain mappings for our products
-# write_deps_file(joinpath(@__DIR__, "deps.jl"), products, verbose=verbose)
-
-lib_versions = map(p -> p.libnames[1][9:end], products)
-lib_path = Sys.iswindows() ? "bin" : "lib"
-deps_source = """
-if isdefined((@static VERSION < v"0.7.0-DEV.484" ? current_module() : @__MODULE__), :Compat)
-    import Compat.Libdl
-elseif VERSION >= v"0.7.0-DEV.3382"
-    import Libdl
-end
-
-const lib_versions = $(lib_versions)
-proper_ver = filter(lib_versions) do v
-    endswith(v, "\$(VERSION.major)_\$(VERSION.minor)")
-end
-proper_ver = length(proper_ver) == 0 ? lib_versions[end] : proper_ver[1]
-const libtask = joinpath(dirname(@__FILE__), "usr/$(lib_path)/libtask_\$(proper_ver).\$(Libdl.dlext)")
-
-function check_deps()
-    global libtask
-    if !isfile(libtask)
-        error("\$(libtask) does not exist, Please re-run Pkg.build(\\"Libtask.jl\\"), and restart Julia.")
-    end
-
-    if Libdl.dlopen_e(libtask) in (C_NULL, nothing)
-        error("\$(libtask) cannot be opened, Please re-run Pkg.build(\\"Libtask.jl\\"), and restart Julia.")
-    end
-
-end
-
-"""
-write(joinpath(@__DIR__, "deps.jl"), deps_source)
+write_deps_file(joinpath(@__DIR__, "deps.jl"), products, verbose=verbose)
