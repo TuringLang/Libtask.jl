@@ -7,8 +7,8 @@ using Test
     function f_ct()
         ta = tzeros(UInt64, 4);
         for i in 1:4
-            ta[i] = hash(current_task())
-            DATA[current_task()] = convert(Array, ta)
+            ta[i] = hash(Libtask._current_task())
+            DATA[Libtask._current_task()] = convert(Array, ta)
             produce(ta[i])
         end
     end
