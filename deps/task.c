@@ -5,6 +5,7 @@
 
 #include "julia.h"
 
+// Workaround for JuliaLang/julia#32812
 jl_task_t *vanilla_get_current_task(void)
 {
     jl_ptls_t ptls = jl_get_ptls_states();
