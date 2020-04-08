@@ -5,6 +5,13 @@
 
 #include "julia.h"
 
+jl_task_t *vanilla_get_current_task(void)
+{
+    jl_ptls_t ptls = jl_get_ptls_states();
+    return (jl_task_t*)ptls->current_task;
+}
+
+
 jl_task_t *jl_enable_stack_copying(jl_task_t *t)
 {
 #if JULIA_VERSION_MAJOR == 1 && JULIA_VERSION_MINOR >= 1
