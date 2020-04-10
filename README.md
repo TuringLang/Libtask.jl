@@ -80,5 +80,23 @@ Disclaimer: This feature is still experimental and should only be used with caut
 ## For Developer
 
 ### Release a new version
-    Update the new version number in `Project.toml`, a tag to that
-    version will be made by the GitHub Actions after it is pushed.
+    - If you have updates of the binary dylib (files under the `deps`
+      directory), you should:
+      - Update the version/commit information in [this
+        file](https://github.com/JuliaPackaging/Yggdrasil/blob/master/L/Libtask/build_tarballs.jl)
+        by a pull request
+      - Wait for that PR being merged, then you will find a new
+        release of the dylib
+        [here](https://github.com/JuliaBinaryWrappers/Libtask_jll.jl/releases)
+      - Then, in the root directory of the Yggdrasil project, run
+        `https://github.com/JuliaBinaryWrappers/Libtask_jll.jl/releases`,
+        you will get a build file like
+        `build/build_Libtask.v0.3.1.jl`. Copy the binary download
+        information (the variables `bin_prefix` and `download_info`)
+        from that generated file to `deps/build.jl` in our repo and
+        commit the changes.
+    - If you don't make any changes about the dylib, just ignore the
+      first step and go to next one.
+    - Update the new version number in `Project.toml`, ping
+      @JuliaRegistrator with `@JuliaRegistrator register` in a
+      comment.
