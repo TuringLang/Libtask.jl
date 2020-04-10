@@ -1,6 +1,8 @@
 # Utility function for self-copying mechanism
 
-n_copies() = n_copies(current_task())
+_current_task() = ccall((:vanilla_get_current_task, libtask), Ref{Task}, ())
+
+n_copies() = n_copies(_current_task())
 n_copies(t::Task) = begin
   isa(t.storage, Nothing) && (t.storage = IdDict())
   if haskey(t.storage, :n_copies)
@@ -34,14 +36,14 @@ proper way is refreshing the `current_task` (the variable `t`) in
 function task_wrapper(func)
     () ->
     try
-        ct = current_task()
+        ct = _current_task()
         res = func()
         ct.result = res
         isa(ct.storage, Nothing) && (ct.storage = IdDict())
         ct.storage[:_libtask_state] = :done
         wait()
     catch ex
-        ct = current_task()
+        ct = _current_task()
         ct.exception = ex
         ct.result = ex
         ct.backtrace = catch_backtrace()
@@ -92,7 +94,7 @@ function Base.show(io::IO, exc::CTaskException)
 end
 
 produce(v) = begin
-    ct = current_task()
+    ct = _current_task()
 
     if ct.storage == nothing
         ct.storage = IdDict()
@@ -126,7 +128,7 @@ produce(v) = begin
     if empty
         schedule(t, v)
         wait()
-        ct = current_task() # When a task is copied, ct should be updated to new task ID.
+        ct = _current_task() # When a task is copied, ct should be updated to new task ID.
         while true
             # wait until there are more consumers
             q = ct.storage[:consumers]
@@ -159,7 +161,7 @@ consume(p::Task, values...) = begin
         return wait(p)
     end
 
-    ct = current_task()
+    ct = _current_task()
     ct.result = length(values)==1 ? values[1] : values
 
     #### un-optimized version
