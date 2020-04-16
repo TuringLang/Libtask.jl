@@ -37,7 +37,7 @@ function task_wrapper(func)
     () ->
     try
         ct = _current_task()
-        res = func()
+        res = cow(func)
         ct.result = res
         isa(ct.storage, Nothing) && (ct.storage = IdDict())
         ct.storage[:_libtask_state] = :done
@@ -63,6 +63,8 @@ function Base.copy(t::Task)
     n = n_copies(t)
     t.storage[:n_copies]  = 1 + n
     newt.storage = copy(t.storage)
+    newt.storage[:_cow_asset] = IdDict{Any, Bool}()
+    newt.storage[:_cow_copylog] = Dict{UInt64, Any}()
   else
     newt.storage = nothing
   end

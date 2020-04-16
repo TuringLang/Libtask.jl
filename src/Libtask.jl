@@ -24,6 +24,7 @@ else # [v1.3, +)
 end
 
 include("taskcopy.jl")
+include("cow.jl")
 include("tarray.jl")
 
 end
