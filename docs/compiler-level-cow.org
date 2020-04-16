@@ -1,0 +1,132 @@
+# -*- mode: org; mode: auto-fill; mode: flyspell; -*-
+#+TITLE: The attempt to implement COW in compiler level
+
+* Approach 1
+  Hook every writing operation (and reading operation as well), insert
+  data copying instruction before them.
+
+  - list all functions that mutate their arguments, like ~push!~,
+    ~pop!~, etc.
+  - if a user defined function calls functions in the list above
+    directly on its arguments, that user defined function also is a
+    mutating function:
+    #+begin_src julia
+      function func_a(arg1)
+          # ...
+          pop!(arg1)
+      end
+    #+end_src
+    In the code above, ~func_a~ is a mutating function.
+  - in a function, we find all expressions that mutate local data
+    (that is, calling a mutating function with local variables),
+    insert a ~maybe_copy(data)~ function call before each of these
+    expressions, so that, the function:
+
+    #+begin_src julia
+      function func_b()
+          data = zeros(4)
+          for i in 1:4
+              push!(data, 1)
+              func_a(data)
+          end
+      end
+    #+end_src
+
+    will become
+
+    #+begin_src julia
+      function func_b()
+          data = zeros(4)                  # line 1
+          for i in 1:4                     # line 2
+              # here a fork may happen
+              data_1 = maybe_copy(data)    # line 3
+              push!(data_1, 1)             # line 4
+              # here a fork may happen
+              data_2 = maybe_copy(data_1)  # line 5
+              func_a(data_2)               # line 6
+              # line 6 should be `func_a(data_1)` if line 5 not inserted
+          end
+      end
+    #+end_src
+
+    We must insert line 5, because if we don't, and a task copy
+    (forking) happens between line 4 and 5, in the new task, the
+    function call ~func_a(...)~ will happen on data_1 which is owned
+    by the old task.
+
+    This step is what ~insert_copy_stage_2~ does.
+  - Let's see what does ~insert_copy_stage_1~ do. In the function
+    ~func_b~ above, when we are in the for-loop the second time (when
+    ~i == 2~), if a task copy happens between line 2 and line 3, in
+    the new task, ~data_1~ will be a copy of the original ~data~, not
+    the copy owned by the old task. But it should be a copy of the old
+    task's copy.
+
+    So for each local variable that will be mutated in a function, we
+    make a copy immediately after its first appearance, the function
+    becomes:
+
+    #+begin_src julia
+      function func_b()
+          data = zeros(4)                  # line 1
+          data_c = maybe_copy(data)        # line 1.1 <- stage 1 added
+          for i in 1:4                     # line 2
+              # here a fork may happen
+              data_1 = maybe_copy(data_c)  # line 3 <- stage 1 change data to data_c
+              push!(data_1, 1)             # line 4
+              # here a fork may happen
+              data_2 = maybe_copy(data_1)  # line 5
+              func_a(data_2)               # line 6
+              # line 6 should be `func_a(data_1)` if line 5 not inserted
+          end
+      end
+    #+end_src
+
+** The flaws of this approach
+   - can't deal with indirectly call to mutating function, e.g.,
+     ~map(pop!, ...)~.
+   - can't mark anonymous function (including closure, function
+     variable, ...) as mutating function, so treat them as mutating
+     ones whether it is or not.
+   - if a local variable is modified by a closure in the same scope
+     (the closure captures the local variable as its free value), like
+     this:
+
+     #+begin_src julia
+       function outter()
+           data = []
+           function inner()
+               push!(data, 1)
+           end
+           inner()
+       end
+     #+end_src
+     it will not detect that data is mutated -- maybe this can be
+     implemented, but it is not implemented now.
+
+* TODO Approach 2
+  Find all Array creation expressions, insert expressions to wrap the
+  arrays as ~TArray~ s after the creation expressions.
+
+  This approach can capture any array creation in the task entry
+  function and its callees, but can't capture array creations out of
+  that scope.
+
+  Approach 1 can apply to any heap allocated object, while approach 2
+  only applies to ~Array~ which has a corresponding COW data type
+  (~TArray~).
+
+* Approach 3 [*Current Implementation*]
+  - adopt the ~TArray~ pattern to copy objects
+  - use the original object's id as the tracking id (~TArray~ uses a
+    unique symbol, ~S.ref~)
+  - use ~IRTools~ to hook the reading/writing methods
+
+  *Caveat*: We should use ~get~ if we read (usually pass out) the
+  COW-ed objects directly but not using the hooked methods (indexing,
+  for example):
+
+  #+begin_src julia
+    GLOBAL_DICT[key] = obj      # ! this one works in a wrong way
+    GLOBAL_DICT[key] = get(obj) #   this one works well
+  #+end_src

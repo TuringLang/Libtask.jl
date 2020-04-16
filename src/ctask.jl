@@ -11,7 +11,7 @@ struct CTask
     end
 end
 
-CTask(f) = CTask(Task(task_wrapper(f)))
+CTask(f; cow=true) = CTask(Task(task_wrapper(f; _cow=true)))
 
 # Iteration interface.
 Base.iterate(ctask::CTask, state=nothing) = consume(ctask), nothing
@@ -57,12 +57,13 @@ proper way is refreshing the `current_task` (the variable `t`) in
 `start_task` after the call to `jl_apply` returns.
 
 """
-function task_wrapper(func)
+
+function task_wrapper(func; _cow=true)
     f = let func=func
         () -> begin
             try
                 ct = _current_task()
-                res = func()
+                res = _cow ? cow(func) : func()
                 ct.result = res
                 ct.storage === nothing && (ct.storage = IdDict())
                 ct.storage[:_libtask_state] = :done
@@ -86,7 +87,6 @@ function Base.copy(ctask::CTask)
     if task.state !== :runnable && task.state !== :done
         error("only runnable or finished tasks can be copied.")
     end
-
     newtask = ccall((:jl_clone_task, libtask), Any, (Any,), task)::Task
 
     task.storage[:n_copies] = 1 + n_copies(task)
