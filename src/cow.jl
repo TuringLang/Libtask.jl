@@ -163,3 +163,14 @@ cow(::typeof(Base.push!), a...) = Base.push!(a...)
 cow(::typeof(Base.pop!), a...) = Base.pop!(a...)
 cow(::typeof(Base.setindex!), a...) = Base.setindex!(a...)
 cow(::typeof(produce), a...) = produce(a...)
+
+
+# debug
+function cmp_cow_ir(func, args...)
+    ir = IRTools.@code_ir func(args...)
+    print("\nIR before transformation --------\n")
+    print(ir)
+    ir = insert_copy(ir)
+    print("\nIR after transformation --------\n")
+    print(ir)
+end

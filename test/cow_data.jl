@@ -4,27 +4,32 @@ using Test
 
 @testset "COW Test" begin
 
-    @testset "Code Generation" begin
-
+    @testset "Test on Array (1)" begin
         function f_ct()
-            ta = zeros(UInt64, 4);
-            for i in 1:4
-                print(ta[i])
-                ta[i] = hash(Libtask._current_task())
-                DATA[Libtask._current_task()] = ta
+            data = [0 1 2];
+            while true
+                produce(data[1])
+                data[1] = 1 + data[1]
             end
-            ta
         end
 
-        ir = IRTools.@code_ir f_ct()
-        @show ir
-        ir = Libtask.insert_copy(ir)
-        print("--------\n")
-        @show ir
+        t = CTask(f_ct)
+
+        @test consume(t) == 0
+        @test consume(t) == 1
+
+        a = copy(t);
+        @test consume(a) == 2
+        @test consume(a) == 3
+
+        @test consume(t) == 2
+        @test consume(t) == 3
+
+        @test consume(a) == 4
+        @test consume(a) == 5
     end
 
-
-    @testset "Test on Array" begin
+    @testset "Test on Array (2)" begin
 
         DATA = Dict{Task, Array}()
 

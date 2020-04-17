@@ -22,7 +22,7 @@ a = copy(t);
 @test consume(t) == 2
 @test consume(t) == 3
 
-# Test case 2: heap allocated objects are shallowly copied.
+# Test case 2: Array is COW-ed by default
 
 function f_ct2()
   t = [0 1 2];
@@ -39,10 +39,10 @@ t = CTask(f_ct2)
 a = copy(t);
 @test consume(a) == 2
 @test consume(a) == 3
-@test consume(t) == 4
-@test consume(t) == 5
-@test consume(a) == 6
-@test consume(a) == 7
+@test consume(t) == 2
+@test consume(t) == 3
+@test consume(a) == 4
+@test consume(a) == 5
 
 
 # Breaking test
