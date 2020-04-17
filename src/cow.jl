@@ -3,11 +3,12 @@ using MacroTools
 
 using IRTools: BasicBlock, stmt, var
 
+# TODO: this should be list of (op => mutated_arg_pos)
 const MUTATING_OPS = (:push!, :pop!, :setindex!)
 
 function copy_object(obj)
     ct = _current_task()
-    ct.storage == nothing && (ct.storage = IdDict())
+    ct.storage === nothing && (ct.storage = IdDict())
     if !haskey(ct.storage, :_cow_asset)
         ct.storage[:_cow_asset] = IdDict{Any, Bool}()
     end
@@ -29,7 +30,7 @@ function copy_object(obj)
 end
 
 maybe_copy(x) = x
-maybe_copy(x::AbstractArray{T}) where {T<:Number} = copy_object(x)
+maybe_copy(x::AbstractArray{<:Number}) = copy_object(x)
 
 function mutating(e)
     isa(e, Expr) || return (false, 0)
@@ -51,8 +52,6 @@ function insert_copy_stage_1(ir::IRTools.IR)
     replacements = Dict{IRTools.Variable, IRTools.Variable}()
 
     for (v, st) in ir
-        isa(v, IRTools.Variable) || continue
-        isa(st, IRTools.Statement) || continue
         mut, mpos = mutating(st.expr)
         mut || continue
         if mpos == 1 && isa(st.expr.args[2], IRTools.Variable) # push!(...)
@@ -63,7 +62,6 @@ function insert_copy_stage_1(ir::IRTools.IR)
     end
 
     for (mv, _) in mutate_vars
-        # rk = insert!(ir, ov, :(_()))
         rk = IRTools.insertafter!(ir, mv, :(_placeholder()))
         replacements[mv] = rk
     end
@@ -76,8 +74,7 @@ function insert_copy_stage_1(ir::IRTools.IR)
     end
 
     for (mv, newk) in replacements
-        # ir_new[newk] = :(Libtask.maybe_copy($(ov)))
-        ir_new[newk] = IRTools.xcall(GlobalRef(Libtask, :maybe_copy), mv)
+        ir_new[newk] = IRTools.xcall(Libtask, :maybe_copy, mv)
     end
 
     return ir_new
@@ -91,6 +88,7 @@ function update_var(ir, start, from, to)
         end
         started || continue
 
+        # TODO: remove MacroTools
         st_new = MacroTools.prewalk(st) do x
             return x == from ? to : x
         end
@@ -103,19 +101,16 @@ function insert_copy_stage_2(ir::IRTools.IR)
     mutate_instructions = Dict{IRTools.Variable, IRTools.Variable}()
 
     for (v, st) in ir
-        isa(v, IRTools.Variable) || continue
-        isa(st, IRTools.Statement) || continue
         mut, mpos = mutating(st.expr)
         mut || continue
-        if mpos == 1 && isa(st.expr.args[2], IRTools.Variable) # push!(...)
-            mutate_instructions[v] = st.expr.args[2]
-        elseif mpos == 2 && isa(st.expr.args[3], IRTools.Variable)  # self(push!, ...)
-            mutate_instructions[v] = st.expr.args[3]
+        # mpos = 1 when push!(...), mpos = 2 when self(push!, ...)
+        if isa(st.expr.args[mpos + 1], IRTools.Variable)
+            mutate_instructions[v] = st.expr.args[mpos + 1]
         end
     end
 
     for (mres, mv) in mutate_instructions
-        rk = insert!(ir, mres, IRTools.xcall(GlobalRef(Libtask, :maybe_copy), mv))
+        rk = insert!(ir, mres, IRTools.xcall(Libtask, :maybe_copy, mv))
         st = ir[mres]
         update_var(ir, mres, mv, rk)
     end
@@ -127,7 +122,7 @@ insert_copy(ir) = ir |> insert_copy_stage_1 |> insert_copy_stage_2
 
 IRTools.@dynamo function cow(a...)
     ir = IRTools.IR(a...)
-    ir == nothing && return
+    ir === nothing && return
     IRTools.recurse!(ir)
     ir = insert_copy(ir)
     # @show ir
