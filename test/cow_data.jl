@@ -9,6 +9,7 @@ using Test
         function f_ct()
             ta = zeros(UInt64, 4);
             for i in 1:4
+                print(ta[i])
                 ta[i] = hash(Libtask._current_task())
                 DATA[Libtask._current_task()] = ta
             end
