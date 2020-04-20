@@ -32,16 +32,12 @@ using Test
     @testset "Test on Array (2)" begin
 
         DATA = Dict{Task, Array}()
-        Libtask.@non_cow function setter(k, v)
-            DATA[k] = v
-        end
-        # Libtask.@non_cow(setter)
 
         function f_ct()
             ta = zeros(UInt64, 4); # NOT a TArray!
             for i in 1:4
                 ta[i] = hash(Libtask._current_task())
-                setter(Libtask._current_task(), ta)
+                @non_cow DATA[Libtask._current_task()] = ta
                 produce(ta[i])
             end
         end

@@ -181,7 +181,7 @@ IRTools.@dynamo function cow(a...)
     return ir
 end
 
-macro non_cow(func)
+macro non_cow_func(func)
     if isa(func, Symbol) || (isa(func, Expr) && func.head === :.)
         return :(cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
     end
@@ -194,8 +194,19 @@ macro non_cow(func)
     end
 end
 
-@non_cow(produce)
-@non_cow(consume)
+macro non_cow(expr)
+    quote
+        f = () -> begin
+            $(esc(expr))
+        end
+        Libtask.non_cow_call(f)
+    end
+end
+
+@non_cow_func(produce)
+@non_cow_func(consume)
+@non_cow_func non_cow_call(func, args...) = func(args...)
+
 
 # debug
 function cmp_cow_ir(func, args...)
