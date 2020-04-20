@@ -1,7 +1,7 @@
 using Libtask
 using Test
 
-r = @testset "Broken Functions Tests" begin
+@testset "Broken Functions Tests" begin
 
     @testset "Error Test" begin
         function ftest()
@@ -85,4 +85,3 @@ r = @testset "Broken Functions Tests" begin
         @test isa(t_copy.exception, BoundsError)
     end
 end
-Test.print_test_results(r)

@@ -33,11 +33,11 @@ proper way is refreshing the `current_task` (the variable `t`) in
 `start_task` after the call to `jl_apply` returns.
 
 """
-function task_wrapper(func)
+function task_wrapper(func; _cow=true)
     () ->
     try
         ct = _current_task()
-        res = cow(func)
+        res = _cow ? cow(func) : func()
         ct.result = res
         isa(ct.storage, Nothing) && (ct.storage = IdDict())
         ct.storage[:_libtask_state] = :done
@@ -53,7 +53,7 @@ function task_wrapper(func)
     end
 end
 
-CTask(func) = Task(task_wrapper(func)) |> enable_stack_copying
+CTask(func; cow=true) = Task(task_wrapper(func, _cow=cow)) |> enable_stack_copying
 
 function Base.copy(t::Task)
   t.state != :runnable && t.state != :done &&

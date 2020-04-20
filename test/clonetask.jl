@@ -3,57 +3,63 @@
 using Libtask
 using Test
 
-# Test case 1: stack allocated objects are deep copied.
-function f_ct()
-  t = 0;
-  while true
-    produce(t)
-    t = 1 + t
-  end
-end
+@testset "Task Copying Tests" begin
 
-t = CTask(f_ct)
+    @testset "Test case 1: stack allocated objects are deep copied." begin
+        function f_ct()
+            i = 0;
+            while true
+                produce(i)
+                i = 1 + i
+            end
+        end
 
-@test consume(t) == 0
-@test consume(t) == 1
-a = copy(t);
-@test consume(a) == 2
-@test consume(a) == 3
-@test consume(t) == 2
-@test consume(t) == 3
+        t = CTask(f_ct)
 
-# Test case 2: Array is COW-ed by default
+        @test consume(t) == 0
+        @test consume(t) == 1
+        a = copy(t);
+        @test consume(a) == 2
+        @test consume(a) == 3
+        @test consume(t) == 2
+        @test consume(t) == 3
+    end
 
-function f_ct2()
-  t = [0 1 2];
-  while true
-    produce(t[1])
-    t[1] = 1 + t[1]
-  end
-end
+    @testset "Test case 2: head-allocated objects are shared when cow=false" begin
+        function f_ct2()
+            data = [0 1 2];
+            while true
+                produce(data[1])
+                data[1] = 1 + data[1]
+            end
+        end
 
-t = CTask(f_ct2)
+        t = CTask(f_ct2, cow=false)
 
-@test consume(t) == 0
-@test consume(t) == 1
-a = copy(t);
-@test consume(a) == 2
-@test consume(a) == 3
-@test consume(t) == 2
-@test consume(t) == 3
-@test consume(a) == 4
-@test consume(a) == 5
+        @test consume(t) == 0
+        @test consume(t) == 1
+        a = copy(t);
+        @test consume(a) == 2
+        @test consume(a) == 3
+        @test consume(t) == 4
+        @test consume(t) == 5
+        @test consume(a) == 6
+        @test consume(a) == 7
 
+    end
 
-# Breaking test
-function g_break()
-    t = 0
-    while true
-        t[3] = 1
-        produce(t)
-        t = t + 1
+    @testset "Test case 3: Exception" begin
+
+        function g_break()
+            data = 0
+            while true
+                data[3] = 1
+                produce(data)
+                data = data + 1
+            end
+        end
+
+        t = CTask(g_break)
+        @test_throws Libtask.CTaskException consume(t)
     end
 end
-
-t = CTask(g_break)
-@test_throws Libtask.CTaskException consume(t)

@@ -1,8 +1,6 @@
 using IRTools
 using MacroTools
 
-using IRTools: BasicBlock, stmt, var
-
 function copy_object(obj)
     ct = _current_task()
     ct.storage === nothing && (ct.storage = IdDict())
@@ -28,21 +26,35 @@ end
 
 maybe_copy(x) = x
 maybe_copy(x::AbstractArray{<:Number}) = copy_object(x)
+maybe_copy(x::AbstractDict) = begin
+    ct = _current_task()
+    if x === ct.storage
+        return x
+    end
+    copy_object(x)
+end
 
-# TODO: this should be list of (op => mutated_arg_pos)
-const MUTATING_OPS = (:push!, :pop!, :setindex!)
+# (func_name => mutated_arg_pos)
+const MUTATING_OPS = Dict{Symbol, Int}(
+    :setindex! => 1,
+    :push! => 1, :pushfirst! => 1,
+    :pop! => 1, :popfirst! => 1,
+    :append! => 1,
+    :delete! => 1, :deleteat! => 1,
+    :setdiff! => 1,
+)
 
 function mutating(e)
     isa(e, Expr) || return (false, 0)
     e.head == :call || return (false, 0)
-    if isa(e.args[1], GlobalRef) && e.args[1].name in MUTATING_OPS
-        return (true, 1)
+    if isa(e.args[1], GlobalRef) && haskey(MUTATING_OPS, e.args[1].name)
+        return (true, MUTATING_OPS[e.args[1].name])
     end
 
-    # IRTools.Inner.Statement(:((IRTools.Inner.Self())(Main.push!, %2, 1)), Any, 2)
-    if isa(e.args[1], IRTools.Inner.Self) && isa(e.args[2], GlobalRef) &&
-        e.args[2].name in MUTATING_OPS
-        return (true, 2)
+    # IRTools.Statement(:((IRTools.Self())(Main.push!, %2, 1)), Any, 2)
+    if (e.args[1] === IRTools.self) && isa(e.args[2], GlobalRef) &&
+        haskey(MUTATING_OPS, e.args[2].name)
+        return (true, MUTATING_OPS[e.args[2].name] + 1)
     end
     return (false, 0)
 end
@@ -149,21 +161,41 @@ end
 
 insert_copy(ir) = ir |> insert_copy_stage_1 |> insert_copy_stage_2
 
-IRTools.@dynamo function cow(a...)
-    ir = IRTools.IR(a...)
-    ir === nothing && return
-    IRTools.recurse!(ir)
-    ir = insert_copy(ir)
-    # @show ir
+function recurse_no_builtin!(ir, to = IRTools.self)
+    for (x, st) in ir
+        IRTools.isexpr(st.expr, :call) || continue
+        func = st.expr.args[1]
+        if isa(func, GlobalRef) && func.mod in (Base, Core)
+            continue
+        end
+        ir[x] = Expr(:call, to, st.expr.args...)
+    end
     return ir
 end
 
-cow(::typeof(Base.zeros), a...) = Base.zeros(a...)
-cow(::typeof(Base.push!), a...) = Base.push!(a...)
-cow(::typeof(Base.pop!), a...) = Base.pop!(a...)
-cow(::typeof(Base.setindex!), a...) = Base.setindex!(a...)
-cow(::typeof(produce), a...) = produce(a...)
+IRTools.@dynamo function cow(a...)
+    ir = IRTools.IR(a...)
+    ir === nothing && return
+    recurse_no_builtin!(ir)
+    ir = insert_copy(ir)
+    return ir
+end
 
+macro non_cow(func)
+    if isa(func, Symbol) || (isa(func, Expr) && func.head === :.)
+        return :(cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
+    end
+
+    @capture(shortdef(func), (name_(args__) = body_) |
+             (name_(args__) where {T__} = body_)) || error("Need a function definition")
+    return quote
+        $(esc(func))
+        $(esc(:(Libtask.cow(::typeof($(name)), a...) = $(name)(a...))))
+    end
+end
+
+@non_cow(produce)
+@non_cow(consume)
 
 # debug
 function cmp_cow_ir(func, args...)
