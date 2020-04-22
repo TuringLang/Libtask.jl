@@ -1,6 +1,30 @@
 using IRTools
 using MacroTools
 
+"""
+    copye_object(obj)
+
+Copy an object and mark it as the current task's asset (i.e., the
+current task will own that copy).
+
+The logic is:
+
+- If `obj` is already in `_cow_asset`, do nothing because we had
+  already copied it.
+- If `object_id(obj)` is in `_cow_copylog`, it reflects that the
+  `obj` had been copied, and the copy is in `_cow_asset` now, but
+  we there are many objects in `_cow_asset` so that we can tell
+  which object is the copy of `obj`. In this situation, we can find
+  the copy using `task.storage[:_cow_copylog][objectid(obj)]`.
+
+  ```julia
+  data = []
+  f1(data) # will modify data, so a copy is made.
+  f2(data) # will modify data, and find the copy made by f1 in copy log.
+  ```
+- Else, we copy the object, register it to the asset and copy log.
+
+"""
 function copy_object(obj)
     ct = _current_task()
     ct.storage === nothing && (ct.storage = IdDict())
@@ -24,6 +48,18 @@ function copy_object(obj)
     return new_obj
 end
 
+"""
+    maybe_copy(x)
+
+Copy an object when the COW mechanism requires to make a copy. If you
+want objects of a certain type to be copied then, add a method to this
+function:
+
+```julia
+Libtask.maybe_copy(x::MyType) = Libtask.copy_object(x)
+```
+
+"""
 maybe_copy(x) = x
 maybe_copy(x::AbstractArray{<:Number}) = copy_object(x)
 maybe_copy(x::AbstractDict) = begin
@@ -44,6 +80,19 @@ const MUTATING_OPS = Dict{Symbol, Int}(
     :setdiff! => 1,
 )
 
+"""
+    mutating(e)
+
+Predicate if an expression is a mutating operation.
+If true, returns `ture` and the position of the mutated argument;
+else returns `(false, 0)`.
+
+Examples:
+
+- `push!(a, v)` -> (true, 1)
+- `print(a)` -> (false, 0)
+
+"""
 function mutating(e)
     isa(e, Expr) || return (false, 0)
     e.head == :call || return (false, 0)
@@ -59,22 +108,30 @@ function mutating(e)
     return (false, 0)
 end
 
-function all_successors(b::IRTools.Block, accu::Vector{Int64})
+function _successors(b::IRTools.Block, accu::Vector{Int64})
     succs = IRTools.successors(b)
     ids = map(x -> x.id, succs)
     issubset(ids, accu) && return
     for blk in succs
         push!(accu, blk.id)
-        all_successors(blk, accu)
+        _successors(blk, accu)
     end
 end
 
-function all_successors(b::IRTools.Block)
+function _successors(b::IRTools.Block)
     ret = Int64[]
-    all_successors(b, ret)
+    _successors(b, ret)
     return ret
 end
 
+
+"""
+    find_mutating_blocks(ir::IRTools.IR)
+
+Find all variables that are mutated in the IR, and all the blocks in
+which a certain variable is modified.
+
+"""
 function find_mutating_blocks(ir::IRTools.IR)
     vars_to_blocks = Dict{IRTools.Variable, Vector{Int64}}()
     for blk in IRTools.blocks(ir)
@@ -89,7 +146,7 @@ function find_mutating_blocks(ir::IRTools.IR)
             else
                 vars_to_blocks[mv] = [blk.id]
             end
-            push!(vars_to_blocks[mv], all_successors(blk)...)
+            push!(vars_to_blocks[mv], _successors(blk)...)
         end
     end
 
@@ -119,6 +176,15 @@ function insert_copy_for_var(ir::IRTools.IR, var, blk_ids::Vector{Int64})
 end
 
 
+"""
+    insert_copy_stage_1(ir::IR)
+
+If a variable is mutated in an IR, we find its first occurrence, then
+insert a `maybe_copy` after that occurrence.
+
+This is for handle read operations after write opertions.
+
+"""
 function insert_copy_stage_1(ir::IRTools.IR)
     mutate_vars = Dict{IRTools.Variable, Bool}()
     replacements = Dict{IRTools.Variable, IRTools.Variable}()
@@ -151,6 +217,13 @@ function insert_copy_stage_1(ir::IRTools.IR)
     return ir_new
 end
 
+
+"""
+    insert_copy_stage_2(ir::IR)
+
+Find every mutating expression, insert a `maybe_copy` before it.
+
+"""
 function insert_copy_stage_2(ir::IRTools.IR)
     mv_blocks = find_mutating_blocks(ir)
     for (var, blk_ids) in mv_blocks
@@ -181,6 +254,18 @@ IRTools.@dynamo function cow(a...)
     return ir
 end
 
+
+"""
+    @non_cow_func
+
+Make a function skip the COW mechanism.
+
+```julia
+@non_cow_func function f1()
+    # ...
+end
+```
+"""
 macro non_cow_func(func)
     if isa(func, Symbol) || (isa(func, Expr) && func.head === :.)
         return :(cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
@@ -194,6 +279,15 @@ macro non_cow_func(func)
     end
 end
 
+"""
+    @non_cow
+
+Make an expression skip the COW mechanism.
+
+```julia
+@now_cow data[idx] = value
+```
+"""
 macro non_cow(expr)
     quote
         f = () -> begin
