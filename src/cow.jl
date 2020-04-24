@@ -174,18 +174,20 @@ For a given variable:
 
 """
 function insert_copy_for_var(ir::IRTools.IR, var)
+    arg = var
     for (v, st) in ir
         isa(st.expr, Expr) || continue
         (var in st.expr.args) || continue
         mut, mpositions = mutating(st.expr)
         if mut # write
-            rk = insert!(ir, v, IRTools.xcall(Libtask, :maybe_copy, var))
+            rk = insert!(ir, v, IRTools.xcall(Libtask, :maybe_copy, arg))
         else # read
-            rk = insert!(ir, v, IRTools.xcall(Libtask, :copy_for_reading, var))
+            rk = insert!(ir, v, IRTools.xcall(Libtask, :copy_for_reading, arg))
         end
         for i in 1:length(st.expr.args)
             st.expr.args[i] == var && (st.expr.args[i] = rk)
         end
+        arg = rk
     end
 
     return ir
