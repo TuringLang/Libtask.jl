@@ -99,13 +99,6 @@ function Base.copy(ctask::CTask)
     return CTask(newtask)
 end
 
-# Forward methods to underlying `Task`.
-for f in (:istaskdone, :istaskstarted, :istaskfailed)
-    @eval begin
-        Base.$f(ctask::CTask) = $f(ctask.task)
-    end
-end
-
 function produce(v)
     ct = _current_task()
 
