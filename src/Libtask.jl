@@ -25,5 +25,6 @@ end
 
 include("ctask.jl")
 include("tarray.jl")
+include("tref.jl")
 
 end
