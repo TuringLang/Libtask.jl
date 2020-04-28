@@ -1,15 +1,34 @@
-# Utility function for self-copying mechanism
+"""
+    CTask
 
+Wrapper of a [`Task`](@ref) for which deep copying of stack allocated objects is enabled.
+"""
+struct CTask
+    task::Task
+
+    function CTask(task::Task)
+        new(enable_stack_copying(task))
+    end
+end
+
+CTask(f) = CTask(Task(task_wrapper(f)))
+
+struct CTaskException <: Exception
+    task::Task
+end
+
+function Base.showerror(io::IO, ex::CTaskException)
+    println(io, "CTaskException:")
+    showerror(io, ex.task.exception, ex.task.backtrace)
+end
+
+# Utility function for self-copying mechanism
 _current_task() = ccall((:vanilla_get_current_task, libtask), Ref{Task}, ())
 
 n_copies() = n_copies(_current_task())
-n_copies(t::Task) = begin
-  isa(t.storage, Nothing) && (t.storage = IdDict())
-  if haskey(t.storage, :n_copies)
-    t.storage[:n_copies]
-  else
-    t.storage[:n_copies] = 0
-  end
+function n_copies(t::Task)
+  t.storage === nothing && (t.storage = IdDict())
+  return get!(t.storage, :n_copies, 0)
 end
 
 function enable_stack_copying(t::Task)
@@ -19,7 +38,6 @@ function enable_stack_copying(t::Task)
 end
 
 """
-
     task_wrapper()
 
 `task_wrapper` is a wordaround for set the result/exception to the
@@ -39,167 +57,158 @@ function task_wrapper(func)
         ct = _current_task()
         res = func()
         ct.result = res
-        isa(ct.storage, Nothing) && (ct.storage = IdDict())
-        ct.storage[:_libtask_state] = :done
+        ct.state = :done
         wait()
     catch ex
         ct = _current_task()
         ct.exception = ex
         ct.result = ex
+        ct.state = :failed
         ct.backtrace = catch_backtrace()
-        isa(ct.storage, Nothing) && (ct.storage = IdDict())
-        ct.storage[:_libtask_state] = :failed
         wait()
     end
 end
 
-CTask(func) = Task(task_wrapper(func)) |> enable_stack_copying
+function Base.copy(ctask::CTask)
+    task = ctask.task
+    task.state != :runnable && task.state != :done &&
+        error("only runnable or finished tasks can be copied.")
 
-function Base.copy(t::Task)
-  t.state != :runnable && t.state != :done &&
-    error("Only runnable or finished tasks can be copied.")
-  newt = ccall((:jl_clone_task, libtask), Any, (Any,), t)::Task
-  if t.storage != nothing
-    n = n_copies(t)
-    t.storage[:n_copies]  = 1 + n
-    newt.storage = copy(t.storage)
-  else
-    newt.storage = nothing
-  end
-  # copy fields not accessible in task.c
-  newt.code = t.code
-  newt.state = t.state
-  newt.result = t.result
-  @static if VERSION < v"1.1"
-    newt.parent = t.parent
-  end
-  if :last in fieldnames(typeof(t))
-    newt.last = nothing
-  end
-  newt
+    newtask = ccall((:jl_clone_task, libtask), Any, (Any,), task)::Task
+
+    task.storage[:n_copies] = 1 + n_copies(task)
+    newtask.storage = copy(task.storage)
+
+    # copy fields not accessible in task.c
+    newtask.code = task.code
+    newtask.state = task.state
+    newtask.result = task.result
+    @static if VERSION < v"1.1"
+        newtask.parent = task.parent
+    end
+
+    if isdefined(task, :last)
+        newtask.last = nothing
+    end
+
+    return CTask(newtask)
 end
 
-struct CTaskException
-    etype
-    msg::String
-    backtrace::Vector{Union{Ptr{Nothing}, Base.InterpreterIP}}
-end
-
-function Base.show(io::IO, exc::CTaskException)
-    println(io, "Stacktrace in the failed task:\n")
-    println(io, exc.msg * "\n")
-    for line in stacktrace(exc.backtrace)
-        println(io, string(line))
+# Forward methods to underlying `Task`.
+for f in (:istaskdone, :istaskstarted, :istaskfailed)
+    @eval begin
+        Base.$f(ctask::CTask) = $f(ctask.task)
     end
 end
 
-produce(v) = begin
+function produce(v)
     ct = _current_task()
 
     if ct.storage == nothing
         ct.storage = IdDict()
     end
 
-    haskey(ct.storage, :consumers) || (ct.storage[:consumers] = nothing)
-    local empty, t, q
+    consumers = get!(ct.storage, :consumers, nothing)
+    local empty, task
     while true
-        q = ct.storage[:consumers]
-        if isa(q,Task)
-            t = q
+        if consumers isa Task
+            task = consumers
             ct.storage[:consumers] = nothing
             empty = true
             break
-        elseif isa(q,Condition) && !isempty(q.waitq)
-            t = popfirst!(q.waitq)
-            empty = isempty(q.waitq)
+        elseif consumers isa Condition && !isempty(consumers.waitq)
+            task = popfirst!(consumers.waitq)
+            empty = isempty(consumers.waitq)
             break
         end
+
+        # Wait until there are more consumers.
         wait()
+
+        # Update consumers.
+        consumers = ct.storage[:consumers]
     end
 
-    if !(t.state in [:runnable, :queued])
-        throw(AssertionError("producer.consumer.state in [:runnable, :queued]"))
-    end
+    # Internal check to make sure that it is possible to switch to the consumer.
+    @assert task.state in (:runnable, :queued)
+
     @static if VERSION < v"1.1.9999"
-        if t.state == :queued yield() end
+        task.state === :queued && yield()
     else
-        if t.queue != nothing yield() end
+        task.queue !== nothing && yield()
     end
+
     if empty
-        schedule(t, v)
+        # Switch to the consumer.
+        schedule(task, v)
         wait()
+
         ct = _current_task() # When a task is copied, ct should be updated to new task ID.
         while true
-            # wait until there are more consumers
             q = ct.storage[:consumers]
             if isa(q,Task)
                 return q.result
             elseif isa(q,Condition) && !isempty(q.waitq)
                 return q.waitq[1].result
             end
+
+            # Wait until there are more consumers.
             wait()
         end
     else
-        schedule(t, v)
-        # make sure `t` runs before us. otherwise, the producer might
+        schedule(task, v)
+        # make sure `task` runs before us. otherwise, the producer might
         # finish before `t` runs again, causing it to see the producer
         # as done, causing done(::Task, _) to miss the value `v`.
         # see issue #7727
         yield()
-        return q.waitq[1].result
+        return consumers.waitq[1].result
     end
 end
 
-consume(p::Task, values...) = begin
 
-    if p.storage == nothing
-        p.storage = IdDict()
-    end
-    haskey(p.storage, :consumers) || (p.storage[:consumers] = nothing)
+function consume(ctask::CTask, values...)
+    # Check if the producer is done.
+    producer = ctask.task
+    istaskdone(producer) && return wait(producer)
 
-    if istaskdone(p)
-        return wait(p)
-    end
-
+    # Obtain the current task and set its result.
     ct = _current_task()
-    ct.result = length(values)==1 ? values[1] : values
+    ct.result = length(values) == 1 ? values[1] : values
 
-    #### un-optimized version
-    #if P.consumers === nothing
-    #    P.consumers = Condition()
-    #end
-    #push!(P.consumers.waitq, ct)
-    # optimized version that avoids the queue for 1 consumer
-    consumers = p.storage[:consumers]
-    if consumers === nothing || (isa(consumers,Condition)&&isempty(consumers.waitq))
-        p.storage[:consumers] = ct
+    # Obtain the consumers listening for the producer.
+    producer.storage === nothing && (producer.storage = IdDict())
+    consumers = get!(producer.storage, :consumers, nothing)
+
+    if consumers === nothing || (consumers isa Condition && isempty(consumers.waitq))
+        # Set the current task as consumer if none exists.
+        producer.storage[:consumers] = ct
     else
-        if isa(consumers, Task)
-            t = consumers
-            p.storage[:consumers] = Condition()
-            push!(p.storage[:consumers].waitq, t)
+        # Otherwise add the current task to the waiting queue.
+        if consumers isa Task
+            # If there is no queue currently but only a single task, replace it with a
+            # waiting queue with this task.
+            producer.storage[:consumers] = Condition()
+            push!(producer.storage[:consumers].waitq, consumers)
         end
-        push!(p.storage[:consumers].waitq, ct)
+        push!(producer.storage[:consumers].waitq, ct)
     end
 
-    if p.state == :runnable
-        Base.schedule(p)
+    if producer.state === :runnable
+        # Switch to the producer.
+        Base.schedule(producer)
         yield()
 
-        isa(p.storage, IdDict) && haskey(p.storage, :_libtask_state) &&
-            (p.state = p.storage[:_libtask_state])
-
-        if p.state == :done
-            return p.result
+        # Throw an exception if the task failed.
+        if istaskfailed(producer)
+            throw(CTaskException(producer))
         end
-        if p.exception != nothing
-            msg = if :msg in fieldnames(typeof(p.exception))
-                p.exception.msg
-            else
-                string(typeof(p.exception))
-            end
-            throw(CTaskException(typeof(p.exception), msg, p.backtrace))
+
+        # Otherwise return the result.
+        if istaskdone(producer)
+            return Base.task_result(producer)
         end
     end
+
     wait()
 end
