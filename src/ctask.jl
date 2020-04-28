@@ -57,21 +57,25 @@ proper way is refreshing the `current_task` (the variable `t`) in
 
 """
 function task_wrapper(func)
-    () ->
-    try
-        ct = _current_task()
-        res = func()
-        ct.result = res
-        ct.state = :done
-        wait()
-    catch ex
-        ct = _current_task()
-        ct.exception = ex
-        ct.result = ex
-        ct.backtrace = catch_backtrace()
-        ct.state = :failed
-        wait()
+    f = let func=func
+        () -> begin
+            try
+                ct = _current_task()
+                res = func()
+                ct.result = res
+                ct.state = :done
+                wait()
+            catch ex
+                ct = _current_task()
+                ct.exception = ex
+                ct.result = ex
+                ct.backtrace = catch_backtrace()
+                ct.state = :failed
+                wait()
+            end
+        end
     end
+    return f
 end
 
 function Base.copy(ctask::CTask)
