@@ -109,7 +109,7 @@ end
 @non_cow_func(consume)
 @non_cow_func non_cow_call(func, args...) = func(args...)
 
-function obj_for_reading(obj)
+function _obj_for_reading(obj)
     oid = objectid(obj)
     n, d = try
         task_local_storage(oid)
@@ -118,9 +118,10 @@ function obj_for_reading(obj)
     end
     return d
 end
+obj_for_reading(obj) = _obj_for_reading(obj)
 Base.get(obj) = obj_for_reading(obj)
 
-function obj_for_writing(obj)
+function _obj_for_writing(obj)
     oid = objectid(obj)
     n, d = try
         task_local_storage(oid)
@@ -135,7 +136,7 @@ function obj_for_writing(obj)
     end
     return newd
 end
-
+obj_for_writing(obj) = _obj_for_writing(obj)
 
 ### COW DISPATCH
 # write
@@ -144,6 +145,7 @@ end
 @cow_dispatch(Base.pushfirst!, [1])
 @cow_dispatch(Base.pop!, [1])
 @cow_dispatch(Base.popfirst!, [1])
+@cow_dispatch(Base.delete!, [1])
 @cow_dispatch(Base.deleteat!, [1])
 # read
 @cow_dispatch(Base.getindex, [1])
@@ -171,6 +173,29 @@ for F in (:getindex, :iterate, :eltype, :length, :size,
     @eval function Base.$F(::Val{:COW}, ::Type{Array{T, N}},
                            array, args...) where {T, N}
         obj = obj_for_reading(array)
+        return $F(obj, args...)
+    end
+end
+
+### COW for Dict
+function obj_for_writing(obj::Dict{K, V}) where {K, V}
+    ct = _current_task()
+    obj === ct.storage && return obj
+    return _obj_for_writing(obj)
+end
+
+for F in (:setindex!, :push!, :pop!, :delete!)
+    @eval function Base.$F(::Val{:COW}, ::Type{Dict{K, V}},
+                           dict, args...) where {K, V}
+        obj = obj_for_writing(dict)
+        return $F(obj, args...)
+    end
+end
+
+for F in (:getindex, :iterate, :eltype, :length)
+    @eval function Base.$F(::Val{:COW}, ::Type{Dict{K, V}},
+                           dict, args...) where {K, V}
+        obj = obj_for_reading(dict)
         return $F(obj, args...)
     end
 end

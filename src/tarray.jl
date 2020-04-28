@@ -25,7 +25,7 @@ Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 """
 struct TArray{T,N} <: AbstractArray{T,N}
     orig_task :: Task
-    TArray{T,N}() where {T,N} = new(current_task())
+    TArray{T,N}() where {T,N} = new(_current_task())
 end
 
 TArray{T,1}(d::Integer) where T = TArray(T,  d)

@@ -36,7 +36,7 @@ using Test
             ta = zeros(UInt64, 4); # NOT a TArray!
             for i in 1:4
                 ta[i] = hash(Libtask._current_task())
-                DATA[Libtask._current_task()] = get(ta) # use get
+                @non_cow DATA[Libtask._current_task()] = get(ta) # use get
                 produce(ta[i])
             end
         end
