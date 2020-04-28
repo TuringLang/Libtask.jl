@@ -13,6 +13,11 @@ end
 
 CTask(f) = CTask(Task(task_wrapper(f)))
 
+# Iteration interface.
+Base.iterate(ctask::CTask, state=nothing) = consume(ctask), nothing
+Base.IteratorSize(::Type{CTask}) = Base.SizeUnknown()
+Base.IteratorEltype(::Type{CTask}) = Base.EltypeUnknown()
+
 struct CTaskException <: Exception
     task::Task
 end
