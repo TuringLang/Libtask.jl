@@ -64,14 +64,16 @@ function task_wrapper(func)
                 ct = _current_task()
                 res = func()
                 ct.result = res
-                ct.state = :done
+                ct.storage === nothing && (ct.storage = IdDict())
+                ct.storage[:_libtask_state] = :done
                 wait()
             catch ex
                 ct = _current_task()
                 ct.exception = ex
                 ct.result = ex
                 ct.backtrace = catch_backtrace()
-                ct.state = :failed
+                ct.storage === nothing && (ct.storage = IdDict())
+                ct.storage[:_libtask_state] = :failed
                 wait()
             end
         end
@@ -197,14 +199,19 @@ function consume(ctask::CTask, values...)
 
     if producer.state === :runnable
         # Switch to the producer.
-        Base.schedule(producer)
+        schedule(producer)
         yield()
 
-        # Throw an exception if the task failed.
-        producer.state === :failed && throw(CTaskException(producer))
+        # Update the state if possible.
+        if producer.storage isa IdDict && haskey(producer.storage, :_libtask_state)
+            producer.state = producer.storage[:_libtask_state]
+        end
 
         # If the task is done return the result.
         producer.state === :done && return producer.result
+
+        # If the task failed, throw an exception.
+        producer.state === :failed && throw(CTaskException(producer))
     end
 
     wait()
