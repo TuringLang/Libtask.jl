@@ -37,8 +37,9 @@ function n_copies(t::Task)
 end
 
 function enable_stack_copying(t::Task)
-    t.state != :runnable && t.state != :done &&
-        error("Only runnable or finished tasks' stack can be copied.")
+    if t.state !== :runnable && t.state !== :done
+        error("only runnable or finished tasks' stack can be copied.")
+    end
     return ccall((:jl_enable_stack_copying, libtask), Any, (Any,), t)::Task
 end
 
@@ -80,8 +81,9 @@ end
 
 function Base.copy(ctask::CTask)
     task = ctask.task
-    task.state != :runnable && task.state != :done &&
+    if task.state !== :runnable && task.state !== :done
         error("only runnable or finished tasks can be copied.")
+    end
 
     newtask = ccall((:jl_clone_task, libtask), Any, (Any,), task)::Task
 
@@ -105,10 +107,7 @@ end
 
 function produce(v)
     ct = _current_task()
-
-    if ct.storage == nothing
-        ct.storage = IdDict()
-    end
+    ct.storage === nothing && (ct.storage = IdDict())
 
     consumers = get!(ct.storage, :consumers, nothing)
     local empty, task
