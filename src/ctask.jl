@@ -68,8 +68,8 @@ function task_wrapper(func)
         ct = _current_task()
         ct.exception = ex
         ct.result = ex
-        ct.state = :failed
         ct.backtrace = catch_backtrace()
+        ct.state = :failed
         wait()
     end
 end
@@ -205,14 +205,10 @@ function consume(ctask::CTask, values...)
         yield()
 
         # Throw an exception if the task failed.
-        if istaskfailed(producer)
-            throw(CTaskException(producer))
-        end
+        producer.state === :failed && throw(CTaskException(producer))
 
-        # Otherwise return the result.
-        if istaskdone(producer)
-            return Base.task_result(producer)
-        end
+        # If the task is done return the result.
+        producer.state === :done && return producer.result
     end
 
     wait()
