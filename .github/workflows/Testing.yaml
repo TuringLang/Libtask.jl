@@ -11,7 +11,9 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ startsWith(matrix.version, 'nightly') }}
     strategy:
+      fail-fast: false
       matrix:
         version:
           - '1.0'
