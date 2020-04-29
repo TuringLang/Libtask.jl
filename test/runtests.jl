@@ -1,5 +1,6 @@
-include("clonetask.jl")
-include("brokentask.jl")
+using Libtask
+using Test
+
+include("ctask.jl")
 include("tarray.jl")
-include("tarray2.jl")
-include("tarray3.jl")
+include("tref.jl")

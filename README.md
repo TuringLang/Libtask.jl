@@ -7,70 +7,85 @@ C shim for [task copying](https://github.com/JuliaLang/julia/issues/4085) in Tur
 
 ## Getting Started
 
+Stack allocated objects are deep copied:
+
 ```julia
 using Libtask
 
-# Stack allocated objects are deep copied.
-function f_ct()
-  t = 0;
+function f()
+  t = 0
   while true
     produce(t)
     t = 1 + t
   end
 end
 
-t = CTask(f_ct)
+ctask = CTask(f)
 
-consume(t) == 0
-consume(t) == 1
-a = copy(t);
-consume(a) == 2
-consume(a) == 3
-consume(t) == 2
-consume(t) == 3
+@show consume(ctask) # 0
+@show consume(ctask) # 1
 
-# Heap allocated objects are shallow copied.
+a = copy(ctask)
+@show consume(a) # 2
+@show consume(a) # 3
 
-function f_ct2()
-  t = [0 1 2];
+@show consume(ctask) # 2
+@show consume(ctask) # 3
+```
+
+Heap allocated objects are shallow copied:
+
+```julia
+using Libtask
+
+function f()
+  t = [0 1 2]
   while true
     produce(t[1])
     t[1] = 1 + t[1]
   end
 end
 
-t = CTask(f_ct2)
+ctask = CTask(f)
 
-consume(t) == 0
-consume(t) == 1
-a = copy(t);
-consume(a) == 2
-consume(a) == 3
-consume(t) == 4
-consume(t) == 5
+@show consume(ctask) # 0
+@show consume(ctask) # 1
 
-# `TArray` implements a copy-on-write array. This is useful for task copying.
-#  In constrast to standard arrays, which are only shallow copied during task copying,
-#  `TArray` are deep copied after task copying.
+a = copy(t)
+@show consume(a) # 2
+@show consume(a) # 3
 
-function f_cta()
-  t = TArray(Int, 1);
-  t[1] = 0;
+@show consume(ctask) # 4
+@show consume(ctask) # 5
+```
+
+`TArray` implements a copy-on-write array. This is useful for task copying.
+In constrast to standard arrays, which are only shallow copied during task copying,
+`TArray` are deep copied after task copying:
+
+```julia
+using Libtask
+
+function f()
+  t = TArray(Int, 1)
+  t[1] = 0
   while true
     produce(t[1])
     t[1] = 1 + t[1]
   end
 end
 
-t = CTask(f_cta)
+ctask = CTask(f)
 
-consume(t) == 0
-consume(t) == 1
-a = copy(t);
-consume(a) == 2
-consume(a) == 3
-consume(t) == 2
-consume(t) == 3
+@show consume(ctask) # 0
+@show consume(ctask) # 1
+
+a = copy(ctask)
+@show consume(a) # 2
+@show consume(a) # 3
+
+@show consume(ctask) # 2
+@show consume(ctask) # 3
 ```
 
 Note: The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming language uses this task copying feature in an efficient implementation of the [particle filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling algorithm for arbitary order [Markov processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
