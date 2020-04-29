@@ -19,7 +19,7 @@
         @test consume(ctask) == 3
     end
 
-    # Test case 2: heap allocated objects are shallowly copied.
+    # Test case 2: when cow=false, heap allocated objects are shallowly copied.
     @testset "heap allocated objects" begin
         function f()
             t = [0 1 2]
@@ -29,7 +29,7 @@
             end
         end
 
-        ctask = CTask(f)
+        ctask = CTask(f; cow=false)
         @test consume(ctask) == 0
         @test consume(ctask) == 1
         a = copy(ctask)

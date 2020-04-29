@@ -32,7 +32,7 @@ using Test
 
         DATA = Dict{Task, Array}()
 
-        function f_ct()
+        function f()
             ta = zeros(UInt64, 4); # NOT a TArray!
             for i in 1:4
                 ta[i] = hash(Libtask._current_task())
@@ -41,19 +41,19 @@ using Test
             end
         end
 
-        t = CTask(f_ct)
+        t = CTask(f)
 
-        @test consume(t) == hash(t) # index = 1
-        @test consume(t) == hash(t) # index = 2
+        @test consume(t) == hash(t.task) # index = 1
+        @test consume(t) == hash(t.task) # index = 2
 
         a = copy(t);
 
-        @test consume(a) == hash(a) # index = 3
-        @test consume(a) == hash(a) # index = 4
+        @test consume(a) == hash(a.task) # index = 3
+        @test consume(a) == hash(a.task) # index = 4
 
-        @test consume(t) == hash(t) # index = 3
+        @test consume(t) == hash(t.task) # index = 3
 
-        @test DATA[t] == [hash(t), hash(t), hash(t), 0]
-        @test DATA[a] == [hash(t), hash(t), hash(a), hash(a)]
+        @test DATA[t.task] == [hash(t.task), hash(t.task), hash(t.task), 0]
+        @test DATA[a.task] == [hash(t.task), hash(t.task), hash(a.task), hash(a.task)]
     end
 end

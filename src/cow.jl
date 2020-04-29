@@ -3,7 +3,19 @@ using MacroTools
 
 const COW_DISPATCH_INFO = Dict{Expr, Vector{Int}}()
 
-function recurse_no_builtin!(ir, to = IRTools.self)
+"""
+    _recurse!(ir, to=IRTools.self)
+
+Like `IRTools.recurse!`, for every statement in `ir`, if it is a
+`:call` expression, change the statment to a call to the `dynamo`
+`self`, and so to all the nested function calls.
+
+The difference to `IRTools.recurse!` is that for the function calls to
+the functions in `COW_DISPATCH_INFO`, we skip them because we
+overwrite these functions to do the COW.
+
+"""
+function _recurse!(ir, to=IRTools.self)
     for (x, st) in ir
         IRTools.isexpr(st.expr, :call) || continue
         func = st.expr.args[1]
@@ -22,11 +34,11 @@ function recurse_no_builtin!(ir, to = IRTools.self)
     return ir
 end
 
-IRTools.@dynamo function cow(a...)
+IRTools.@dynamo function _cow(a...)
     ir = IRTools.IR(a...)
     ir === nothing && return
     # IRTools.recurse!(ir)
-    recurse_no_builtin!(ir)
+    _recurse!(ir)
     return ir
 end
 
@@ -38,7 +50,7 @@ Redispatch methods of a functon based on the types of its arguments.
 
 ``` julia
 COW_DISPATCH_INFO[:(Base.push!)] = [1]
-cow(::typeof(Base.push!), args...) =
+_cow(::typeof(Base.push!), args...) =
     Base.push!(Val(:COW), typeof(args[1]), args...)
 Base.push!(::Val{:COW}, ::Type, args...) = Base.push!(args...)
 ```
@@ -55,7 +67,7 @@ macro cow_dispatch(func, arg_positions)
     expr_func = Expr(:quote, func)
     quote
         Libtask.COW_DISPATCH_INFO[$(expr_func)] = $(arg_positions)
-        Libtask.cow(::typeof($(func)), args...) =
+        Libtask._cow(::typeof($(func)), args...) =
             $(func)(Val(:COW), $(type_args...), args...)
         $(func)(::Val{:COW}, $(types...), args...) = $(func)(args...)
     end |> esc
@@ -75,7 +87,7 @@ end
 """
 macro non_cow_func(func)
     if isa(func, Symbol) || (isa(func, Expr) && func.head === :.)
-        return :(cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
+        return :(_cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
     end
 
     @capture(shortdef(func), (name_(args__) = body_) |
@@ -83,7 +95,7 @@ macro non_cow_func(func)
              error("Need a function definition")
     return quote
         $(func)
-        (Libtask.cow(::typeof($(name)), a...) = $(name)(a...))
+        (Libtask._cow(::typeof($(name)), a...) = $(name)(a...))
     end |> esc
 end
 
@@ -111,11 +123,8 @@ end
 
 function _obj_for_reading(obj)
     oid = objectid(obj)
-    n, d = try
-        task_local_storage(oid)
-    catch
-        (0, obj)
-    end
+    ct = _current_task()
+    n, d = get(Base.get_task_tls(ct), oid, (0, obj))
     return d
 end
 obj_for_reading(obj) = _obj_for_reading(obj)
@@ -123,11 +132,8 @@ Base.get(obj) = obj_for_reading(obj)
 
 function _obj_for_writing(obj)
     oid = objectid(obj)
-    n, d = try
-        task_local_storage(oid)
-    catch
-        (0, obj)
-    end
+    ct = _current_task()
+    n, d = get(Base.get_task_tls(ct), oid, (0, obj))
     cn   = n_copies()
     newd = d
     if cn > n

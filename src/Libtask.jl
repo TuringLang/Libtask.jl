@@ -2,7 +2,7 @@ module Libtask
 
 export CTask, consume, produce,
     @non_cow, @non_cow_func, non_cow_call,
-    TArray, tzeros, tfill
+    TArray, tzeros, tfill, TRef
 
 # Try to load the binary dependency
 const depsjl_path = joinpath(@__DIR__, "..", "deps", "deps.jl")
