@@ -19,6 +19,7 @@ function _recurse!(ir, to=IRTools.self)
     for (x, st) in ir
         IRTools.isexpr(st.expr, :call) || continue
         func = st.expr.args[1]
+        isa(func, IRTools.Variable) && (func = ir[func].expr)
         if isa(func, GlobalRef)
             # don't capture functions in Base and Core
             # except the ones in COW_DISPATCH_INFO
