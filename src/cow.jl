@@ -20,13 +20,11 @@ function _recurse!(ir, to=IRTools.self)
         IRTools.isexpr(st.expr, :call) || continue
         func = st.expr.args[1]
         if isa(func, GlobalRef)
+            # don't capture functions in Base and Core
+            # except the ones in COW_DISPATCH_INFO
             if func.mod in (Base, Core)
                 fexpr = Expr(:., Symbol(func.mod), QuoteNode(func.name))
-                if !haskey(COW_DISPATCH_INFO, fexpr)
-                    # don't capture function in Base and Core
-                    # except the ones in COW_DISPATCH_INFO
-                    continue
-                end
+                haskey(COW_DISPATCH_INFO, fexpr) || continue
             end
         end
         ir[x] = Expr(:call, to, st.expr.args...)
@@ -42,11 +40,13 @@ IRTools.@dynamo function _cow(a...)
     return ir
 end
 
+_cow_func_name(s::Symbol) = Symbol("_" * string(s) * "_maybecopy")
+
 """
-    @cow_dispatch(func, arg_positions)
+    @maybecopy(func, arg_positions)
 
 Redispatch methods of a functon based on the types of its arguments.
-`@cow_dispatch(Base.push!, [1])` will generate:
+`@maybecopy(Base.push!, [1])` will generate:
 
 ``` julia
 COW_DISPATCH_INFO[:(Base.push!)] = [1]
@@ -55,8 +55,12 @@ _cow(::typeof(Base.push!), args...) =
 Base.push!(::Val{:COW}, ::Type, args...) = Base.push!(args...)
 ```
 """
-macro cow_dispatch(func, arg_positions)
-    if !(isa(func, Symbol) || (isa(func, Expr) && func.head === :.))
+macro maybecopy(func, arg_positions)
+    if func isa Symbol
+        cow_func = _cow_func_name(func)
+    elseif Meta.isexpr(func, :.)
+        cow_func = _cow_func_name(func.args[2].value)
+    else
         error("need a function name.")
     end
 
@@ -68,58 +72,49 @@ macro cow_dispatch(func, arg_positions)
     quote
         Libtask.COW_DISPATCH_INFO[$(expr_func)] = $(arg_positions)
         Libtask._cow(::typeof($(func)), args...) =
-            $(func)(Val(:COW), $(type_args...), args...)
-        $(func)(::Val{:COW}, $(types...), args...) = $(func)(args...)
+            $(cow_func)($(type_args...), args...)
+        $(cow_func)($(types...), args...) = $(func)(args...)
     end |> esc
 end
 
 
 """
-    @non_cow_func
+    @nevercopy
 
 Make a function skip the COW mechanism.
 
 ```julia
-@non_cow_func function f1()
+@nevercopy function f1()
     # ...
 end
 ```
 """
-macro non_cow_func(func)
+macro nevercopy(func)
     if isa(func, Symbol) || (isa(func, Expr) && func.head === :.)
         return :(_cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
     end
 
-    @capture(shortdef(func), (name_(args__) = body_) |
-             (name_(args__) where {T__} = body_)) ||
-             error("Need a function definition")
-    return quote
-        $(func)
-        (Libtask._cow(::typeof($(name)), a...) = $(name)(a...))
-    end |> esc
-end
+    if @capture(shortdef(func),
+                (name_(args__) = body_) | (name_(args__) where {T__} = body_))
+        # function definition
+        return quote
+            $(func)
+            (Libtask._cow(::typeof($(name)), a...) = $(name)(a...))
+        end |> esc
+    end
 
-"""
-    @non_cow
-
-Make an expression skip the COW mechanism.
-
-```julia
-@now_cow data[idx] = value
-```
-"""
-macro non_cow(expr)
+    # else, func is an expression
     quote
         f = () -> begin
-            $(esc(expr))
+            $(esc(func))
         end
-        Libtask.non_cow_call(f)
+        nevercopy(f)
     end
 end
 
-@non_cow_func(produce)
-@non_cow_func(consume)
-@non_cow_func non_cow_call(func, args...) = func(args...)
+@nevercopy(produce)
+@nevercopy(consume)
+@nevercopy nevercopy(f, args...) = f(args...)
 
 function _obj_for_reading(obj)
     oid = objectid(obj)
@@ -146,29 +141,29 @@ obj_for_writing(obj) = _obj_for_writing(obj)
 
 ### COW DISPATCH
 # write
-@cow_dispatch(Base.setindex!, [1])
-@cow_dispatch(Base.push!, [1])
-@cow_dispatch(Base.pushfirst!, [1])
-@cow_dispatch(Base.pop!, [1])
-@cow_dispatch(Base.popfirst!, [1])
-@cow_dispatch(Base.delete!, [1])
-@cow_dispatch(Base.deleteat!, [1])
+@maybecopy(Base.setindex!, [1])
+@maybecopy(Base.push!, [1])
+@maybecopy(Base.pushfirst!, [1])
+@maybecopy(Base.pop!, [1])
+@maybecopy(Base.popfirst!, [1])
+@maybecopy(Base.delete!, [1])
+@maybecopy(Base.deleteat!, [1])
 # read
-@cow_dispatch(Base.getindex, [1])
-@cow_dispatch(Base.iterate, [1])
-@cow_dispatch(Base.eltype, [1])
-@cow_dispatch(Base.length, [1])
-@cow_dispatch(Base.size, [1])
-@cow_dispatch(Base.firstindex, [1])
-@cow_dispatch(Base.lastindex, [1])
-@cow_dispatch(Base.ndims, [1])
-@cow_dispatch(Base.axes, [1])
+@maybecopy(Base.getindex, [1])
+@maybecopy(Base.iterate, [1])
+@maybecopy(Base.eltype, [1])
+@maybecopy(Base.length, [1])
+@maybecopy(Base.size, [1])
+@maybecopy(Base.firstindex, [1])
+@maybecopy(Base.lastindex, [1])
+@maybecopy(Base.ndims, [1])
+@maybecopy(Base.axes, [1])
 
 ### COW for Array
 for F in (:setindex!, :push!, :pushfirst!, :pop!, :popfirst!,
           :deleteat!)
-    @eval function Base.$F(::Val{:COW}, ::Type{Array{T, N}},
-                           array, args...) where {T, N}
+    cow_func = _cow_func_name(F)
+    @eval function $cow_func(::Type{Array{T, N}}, array, args...) where {T, N}
         obj = obj_for_writing(array)
         return $F(obj, args...)
     end
@@ -176,8 +171,8 @@ end
 
 for F in (:getindex, :iterate, :eltype, :length, :size,
           :firstindex, :lastindex, :ndims, :axes)
-    @eval function Base.$F(::Val{:COW}, ::Type{Array{T, N}},
-                           array, args...) where {T, N}
+    cow_func = _cow_func_name(F)
+    @eval function $cow_func(::Type{Array{T, N}}, array, args...) where {T, N}
         obj = obj_for_reading(array)
         return $F(obj, args...)
     end
@@ -191,16 +186,16 @@ function obj_for_writing(obj::Dict{K, V}) where {K, V}
 end
 
 for F in (:setindex!, :push!, :pop!, :delete!)
-    @eval function Base.$F(::Val{:COW}, ::Type{Dict{K, V}},
-                           dict, args...) where {K, V}
+    cow_func = _cow_func_name(F)
+    @eval function $cow_func(::Type{Dict{K, V}}, dict, args...) where {K, V}
         obj = obj_for_writing(dict)
         return $F(obj, args...)
     end
 end
 
 for F in (:getindex, :iterate, :eltype, :length)
-    @eval function Base.$F(::Val{:COW}, ::Type{Dict{K, V}},
-                           dict, args...) where {K, V}
+    cow_func = _cow_func_name(F)
+    @eval function $cow_func(::Type{Dict{K, V}}, dict, args...) where {K, V}
         obj = obj_for_reading(dict)
         return $F(obj, args...)
     end
