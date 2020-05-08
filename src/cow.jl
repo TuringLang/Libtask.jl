@@ -52,8 +52,8 @@ Redispatch methods of a functon based on the types of its arguments.
 ``` julia
 COW_DISPATCH_INFO[:(Base.push!)] = [1]
 _cow(::typeof(Base.push!), args...) =
-    Base.push!(Val(:COW), typeof(args[1]), args...)
-Base.push!(::Val{:COW}, ::Type, args...) = Base.push!(args...)
+    _push!_maybecopy(typeof(args[1]), args...)
+_push!_maybecopy(::Type, args...) = Base.push!(args...)
 ```
 """
 macro maybecopy(func, arg_positions)
