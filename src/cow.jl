@@ -56,10 +56,13 @@ end
     @maybecopy(funcall)
 
 Redispatch methods of a functon based on the types of its arguments.
-`@maybecopy(Base.push!(write::AbstractArray, x))` will be expanded as:
+
+Examples:
+
+`@maybecopy Base.push!(w_1::AbstractArray, x)` will be expanded as:
 
 ``` julia
-_cow(::typeof(Base.push!), args...) = Base.push!(args) # fallback
+_cow(::typeof(Base.push!), args...) = Base.push!(args...) # fallback
 
 function _push!_maybecopy(w_1::AbstractArray, x)
     w_1_c = obj_for_writing(w_1)
@@ -67,6 +70,26 @@ function _push!_maybecopy(w_1::AbstractArray, x)
 end
 _cow(::typeof(Base.push!), w_1::AbstractArray, x) = _push!_maybecopy(w_1, x)
 ```
+
+`@maybecopy func(w_v::T1, x, y::T2, z)` will be expanded as:
+
+``` julia
+_cow(::typeof(func), args...) = func(args...) # fallback
+
+function _func_maybecopy(w_v::T1, x, y::T2, z)
+    w_v_c = obj_for_writing(w_v)
+    y_c = obj_for_reading(y)
+    func(w_v_c, x, y_c, z)
+end
+_cow(::typeof(func), w_v::T1, x, y::T2, z) = _func_maybecopy(w_v, x, y, z)
+```
+
+All the arguments with type annotation will be ensured to be task local:
+- if the variable name starts with `w_`, it will be passed to
+  `obj_for_writing`
+- else it will be passed to `obj_for_reading`
+- arguments without type annotation will be untouched
+
 """
 macro maybecopy(funcall)
     (@capture funcall fname_(args__)) || error("need a function call")
@@ -76,7 +99,7 @@ macro maybecopy(funcall)
     for arg in args
         if Meta.isexpr(arg, :(::))
             new_var = gensym(arg.args[1])
-            trans = string(arg.args[1])[1:2] == "w_" ?
+            trans = startswith(string(arg.args[1]), "w_") ?
                 :($new_var = obj_for_writing($(arg.args[1]))) :
                 :($new_var = obj_for_reading($(arg.args[1])))
             push!(args_transfer, trans)
