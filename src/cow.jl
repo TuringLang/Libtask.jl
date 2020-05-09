@@ -1,12 +1,19 @@
 using IRTools
 using MacroTools
 
+function _sanitize_fname(fname)
+    fname = string(fname)
+    map(collect(fname)) do c
+        (Base.Unicode.isnumeric(c) || Base.Unicode.isletter(c) || c in "_!") ?
+            c : "L" * string(Int(c))
+    end |> join
+end
 
 function _cow_func_name(func)
     fname = if func isa Symbol
         string(func)
     elseif Meta.isexpr(func, :.)
-        string(func.args[1]) * "_" * string(func.args[2].value)
+        string(func.args[1]) * "_" * _sanitize_fname(func.args[2].value)
     else
         error("need a function name.")
     end
@@ -202,6 +209,9 @@ for F in (:getindex, :iterate, :eltype, :length, :size,
           :firstindex, :lastindex, :ndims, :axes)
     @eval @maybecopy Base.$F(read::AbstractArray, args...)
 end
+
+@maybecopy Base.:+(a::AbstractArray, b::AbstractArray)
+@maybecopy Base.:-(a::AbstractArray, b::AbstractArray)
 
 ### COW for Dict
 function obj_for_writing(obj::Dict{K, V}) where {K, V}
