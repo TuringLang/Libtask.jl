@@ -87,14 +87,14 @@ function Base.pop!(S::TArray)
     pop!(d)
 end
 
-function Base.convert(::Type{TArray}, x::Array)
+function Base.convert(::Type{<:TArray}, x::Array)
     res = TArray{typeof(x[1]),ndims(x)}();
     n   = n_copies()
     task_local_storage(res.ref, (n,x))
     return res
 end
 
-function Base.convert(::Array, x::Type{TArray})
+function Base.convert(::Type{<:Array}, S::TArray)
     n,d = task_local_storage(S.ref)
     c = deepcopy(d)
     return c
