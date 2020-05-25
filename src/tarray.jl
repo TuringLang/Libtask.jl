@@ -88,15 +88,21 @@ function Base.pop!(S::TArray)
 end
 
 function Base.convert(::Type{TArray}, x::Array)
-    res = TArray{typeof(x[1]),ndims(x)}();
+    return convert(TArray{eltype(x),ndims(x)}, x)
+end
+function Base.convert(::Type{TArray{T,N}}, x::Array{T,N}) where {T,N}
+    res = TArray{T,N}()
     n   = n_copies()
     task_local_storage(res.ref, (n,x))
     return res
 end
 
-function Base.convert(::Array, x::Type{TArray})
+function Base.convert(::Type{Array}, S::TArray)
+    return convert(Array{eltype(S), ndims(S)}, S)
+end
+function Base.convert(::Type{Array{T,N}}, S::TArray{T,N}) where {T,N}
     n,d = task_local_storage(S.ref)
-    c = deepcopy(d)
+    c = convert(Array{T, N}, deepcopy(d))
     return c
 end
 
