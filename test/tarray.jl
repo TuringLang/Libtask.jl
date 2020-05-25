@@ -50,6 +50,8 @@
         @test convert(Array{Int, 1}, ta5) == [1, 2, 3, 4]
         @test ta5 == convert(TArray, [1, 2, 3, 4])
         @test ta5 == convert(TArray{Int, 1}, [1, 2, 3, 4])
+        @test_throws MethodError convert(TArray{Int, 2}, [1, 2, 3, 4])
+        @test_throws MethodError convert(Array{Int, 2}, ta5)
 
         @test Array(tzeros(4)) == zeros(4)
 
