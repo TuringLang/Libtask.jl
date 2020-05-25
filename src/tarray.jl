@@ -87,10 +87,10 @@ function Base.pop!(S::TArray)
     pop!(d)
 end
 
-function Base.convert(::Type{TArray{T, N}}, x::Array{T, N}) where {T, N}
-    return convert(TArray, x)
-end
 function Base.convert(::Type{TArray}, x::Array)
+    return convert(TArray{eltype(x),ndims(x)}, x)
+end
+function Base.convert(::Type{TArray{T,N}}, x::Array{T,N}) where {T,N}
     res = TArray{typeof(x[1]),ndims(x)}();
     n   = n_copies()
     task_local_storage(res.ref, (n,x))
