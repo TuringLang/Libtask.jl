@@ -93,12 +93,14 @@ function Base.convert(::Type{TArray}, x::Array)
     task_local_storage(res.ref, (n,x))
     return res
 end
+Base.convert(::Type{TArray{T, N}}, x::Array{T, N}) where {T, N} = convert(TArray, x)
 
-function Base.convert(::Array, x::Type{TArray})
-    n,d = task_local_storage(S.ref)
+function Base.convert(::Type{Array}, x::TArray)
+    n, d = task_local_storage(S.ref)
     c = deepcopy(d)
     return c
 end
+Base.convert(::Type{Array{T, N}}, x::TArray{T, N}) where {T, N} = convert(Array, x)
 
 function Base.display(S::TArray)
     arr = S.orig_task.storage[S.ref][2]
