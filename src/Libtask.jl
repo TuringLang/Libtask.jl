@@ -1,7 +1,7 @@
 module Libtask
 
 export CTask, consume, produce,
-    nevercopy, @nevercopy,
+    @nevercopy,
     TArray, tzeros, tfill, TRef
 
 # Try to load the binary dependency

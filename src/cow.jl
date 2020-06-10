@@ -11,7 +11,7 @@ end
 
 function _cow_func_name(func)
     fname = if func isa Symbol
-        string(func)
+        _sanitize_fname(func)
     elseif Meta.isexpr(func, :.)
         string(func.args[1]) * "_" * _sanitize_fname(func.args[2].value)
     else
@@ -58,6 +58,12 @@ IRTools.@dynamo function _cow(a...)
     return ir
 end
 
+_cow(::typeof(produce), args...) = produce(args...)
+_cow(::typeof(consume), args...) = consume(args...)
+
+struct NeverCopy end
+(::NeverCopy)(f, args...) = f(args...)
+_cow(::NeverCopy, f, args...) = f(args...)
 
 """
     @maybecopy(funcall)
@@ -139,40 +145,29 @@ end
 """
     @nevercopy
 
-Make a function skip the COW mechanism.
+Make a function-call (and the sub-function calls) skip the COW mechanism.
 
 ```julia
-@nevercopy function f1()
-    # ...
-end
+@nevercopy  f1(g1(), g2())
+@nevercopy  array_1[2] = 3
 ```
 """
 macro nevercopy(func)
-    if isa(func, Symbol) || (isa(func, Expr) && func.head === :.)
-        return :(_cow(::typeof($(esc(func))), a...) = $(esc(func))(a...))
-    end
-
-    if @capture(shortdef(func),
-                (name_(args__) = body_) | (name_(args__) where {T__} = body_))
-        # function definition
-        return quote
-            $(func)
-            (Libtask._cow(::typeof($(name)), a...) = $(name)(a...))
+    # if func is a function-call
+    if Meta.isexpr(func, :call)
+        return  MacroTools.postwalk(func) do x
+            Meta.isexpr(x, :call) && pushfirst!(x.args, :(Libtask.NeverCopy()))
+            x
         end |> esc
     end
-
     # else, func is an expression
     quote
         f = () -> begin
             $(esc(func))
         end
-        nevercopy(f)
+        NeverCopy()(f)
     end
 end
-
-@nevercopy(produce)
-@nevercopy(consume)
-@nevercopy nevercopy(f, args...) = f(args...)
 
 function _obj_for_reading(obj)
     oid = objectid(obj)

@@ -56,4 +56,34 @@ using Test
         @test DATA[t.task] == [hash(t.task), hash(t.task), hash(t.task), 0]
         @test DATA[a.task] == [hash(t.task), hash(t.task), hash(a.task), hash(a.task)]
     end
+
+    @testset "Test on Array (3)" begin
+
+        DATA = Int[]
+
+        function g()
+            for i in 1:4
+                push!(DATA, i)
+                produce(DATA[end])
+            end
+        end
+
+        function f()
+            @nevercopy g()
+        end
+
+        t = CTask(f, cow=true)
+
+        @test consume(t) == 1
+        @test consume(t) == 2
+
+        a = copy(t);
+
+        @test consume(a) == 3
+        @test consume(a) == 4
+
+        @test consume(t) == 3
+
+        @test DATA == [1, 2, 3, 4, 3]
+    end
 end
