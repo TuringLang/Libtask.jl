@@ -11,7 +11,7 @@ struct CTask
     end
 end
 
-CTask(f; cow=true) = CTask(Task(task_wrapper(f; cow=cow)))
+CTask(f; cow=false) = CTask(Task(task_wrapper(f; cow=cow)))
 
 # Iteration interface.
 Base.iterate(ctask::CTask, state=nothing) = consume(ctask), nothing
@@ -57,7 +57,7 @@ proper way is refreshing the `current_task` (the variable `t`) in
 `start_task` after the call to `jl_apply` returns.
 
 """
-function task_wrapper(func; cow=true)
+function task_wrapper(func; cow=false)
     f = let func=func
         () -> begin
             try

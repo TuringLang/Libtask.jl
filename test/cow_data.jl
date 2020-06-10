@@ -13,7 +13,7 @@ using Test
             end
         end
 
-        t = CTask(f_ct)
+        t = CTask(f_ct, cow=true)
         @test consume(t) == 0
         @test consume(t) == 1
 
@@ -41,7 +41,7 @@ using Test
             end
         end
 
-        t = CTask(f)
+        t = CTask(f, cow=true)
 
         @test consume(t) == hash(t.task) # index = 1
         @test consume(t) == hash(t.task) # index = 2
