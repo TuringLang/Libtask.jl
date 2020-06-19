@@ -49,7 +49,8 @@ script = read(joinpath(dirname(@__FILE__), "build_dylib.sh"), String)
 platforms = [
     Linux(:i686, :glibc),
     Linux(:x86_64, :glibc),
-    Linux(:armv7l, :glibc, :eabihf),
+    Linux(:powerpc64le, libc=:glibc),
+    # Linux(:armv7l, :glibc, :eabihf),
     Linux(:aarch64),
     MacOS(:x86_64),
     Windows(:i686),
