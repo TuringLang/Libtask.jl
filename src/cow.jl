@@ -1,6 +1,9 @@
 using IRTools
 using MacroTools
 
+const cow_logging = Ref(false)
+_warn(arg) = @warn arg
+
 function _sanitize_fname(fname)
     fname = string(fname)
     map(collect(fname)) do c
@@ -20,6 +23,7 @@ function _cow_func_name(func)
     Symbol("_$(fname)_maybecopy")
 end
 
+
 """
     _recurse!(ir, to=IRTools.self)
 
@@ -33,6 +37,7 @@ these functions to do the COW.
 
 """
 function _recurse!(ir, to=IRTools.self)
+    calls = Dict()
     for (x, st) in ir
         IRTools.isexpr(st.expr, :call) || continue
         func = st.expr.args[1]
@@ -42,10 +47,18 @@ function _recurse!(ir, to=IRTools.self)
             # except the ones for which we implement COW
             if func.mod in (Base, Core)
                 fexpr = Expr(:., Symbol(func.mod), QuoteNode(func.name))
-                isdefined(Libtask, _cow_func_name(fexpr)) || continue
+                if !isdefined(Libtask, _cow_func_name(fexpr))
+                    calls[x] = st.expr.args
+                    continue
+                end
             end
         end
         ir[x] = Expr(:call, to, st.expr.args...)
+    end
+    if cow_logging[]
+        for (x, v) in calls
+            insert!(ir, x, IRTools.xcall(_warn, "Function $(v[1]) is called but not cow-ed."))
+        end
     end
     return ir
 end
