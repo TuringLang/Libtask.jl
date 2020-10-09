@@ -6,9 +6,7 @@ repo = "https://github.com/TuringLang/Libtask.jl.git"
 version = "0.5.0"
 
 [deps]
-Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 Libtask_jll = "3ae2931a-708c-5973-9c38-ccf7496fb450"
-Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [compat]
 Libtask_jll = "0.3.2"
