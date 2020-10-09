@@ -2,7 +2,7 @@ module Libtask
 
 using Libtask_jll
 
-export CTask, consume, produce, TArray, get, tzeros, tfill, TRef
+export CTask, consume, produce, TArray, tzeros, tfill, TRef
 
 @static if VERSION < v"1.0.9999" # (-, v1.1)
     const libtask = libtask_v1_0
