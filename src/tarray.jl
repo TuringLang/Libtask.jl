@@ -29,11 +29,10 @@ struct TArray{T,N} <: AbstractArray{T,N}
     TArray{T,N}() where {T,N} = new(gensym(), current_task())
 end
 
-TArray{T,1}(d::Integer) where T = TArray(T,  d)
 TArray{T}(d::Integer...) where T = TArray(T, d)
-TArray{T}(UndefInitializer, d::Integer...) where T = TArray(T, d)
-TArray{T,N}(d::Integer...) where {T,N} = length(d)==N ? TArray(T,d) : error("Malformed dims")
-TArray{T,N}(UndefInitializer, d::Integer...) where {T,N} = length(d)==N ? TArray(T,d) : error("Malformed dims")
+TArray{T}(::UndefInitializer, d::Integer...) where T = TArray(T, d)
+TArray{T,N}(d::Vararg{<:Integer,N}) where {T,N} = TArray(T, d)
+TArray{T,N}(::UndefInitializer, d::Vararg{<:Integer,N}) where {T,N} = TArray{T,N}(d)
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 
 function TArray(T::Type, dim)

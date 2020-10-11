@@ -36,12 +36,47 @@
 
     @testset "other methods" begin
         ta2 = TArray{Int}(4, 4)
+        @test ta2 isa TArray{Int,2}
+        @test size(ta2) == (4, 4)
+
+        ta2 = TArray{Int}(undef, 4, 4)
+        @test ta2 isa TArray{Int,2}
+        @test size(ta2) == (4, 4)
+
+        ta2 = TArray{Int,2}(4, 4)
+        @test ta2 isa TArray{Int,2}
+        @test size(ta2) == (4, 4)
+
+        ta2 = TArray{Int,2}(undef, 4, 4)
+        @test ta2 isa TArray{Int,2}
+        @test size(ta2) == (4, 4)
+
+        @test_throws MethodError TArray{Int,2}(4)
+        @test_throws MethodError TArray{Int,2}(undef, 4)
 
         ta3 = TArray{Int, 4}(4, 3, 2, 1)
         ta4 = get(ta3)
         @test ta3[3] == ta4[3]
 
         ta5 = TArray{Int}(4)
+        @test ta5 isa TArray{Int,1}
+        @test size(ta5) == (4,)
+
+        ta5 = TArray{Int}(undef, 4)
+        @test ta5 isa TArray{Int,1}
+        @test size(ta5) == (4,)
+
+        ta5 = TArray{Int,1}(4)
+        @test ta5 isa TArray{Int,1}
+        @test size(ta5) == (4,)
+
+        ta5 = TArray{Int,1}(undef, 4)
+        @test ta5 isa TArray{Int,1}
+        @test size(ta5) == (4,)
+
+        @test_throws MethodError TArray{Int,1}(4, 4)
+        @test_throws MethodError TArray{Int,1}(undef, 4, 4)
+
         for i in 1:4
             ta5[i] = i
         end
