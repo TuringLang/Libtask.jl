@@ -1,13 +1,9 @@
 name: Libtask Testing
-
 on:
   push:
     branches:
       - master
-    # tags: '*'
-    release:
   pull_request:
-
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -15,9 +11,6 @@ jobs:
     strategy:
       matrix:
         version:
-          - '1.0'
-          - '1.1'
-          - '1.2'
           - '1.3'
           - '1.4'
           - '1'
@@ -32,12 +25,23 @@ jobs:
         exclude:
           - os: macOS-latest
             arch: x86
-
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+      - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - if: ${{ matrix.version == 'nightly' }}
+        run: julia --color=yes --project -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/JuliaBinaryWrappers/Libtask_jll.jl.git"))'
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest

@@ -24,11 +24,11 @@ end
 
 function Base.showerror(io::IO, ex::CTaskException)
     println(io, "CTaskException:")
-    showerror(io, ex.task.exception, ex.task.backtrace)
+    showerror(io, getproperty(ex.task, :exception), getproperty(ex.task, :backtrace))
 end
 
 # Utility function for self-copying mechanism
-_current_task() = ccall((:vanilla_get_current_task, libtask), Ref{Task}, ())
+_current_task() = ccall((:vanilla_get_current_task, libtask_julia), Ref{Task}, ())
 
 n_copies() = n_copies(_current_task())
 function n_copies(t::Task)
@@ -37,10 +37,11 @@ function n_copies(t::Task)
 end
 
 function enable_stack_copying(t::Task)
-    if t.state !== :runnable && t.state !== :done
+    state = getproperty(t, :state)
+    if state !== :runnable && state !== :done
         error("only runnable or finished tasks' stack can be copied.")
     end
-    return ccall((:jl_enable_stack_copying, libtask), Any, (Any,), t)::Task
+    return ccall((:jl_enable_stack_copying, libtask_julia), Any, (Any,), t)::Task
 end
 
 """
@@ -69,7 +70,11 @@ function task_wrapper(func)
                 wait()
             catch ex
                 ct = _current_task()
-                ct.exception = ex
+                @static if VERSION < v"1.6.0-DEV.1145"
+                    ct.exception = ex
+                else
+                    ct._isexception = true
+                end
                 ct.result = ex
                 ct.backtrace = catch_backtrace()
                 ct.storage === nothing && (ct.storage = IdDict())
@@ -83,18 +88,19 @@ end
 
 function Base.copy(ctask::CTask)
     task = ctask.task
-    if task.state !== :runnable && task.state !== :done
+    state = getproperty(task, :state)
+    if state !== :runnable && state !== :done
         error("only runnable or finished tasks can be copied.")
     end
 
-    newtask = ccall((:jl_clone_task, libtask), Any, (Any,), task)::Task
+    newtask = ccall((:jl_clone_task, libtask_julia), Any, (Any,), task)::Task
 
     task.storage[:n_copies] = 1 + n_copies(task)
     newtask.storage = copy(task.storage)
 
     # copy fields not accessible in task.c
     newtask.code = task.code
-    newtask.state = task.state
+    setstate!(newtask, getstate(task))
     newtask.result = task.result
     @static if VERSION < v"1.1"
         newtask.parent = task.parent
@@ -133,7 +139,7 @@ function produce(v)
     end
 
     # Internal check to make sure that it is possible to switch to the consumer.
-    @assert task.state in (:runnable, :queued)
+    @assert getproperty(task, :state) in (:runnable, :queued)
 
     @static if VERSION < v"1.1.9999"
         task.state === :queued && yield()
@@ -197,22 +203,55 @@ function consume(ctask::CTask, values...)
         push!(producer.storage[:consumers].waitq, ct)
     end
 
-    if producer.state === :runnable
+    if getproperty(producer, :state) === :runnable
         # Switch to the producer.
         schedule(producer)
         yield()
 
         # Update the state if possible.
         if producer.storage isa IdDict && haskey(producer.storage, :_libtask_state)
-            producer.state = producer.storage[:_libtask_state]
+            setstate!(producer, producer.storage[:_libtask_state])
         end
 
-        # If the task is done return the result.
-        producer.state === :done && return producer.result
-
         # If the task failed, throw an exception.
-        producer.state === :failed && throw(CTaskException(producer))
+        _istaskfailed(producer) && throw(CTaskException(producer))
+
+        # If the task is done return the result.
+        istaskdone(producer) && return producer.result
     end
 
     wait()
 end
+
+function _istaskfailed(task::Task)
+    @static if VERSION < v"1.3"
+        return task.state === :failed
+    else
+        return Base.istaskfailed(task)
+    end
+end
+
+function getstate(task::Task)
+    @static if VERSION < v"1.6.0-DEV.618"
+        return task.state
+    else
+        return task._state
+    end
+end
+
+function setstate!(task::Task, state)
+    @static if VERSION < v"1.6.0-DEV.618"
+        task.state = state
+    else
+        if state === :runnable
+            task._state = Base.task_state_runnable
+        elseif state === :done
+            task._state = Base.task_state_done
+        elseif state === :failed
+            task._state = Base.task_state_failed
+        else
+            task._state = state
+        end
+    end
+end
+
