@@ -92,3 +92,15 @@ Note: The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic progra
 ## Disclaimer
 
 This feature is still experimental and should only be used with caution. Some discussions on its potential caveats can be found [here](https://github.com/JuliaLang/julia/pull/15078).
+
+## Julia nightly
+
+Libtask uses the `libtask_julia` library which is pre-built for Julia versions 1.3, 1.4, and 1.5 and
+distributed via the [Libtask_jll](https://github.com/JuliaBinaryWrappers/Libtask_jll.jl/) package.
+
+Julia nightly might not be compatible with the latest version of the `libtask_julia` library and is
+not officially supported. If you want to use Julia nightly, you have to add the Libtask_jll package
+manually:
+```julia
+julia> ] add https://github.com/JuliaBinaryWrappers/Libtask_jll.jl.git
+```
