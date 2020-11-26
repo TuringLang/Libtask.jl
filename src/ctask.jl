@@ -24,7 +24,12 @@ end
 
 function Base.showerror(io::IO, ex::CTaskException)
     println(io, "CTaskException:")
-    showerror(io, getproperty(ex.task, :exception), getproperty(ex.task, :backtrace))
+    bt = @static if VERSION < v"1.6.0-DEV.1145"
+        ct.backtrace
+    else
+        ct.storage[:_libtask_bt]
+    end
+    showerror(io, ex.task.exception, bt)
 end
 
 # Utility function for self-copying mechanism
@@ -37,7 +42,7 @@ function n_copies(t::Task)
 end
 
 function enable_stack_copying(t::Task)
-    state = getproperty(t, :state)
+    state = t.state
     if state !== :runnable && state !== :done
         error("only runnable or finished tasks' stack can be copied.")
     end
@@ -72,11 +77,12 @@ function task_wrapper(func)
                 ct = _current_task()
                 @static if VERSION < v"1.6.0-DEV.1145"
                     ct.exception = ex
+                    ct.backtrace = catch_backtrace()
                 else
                     ct._isexception = true
+                    ct.storage[:_libtask_bt] = catch_backtrace()
                 end
                 ct.result = ex
-                ct.backtrace = catch_backtrace()
                 ct.storage === nothing && (ct.storage = IdDict())
                 ct.storage[:_libtask_state] = :failed
                 wait()
@@ -88,7 +94,7 @@ end
 
 function Base.copy(ctask::CTask)
     task = ctask.task
-    state = getproperty(task, :state)
+    state = task.state
     if state !== :runnable && state !== :done
         error("only runnable or finished tasks can be copied.")
     end
@@ -139,7 +145,7 @@ function produce(v)
     end
 
     # Internal check to make sure that it is possible to switch to the consumer.
-    @assert getproperty(task, :state) in (:runnable, :queued)
+    @assert task.state in (:runnable, :queued)
 
     @static if VERSION < v"1.1.9999"
         task.state === :queued && yield()
@@ -203,7 +209,7 @@ function consume(ctask::CTask, values...)
         push!(producer.storage[:consumers].waitq, ct)
     end
 
-    if getproperty(producer, :state) === :runnable
+    if producer.state === :runnable
         # Switch to the producer.
         schedule(producer)
         yield()
@@ -254,4 +260,3 @@ function setstate!(task::Task, state)
         end
     end
 end
-
