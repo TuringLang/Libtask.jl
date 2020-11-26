@@ -42,8 +42,7 @@ function n_copies(t::Task)
 end
 
 function enable_stack_copying(t::Task)
-    state = t.state
-    if state !== :runnable && state !== :done
+    if istaskfailed(t)
         error("only runnable or finished tasks' stack can be copied.")
     end
     return ccall((:jl_enable_stack_copying, libtask_julia), Any, (Any,), t)::Task
@@ -94,8 +93,7 @@ end
 
 function Base.copy(ctask::CTask)
     task = ctask.task
-    state = task.state
-    if state !== :runnable && state !== :done
+    if istaskfailed(task)
         error("only runnable or finished tasks can be copied.")
     end
 
@@ -108,13 +106,6 @@ function Base.copy(ctask::CTask)
     newtask.code = task.code
     setstate!(newtask, getstate(task))
     newtask.result = task.result
-    @static if VERSION < v"1.1"
-        newtask.parent = task.parent
-    end
-
-    if isdefined(task, :last)
-        newtask.last = nothing
-    end
 
     return CTask(newtask)
 end
@@ -145,13 +136,9 @@ function produce(v)
     end
 
     # Internal check to make sure that it is possible to switch to the consumer.
-    @assert task.state in (:runnable, :queued)
+    @assert !istaskdone(task) && !istaskfailed(task)
 
-    @static if VERSION < v"1.1.9999"
-        task.state === :queued && yield()
-    else
-        task.queue !== nothing && yield()
-    end
+    task.queue !== nothing && yield()
 
     if empty
         # Switch to the consumer.
@@ -209,7 +196,7 @@ function consume(ctask::CTask, values...)
         push!(producer.storage[:consumers].waitq, ct)
     end
 
-    if producer.state === :runnable
+    if !istaskdone(producer) && !istaskfailed(producer)
         # Switch to the producer.
         schedule(producer)
         yield()
@@ -220,21 +207,13 @@ function consume(ctask::CTask, values...)
         end
 
         # If the task failed, throw an exception.
-        _istaskfailed(producer) && throw(CTaskException(producer))
+        istaskfailed(producer) && throw(CTaskException(producer))
 
         # If the task is done return the result.
         istaskdone(producer) && return producer.result
     end
 
     wait()
-end
-
-function _istaskfailed(task::Task)
-    @static if VERSION < v"1.3"
-        return task.state === :failed
-    else
-        return Base.istaskfailed(task)
-    end
 end
 
 function getstate(task::Task)
