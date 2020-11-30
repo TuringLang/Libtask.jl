@@ -4,6 +4,7 @@
 
 #include "julia.h"
 
+// --- functions for debugging
 JL_DLLEXPORT void jl_obj_inspect(jl_value_t *obj)
 {
     int i = 0;
@@ -48,25 +49,20 @@ JL_DLLEXPORT jl_array_t *jl_array_inspect(jl_array_t *ary, void *new_data)
     return ary;
 }
 
-JL_DLLEXPORT jl_value_t * jl_icaller(jl_value_t *fun)
+// --- functions for stack-allocated objects
+JL_DLLEXPORT jl_value_t * lt_stack_alloc(jl_value_t *fun, size_t buf_size)
 {
-    int i = 0;
-    printf("position of i 1: %p\n", &i);
-    printf("s = %ld\n", sizeof(jl_array_t));
-    void *buf = alloca(2048);
-    printf("position of buf: %p\n", buf);
+    void *buf = alloca(buf_size);
     jl_function_t* func = (jl_function_t*)fun;
     jl_value_t *argument = jl_box_int64((int64_t)buf);
     jl_value_t *ret = jl_call1(func, argument);
     return ret;
 }
 
-JL_DLLEXPORT jl_array_t* jl_copy_array_to_stack(jl_array_t *ary, void *dest)
+JL_DLLEXPORT jl_array_t* lt_copy_to_stack_array(jl_array_t *ary, void *dest)
 {
-    int i = 0;
-    printf("position of i 2: %p\n", &i);
-    printf("position of buf: %p\n", dest);
-    memcpy(dest, (void*)ary, sizeof(jl_array_t));
-    printf("------\n");
-    return (jl_array_t*)(dest);
+    memcpy(dest, (void*)jl_astaggedvalue(ary),
+        sizeof(jl_taggedvalue_t) + sizeof(jl_array_t));
+    jl_array_t *ret = (jl_array_t*)(jl_valueof(dest));
+    return ret;
 }
