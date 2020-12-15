@@ -50,7 +50,7 @@ JL_DLLEXPORT jl_array_t *jl_array_inspect(jl_array_t *ary, void *new_data)
 }
 
 // --- functions for stack-allocated objects
-JL_DLLEXPORT jl_value_t * lt_stack_alloc(jl_value_t *fun, size_t buf_size)
+JL_DLLEXPORT jl_value_t * lt_call_with_stackbuf(jl_value_t *fun, size_t buf_size)
 {
     void *buf = alloca(buf_size);
     jl_function_t* func = (jl_function_t*)fun;

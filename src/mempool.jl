@@ -4,8 +4,10 @@ using Libdl
 @show lib = Libdl.dlopen_e("./mempool.so")
 @show inspector = dlsym(lib, :jl_array_inspect)
 @show obj_inspector = dlsym(lib, :jl_obj_inspect)
-@show stack_alloc = dlsym(lib, :lt_stack_alloc)
+@show call_with_stackbuf = dlsym(lib, :lt_call_with_stackbuf)
 @show copy_to_stack_array = dlsym(lib, :lt_copy_to_stack_array)
+
+# GC.enable(false)
 
 # global memory buffer
 const global_buf = Vector{UInt8}(undef, 16)
@@ -17,9 +19,11 @@ end
 println("============= common test =")
 
 function entrance(stack_buffer)
-    # my caller is `lt_stack_alloc`, when I return,
+    # my caller is `lt_call_with_stackbuf`, when I return,
     # the stack-allocated buffer will be released.
+
     ptr = unsafe_convert(Ptr{UInt8}, global_buf) + 0
+    # a1 is allocated on heap, both of the box-object and the data buffer
     a1 = unsafe_wrap(Array{UInt8, 2}, ptr, (2, 2))
     println("Hi, I am from Julia")
     println(typeof(a1))
@@ -32,7 +36,7 @@ function entrance(stack_buffer)
 end
 
 function test()
-    ccall(stack_alloc, Any, (Any, UInt), entrance, 1024)
+    ccall(call_with_stackbuf, Any, (Any, UInt), entrance, 1024)
 end
 
 test()
@@ -47,7 +51,7 @@ t1 = @task for _ in 1:4
 end
 
 function entrance_t(stack_buffer)
-    # my caller is `lt_stack_alloc`, when I return,
+    # my caller is `lt_call_with_stackbuf`, when I return,
     # the stack-allocated buffer will be released.
     ptr = unsafe_convert(Ptr{UInt8}, global_buf) + 0
     a1 = unsafe_wrap(Array{UInt8, 2}, ptr, (2, 2))
@@ -66,7 +70,7 @@ function entrance_t(stack_buffer)
 end
 
 function test_t()
-    ccall(stack_alloc, Any, (Any, UInt), entrance_t, 1024)
+    ccall(call_with_stackbuf, Any, (Any, UInt), entrance_t, 1024)
 end
 
 t = @task test_t()
@@ -102,7 +106,7 @@ function lt_e(stack_buffer)
 end
 
 function lt_f()
-    ccall(stack_alloc, Any, (Any, UInt), lt_e, 1024)
+    ccall(call_with_stackbuf, Any, (Any, UInt), lt_e, 1024)
 end
 
 ctask = CTask(lt_f)
