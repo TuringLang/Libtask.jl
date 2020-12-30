@@ -55,7 +55,7 @@
         @test_throws MethodError TArray{Int,2}(undef, 4)
 
         ta3 = TArray{Int, 4}(4, 3, 2, 1)
-        ta4 = get(ta3)
+        ta4 = Libtask._get(ta3)
         @test ta3[3] == ta4[3]
 
         ta5 = TArray{Int}(4)

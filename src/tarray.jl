@@ -105,19 +105,17 @@ end
 #
 # Conversion between TArray and Array
 #
-function Base.get(x::TArray)
+_get(x) = x
+function _get(x::TArray)
     n, d = task_local_storage(x.ref)
     return d
 end
-
-_get(x) = x
-_get(x::TArray) = get(x)
 
 function Base.convert(::Type{Array}, x::TArray)
     return convert(Array{eltype(x), ndims(x)}, x)
 end
 function Base.convert(::Type{Array{T,N}}, x::TArray{T,N}) where {T,N}
-    c = convert(Array{T, N}, deepcopy(get(x)))
+    c = convert(Array{T, N}, deepcopy(_get(x)))
     return c
 end
 
@@ -134,51 +132,40 @@ end
 #
 # Representation
 #
-function Base.display(x::TArray)
+function Base.show(io::IO, ::MIME"text/plain", x::TArray)
     arr = x.orig_task.storage[x.ref][2]
-    @warn "display(::TArray) prints the originating task's storage, " *
+    @warn "Here shows the originating task's storage, " *
         "not the current task's storage. " *
-        "Please use show(::TArray) to display the current task's version of a TArray."
-    display(arr)
+        "Please explictly call show(::TArray) to display the current task's version of a TArray."
+    show(io,  MIME("text/plain"), arr)
 end
 
 Base.show(io::IO, x::TArray) = Base.show(io::IO, task_local_storage(x.ref)[2])
 
 function Base.summary(io::IO, x::TArray)
   print(io, "Task Local Array: ")
-  summary(io, get(x))
+  summary(io, _get(x))
 end
-
-Base.print_array(io::IO, x::TArray) = Base.print_array(io, get(x))
-
-#
-# Iterator Interface
-#
-
-IteratorSize(::Type{TArray{T, N}}) where {T, N} = HasShape{N}()
-IteratorEltype(::Type{TArray}) = HasEltype()
 
 #
 # Forward many methods to the underlying array
 #
-for F in (:iterate, :eltype, :length, :size,
-          :firstindex, :lastindex, :ndims, :axes,
-          :collect)
-    @eval Base.$F(a::TArray, args...) = $F(get(a), args...)
+for F in (:size,
+          :iterate,
+          :firstindex, :lastindex, :axes)
+    @eval Base.$F(a::TArray, args...) = $F(_get(a), args...)
 end
 
 #
 # Similarity implementation
 #
 
-Base.similar(x::TArray) = tzeros(eltype(x), size(x))
-Base.similar(x::TArray, ::Type{T}) where {T} = tzeros(T, size(x))
-Base.similar(x::TArray, dims::Dims) = tzeros(eltype(x), dims)
+Base.similar(x::TArray, ::Type{T}, dims::Dims) where T = TArray(similar(_get(x), T, dims))
 
 for op in [:(==), :≈]
-    @eval Base.$op(x::TArray, y::AbstractArray) = Base.$op(get(x), y)
-    @eval Base.$op(x::AbstractArray, y::TArray) = Base.$op(x, get(y))
-    @eval Base.$op(x::TArray, y::TArray) = Base.$op(get(x), get(y))
+    @eval Base.$op(x::TArray, y::AbstractArray) = Base.$op(_get(x), y)
+    @eval Base.$op(x::AbstractArray, y::TArray) = Base.$op(x, _get(y))
+    @eval Base.$op(x::TArray, y::TArray) = Base.$op(_get(x), _get(y))
 end
 
 #
@@ -228,66 +215,66 @@ end
 # Other methods from stdlib
 
 Base.view(x::TArray, inds...; kwargs...) =
-    Base.view(get(x), inds...; kwargs...) |> localize
-Base.:-(x::TArray) = (- get(x)) |> localize
-Base.transpose(x::TArray) = transpose(get(x)) |> localize
-Base.adjoint(x::TArray) = adjoint(get(x)) |> localize
-Base.repeat(x::TArray; kw...) = repeat(get(x); kw...) |> localize
-Base.hcat(x::TArray, rest...) = hcat(get(x), _get.(rest)...) |> localize
-Base.hcat(x::AbstractArray, y::TArray, rest...) = hcat(x, get(y), _get.(rest)...) |> localize
-Base.vcat(x::TArray, rest...) = vcat(get(x), _get.(rest)...) |> localize
-Base.vcat(x::AbstractArray, y::TArray, rest...) = vcat(x, get(y), _get.(rest)...) |> localize
-Base.cat(x::TArray, rest...; dims) = cat(get(x), _get.(rest)...; dims = dims) |> localize
+    Base.view(_get(x), inds...; kwargs...) |> localize
+Base.:-(x::TArray) = (- _get(x)) |> localize
+Base.transpose(x::TArray) = transpose(_get(x)) |> localize
+Base.adjoint(x::TArray) = adjoint(_get(x)) |> localize
+Base.repeat(x::TArray; kw...) = repeat(_get(x); kw...) |> localize
+Base.hcat(x::TArray, rest...) = hcat(_get(x), _get.(rest)...) |> localize
+Base.hcat(x::AbstractArray, y::TArray, rest...) = hcat(x, _get(y), _get.(rest)...) |> localize
+Base.vcat(x::TArray, rest...) = vcat(_get(x), _get.(rest)...) |> localize
+Base.vcat(x::AbstractArray, y::TArray, rest...) = vcat(x, _get(y), _get.(rest)...) |> localize
+Base.cat(x::TArray, rest...; dims) = cat(_get(x), _get.(rest)...; dims = dims) |> localize
 Base.cat(x::AbstractArray, y::TArray, rest...; dims) =
-    cat(x, get(y), _get.(rest)...; dims = dims) |> localize
+    cat(x, _get(y), _get.(rest)...; dims = dims) |> localize
 
-Base.reshape(x::TArray, dims::Union{Colon,Int}...) = reshape(get(x), dims) |> localize
+Base.reshape(x::TArray, dims::Union{Colon,Int}...) = reshape(_get(x), dims) |> localize
 Base.reshape(x::TArray, dims::Tuple{Vararg{Union{Int,Colon}}}) =
-    reshape(get(x), Base._reshape_uncolon(get(x), dims)) |> localize
-Base.reshape(x::TArray, dims::Tuple{Vararg{Int}}) = reshape(get(x), dims) |> localize
+    reshape(_get(x), Base._reshape_uncolon(_get(x), dims)) |> localize
+Base.reshape(x::TArray, dims::Tuple{Vararg{Int}}) = reshape(_get(x), dims) |> localize
 
-Base.permutedims(x::TArray, perm) = permutedims(get(x), perm) |> localize
-Base.PermutedDimsArray(x::TArray, perm) = PermutedDimsArray(get(x), perm) |> localize
-Base.reverse(x::TArray; dims) = reverse(get(x), dims = dims) |> localize
+Base.permutedims(x::TArray, perm) = permutedims(_get(x), perm) |> localize
+Base.PermutedDimsArray(x::TArray, perm) = PermutedDimsArray(_get(x), perm) |> localize
+Base.reverse(x::TArray; dims) = reverse(_get(x), dims = dims) |> localize
 
-Base.sum(x::TArray; dims = :) = sum(get(x), dims = dims) |> localize
-Base.sum(f::Union{Function,Type},x::TArray) = sum(f.(get(x))) |> localize
-Base.prod(x::TArray; dims=:) = prod(get(x); dims=dims) |> localize
-Base.prod(f::Union{Function, Type}, x::TArray) = prod(f.(get(x))) |> localize
+Base.sum(x::TArray; dims = :) = sum(_get(x), dims = dims) |> localize
+Base.sum(f::Union{Function,Type},x::TArray) = sum(f.(_get(x))) |> localize
+Base.prod(x::TArray; dims=:) = prod(_get(x); dims=dims) |> localize
+Base.prod(f::Union{Function, Type}, x::TArray) = prod(f.(_get(x))) |> localize
 
-Base.findfirst(x::TArray, args...) = findfirst(get(x), args...) |> localize
-Base.maximum(x::TArray; dims = :) = maximum(get(x), dims = dims) |> localize
-Base.minimum(x::TArray; dims = :) = minimum(get(x), dims = dims) |> localize
+Base.findfirst(x::TArray, args...) = findfirst(_get(x), args...) |> localize
+Base.maximum(x::TArray; dims = :) = maximum(_get(x), dims = dims) |> localize
+Base.minimum(x::TArray; dims = :) = minimum(_get(x), dims = dims) |> localize
 
-Base.:/(x::TArray, y::TArray) = get(x) / get(y) |> localize
-Base.:/(x::AbstractArray, y::TArray) = x / get(y) |> localize
-Base.:/(x::TArray, y::AbstractArray) = get(x) / y |> localize
-Base.:\(x::TArray, y::TArray) = get(x) \ get(y) |> localize
-Base.:\(x::AbstractArray, y::TArray) = x \ get(y) |> localize
-Base.:\(x::TArray, y::AbstractArray) = get(x) \ y |> localize
-Base.:*(x::TArray, y::TArray) = get(x) * get(y) |> localize
-Base.:*(x::AbstractArray, y::TArray) = x * get(y) |> localize
-Base.:*(x::TArray, y::AbstractArray) = get(x) * y |> localize
+Base.:/(x::TArray, y::TArray) = _get(x) / _get(y) |> localize
+Base.:/(x::AbstractArray, y::TArray) = x / _get(y) |> localize
+Base.:/(x::TArray, y::AbstractArray) = _get(x) / y |> localize
+Base.:\(x::TArray, y::TArray) = _get(x) \ _get(y) |> localize
+Base.:\(x::AbstractArray, y::TArray) = x \ _get(y) |> localize
+Base.:\(x::TArray, y::AbstractArray) = _get(x) \ y |> localize
+Base.:*(x::TArray, y::TArray) = _get(x) * _get(y) |> localize
+Base.:*(x::AbstractArray, y::TArray) = x * _get(y) |> localize
+Base.:*(x::TArray, y::AbstractArray) = _get(x) * y |> localize
 
 
 import LinearAlgebra
 import LinearAlgebra:  \, /, inv, det, logdet, logabsdet, norm
 
-LinearAlgebra.inv(x::TArray) = inv(get(x)) |> localize
-LinearAlgebra.det(x::TArray) = det(get(x)) |> localize
-LinearAlgebra.logdet(x::TArray) = logdet(get(x)) |> localize
-LinearAlgebra.logabsdet(x::TArray) = logabsdet(get(x)) |> localize
+LinearAlgebra.inv(x::TArray) = inv(_get(x)) |> localize
+LinearAlgebra.det(x::TArray) = det(_get(x)) |> localize
+LinearAlgebra.logdet(x::TArray) = logdet(_get(x)) |> localize
+LinearAlgebra.logabsdet(x::TArray) = logabsdet(_get(x)) |> localize
 LinearAlgebra.norm(x::TArray, p::Real = 2) =
-    LinearAlgebra.norm(get(x), p) |> localize
+    LinearAlgebra.norm(_get(x), p) |> localize
 
 import LinearAlgebra: dot
-dot(x::TArray, ys::TArray) = dot(get(x), get(ys)) |> localize
-dot(x::AbstractArray, ys::TArray) = dot(x, get(ys)) |> localize
-dot(x::TArray, ys::AbstractArray) = dot(get(x), ys) |> localize
+dot(x::TArray, ys::TArray) = dot(_get(x), _get(ys)) |> localize
+dot(x::AbstractArray, ys::TArray) = dot(x, _get(ys)) |> localize
+dot(x::TArray, ys::AbstractArray) = dot(_get(x), ys) |> localize
 
 using Statistics
-Statistics.mean(x::TArray; dims = :) = mean(get(x), dims = dims) |> localize
-Statistics.std(x::TArray; kw...) = std(get(x), kw...) |> localize
+Statistics.mean(x::TArray; dims = :) = mean(_get(x), dims = dims) |> localize
+Statistics.std(x::TArray; kw...) = std(_get(x), kw...) |> localize
 
 # TODO
 # * NNlib
