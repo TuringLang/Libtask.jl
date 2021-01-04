@@ -31,6 +31,7 @@ end
 
 TArray{T}(d::Integer...) where T = TArray(T, d)
 TArray{T}(::UndefInitializer, d::Integer...) where T = TArray(T, d)
+TArray{T}(::UndefInitializer, dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 TArray{T,N}(d::Vararg{<:Integer,N}) where {T,N} = TArray(T, d)
 TArray{T,N}(::UndefInitializer, d::Vararg{<:Integer,N}) where {T,N} = TArray{T,N}(d)
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
@@ -136,7 +137,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::TArray)
     arr = x.orig_task.storage[x.ref][2]
     @warn "Here shows the originating task's storage, " *
         "not the current task's storage. " *
-        "Please explictly call show(::TArray) to display the current task's version of a TArray."
+        "Please explicitly call show(::TArray) to display the current task's version of a TArray."
     show(io,  MIME("text/plain"), arr)
 end
 
@@ -220,13 +221,14 @@ Base.:-(x::TArray) = (- _get(x)) |> localize
 Base.transpose(x::TArray) = transpose(_get(x)) |> localize
 Base.adjoint(x::TArray) = adjoint(_get(x)) |> localize
 Base.repeat(x::TArray; kw...) = repeat(_get(x); kw...) |> localize
-Base.hcat(x::TArray, rest...) = hcat(_get(x), _get.(rest)...) |> localize
-Base.hcat(x::AbstractArray, y::TArray, rest...) = hcat(x, _get(y), _get.(rest)...) |> localize
-Base.vcat(x::TArray, rest...) = vcat(_get(x), _get.(rest)...) |> localize
-Base.vcat(x::AbstractArray, y::TArray, rest...) = vcat(x, _get(y), _get.(rest)...) |> localize
-Base.cat(x::TArray, rest...; dims) = cat(_get(x), _get.(rest)...; dims = dims) |> localize
-Base.cat(x::AbstractArray, y::TArray, rest...; dims) =
-    cat(x, _get(y), _get.(rest)...; dims = dims) |> localize
+
+Base.hcat(xs::Union{TArray{T,1}, TArray{T,2}}...) where T =
+    hcat(_get.(xs)...) |> localize
+Base.vcat(xs::Union{TArray{T,1}, TArray{T,2}}...) where T =
+    vcat(_get.(xs)...) |> localize
+Base.cat(xs::Union{TArray{T,1}, TArray{T,2}}...; dims) where T =
+    cat(_get.(xs)...; dims = dims) |> localize
+
 
 Base.reshape(x::TArray, dims::Union{Colon,Int}...) = reshape(_get(x), dims) |> localize
 Base.reshape(x::TArray, dims::Tuple{Vararg{Union{Int,Colon}}}) =
@@ -256,6 +258,9 @@ Base.:*(x::TArray, y::TArray) = _get(x) * _get(y) |> localize
 Base.:*(x::AbstractArray, y::TArray) = x * _get(y) |> localize
 Base.:*(x::TArray, y::AbstractArray) = _get(x) * y |> localize
 
+# broadcast
+Base.BroadcastStyle(::Type{TArray{T, N}}) where {T, N} = Broadcast.ArrayStyle{TArray}()
+Broadcast.broadcasted(::Broadcast.ArrayStyle{TArray}, f, args...) = f.(_get.(args)...) |> localize
 
 import LinearAlgebra
 import LinearAlgebra:  \, /, inv, det, logdet, logabsdet, norm

@@ -34,7 +34,7 @@
         @test pop!(ta1_2) == 2
     end
 
-    @testset "other methods" begin
+    @testset "constructors and conversion" begin
         ta2 = TArray{Int}(4, 4)
         @test ta2 isa TArray{Int,2}
         @test size(ta2) == (4, 4)
@@ -99,6 +99,24 @@
 
         # TODO: add test for use this multi-dim array
         ta7 = TArray{Int, 2}((2, 2))
+    end
+
+    @testset "stdlib functions" begin
+        ta = TArray{Int}(4, 4)
+
+        @test view(ta, 3:5) isa TArray{Int, 1}
+        @test view(ta, 3:5) == ta[3:5]
+
+        @test -ta isa TArray{Int, 2}
+        @test -(-ta) == ta
+
+        @test transpose(ta)[2, 3] == ta[3, 2]
+
+        @test repeat(ta, 2) == vcat(ta, ta)
+
+        @test repeat(ta, 1, 2) == hcat(ta, ta)
+
+        @test ta .+ ta == Libtask._get(ta) .+ Libtask._get(ta)
     end
 
     @testset "task copy" begin
