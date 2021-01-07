@@ -10,23 +10,27 @@ using Libtask
      blk
  end
 
-INTENSITY = 2
+INTENSITY = 6
+
+indexing(a, x, y) = @rep INTENSITY a[x, y]
+setindexing(a, x, y) = @rep INTENSITY a[x, y] = 1
+broadcasting(a) = @rep INTENSITY a .+ a
 
 println("= Benchmarks on Arrays =")
 A = rand(1000, 1000)
 x, y =  abs.(rand(Int, 2) .% 999) .+ 1
 print("indexing: ")
-@btime @rep INTENSITY $A[$x, $y]
+@btime indexing($A, $x, $y)
 print("set indexing: ")
-@btime @rep INTENSITY $A[$x, $y] = 1
+@btime setindexing($A, $x, $y)
 print("broadcast: ")
-@btime @rep INTENSITY $A .+ $A
+@btime broadcasting($A)
 
 println("= Benchmarks on TArrays =")
 TA = Libtask.localize(deepcopy(A))
 print("indexing: ")
-@btime @rep INTENSITY $TA[$x, $y]
+@btime indexing($TA, $x, $y)
 print("set indexing: ")
-@btime @rep INTENSITY $TA[$x, $y] = 1
+@btime setindexing($TA, $x, $y)
 print("broadcast: ")
-@btime @rep INTENSITY $TA .+ $TA
+@btime broadcasting($TA)

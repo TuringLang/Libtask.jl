@@ -174,12 +174,11 @@ end
 #
 
 # Indexing Interface
-function Base.getindex(x::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
-    t, d = task_local_storage(x.ref)
-    return d[I...]
+Base.@propagate_inbounds function Base.getindex(x::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
+    return task_local_storage(x.ref)[2][I...]
 end
 
-function Base.setindex!(x::TArray{T, N}, e, I::Vararg{Int,N}) where {T, N}
+Base.@propagate_inbounds function Base.setindex!(x::TArray{T, N}, e, I::Vararg{Int,N}) where {T, N}
     n, d = task_local_storage(x.ref)
     cn   = n_copies()
     newd = d
