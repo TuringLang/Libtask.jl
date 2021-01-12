@@ -5,12 +5,20 @@ Wrapper of a [`Task`](@ref) for which deep copying of stack allocated objects is
 """
 struct CTask
     task::Task
+    data_f2::IdDict{Symbol, Tuple{Int, Array{Float64, 2}}}
 
-    function CTask(task::Task)
-        new(enable_stack_copying(task))
+    function CTask(task::Task, df2::IdDict{Symbol, Tuple{Int, Array{Float64, 2}}})
+        ret = new(enable_stack_copying(task), df2)
+        task.storage === nothing && (task.storage = IdDict())
+        task.storage[:ctask] = ret
+        ret
     end
 end
 
+function CTask(task::Task)
+    df2 = IdDict{Symbol, Tuple{Int, Array{Float64, 2}}}()
+    CTask(enable_stack_copying(task), df2)
+end
 CTask(f) = CTask(Task(task_wrapper(f)))
 
 # Iteration interface.
@@ -24,12 +32,13 @@ end
 
 function Base.showerror(io::IO, ex::CTaskException)
     println(io, "CTaskException:")
+    ct = ex.task
     bt = @static if VERSION < v"1.6.0-DEV.1145"
         ct.backtrace
     else
         ct.storage[:_libtask_bt]
     end
-    showerror(io, ex.task.exception, bt)
+    showerror(io, ct.exception, bt)
 end
 
 # Utility function for self-copying mechanism
@@ -107,7 +116,8 @@ function Base.copy(ctask::CTask)
     setstate!(newtask, getstate(task))
     newtask.result = task.result
 
-    return CTask(newtask)
+    df2 = copy(ctask.data_f2)
+    return CTask(newtask, df2)
 end
 
 function produce(v)

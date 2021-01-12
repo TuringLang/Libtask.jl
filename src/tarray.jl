@@ -40,7 +40,7 @@ function TArray(T::Type, dim)
     res = TArray{T,length(dim)}();
     n = n_copies()
     d = Array{T}(undef, dim)
-    task_local_storage(res.ref, (n,d))
+    _local_storage(res.ref, (n,d))
     res
 end
 
@@ -48,6 +48,23 @@ TArray(x::AbstractArray) = convert(TArray, x)
 
 localize(x) = x
 localize(x::AbstractArray) = TArray(x)
+
+# _local_storage
+_local_storage(k) = task_local_storage(k)
+_local_storage(k, v) = task_local_storage(k, v)
+function _local_storage(k::Symbol, v::Tuple{Int, Array{Float64, 2}})
+    ctask::CTask = task_local_storage(:ctask)
+    ctask.data_f2[k] = v
+end
+function _local_storage(k::Symbol, ::Type{Array{T, N}}) where {T, N}
+    n::Int, d::Array{T, N} = task_local_storage(k)
+    return n, d
+end
+
+function _local_storage(k::Symbol, ::Type{Array{Float64, 2}})
+    ctask::CTask = task_local_storage(:ctask)
+    return ctask.data_f2[k]
+end
 
 # Constructors
 """
@@ -71,7 +88,7 @@ function tzeros(T::Type, dim)
     res = TArray{T,length(dim)}();
     n = n_copies()
     d = zeros(T,dim)
-    task_local_storage(res.ref, (n,d))
+    _local_storage(res.ref, (n,d))
     return res
 end
 
@@ -99,7 +116,7 @@ function tfill(val::Real, dim)
     res = TArray{typeof(val),length(dim)}();
     n = n_copies()
     d = fill(val,dim)
-    task_local_storage(res.ref, (n,d))
+    _local_storage(res.ref, (n,d))
     return res
 end
 
@@ -107,8 +124,8 @@ end
 # Conversion between TArray and Array
 #
 _get(x) = x
-function _get(x::TArray)
-    n, d = task_local_storage(x.ref)
+function _get(x::TArray{T, N}) where {T, N}
+    n, d = _local_storage(x.ref, Array{T, N})
     return d
 end
 
@@ -126,7 +143,7 @@ end
 function Base.convert(::Type{TArray{T,N}}, x::AbstractArray{T,N}) where {T,N}
     res = TArray{T,N}()
     n   = n_copies()
-    task_local_storage(res.ref, (n,x))
+    _local_storage(res.ref, (n,x))
     return res
 end
 
@@ -141,7 +158,8 @@ function Base.show(io::IO, ::MIME"text/plain", x::TArray)
     show(io,  MIME("text/plain"), arr)
 end
 
-Base.show(io::IO, x::TArray) = Base.show(io::IO, task_local_storage(x.ref)[2])
+Base.show(io::IO, x::TArray{T, N}) where {T, N} =
+    Base.show(io::IO, _local_storage(x.ref, Array{T, N})[2])
 
 function Base.summary(io::IO, x::TArray)
   print(io, "Task Local Array: ")
@@ -175,39 +193,39 @@ end
 
 # Indexing Interface
 Base.@propagate_inbounds function Base.getindex(x::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
-    return task_local_storage(x.ref)[2][I...]
+    return _local_storage(x.ref, Array{T, N})[2][I...]
 end
 
 Base.@propagate_inbounds function Base.setindex!(x::TArray{T, N}, e, I::Vararg{Int,N}) where {T, N}
-    n, d = task_local_storage(x.ref)
+    n, d = _local_storage(x.ref, Array{T, N})
     cn   = n_copies()
     newd = d
     if cn > n
         # println("[setindex!]: $(x.ref) copying data")
         newd = deepcopy(d)
-        task_local_storage(x.ref, (cn, newd))
+        _local_storage(x.ref, (cn, newd))
     end
     newd[I...] = e
 end
 
-function Base.push!(x::TArray{T}, e) where T
-    n, d = task_local_storage(x.ref)
+function Base.push!(x::TArray{T, N}, e) where {T, N}
+    n, d = _local_storage(x.ref, Array{T, N})
     cn   = n_copies()
     newd = d
     if cn > n
         newd = deepcopy(d)
-        task_local_storage(x.ref, (cn, newd))
+        _local_storage(x.ref, (cn, newd))
     end
     push!(newd, e)
 end
 
-function Base.pop!(x::TArray)
-    n, d = task_local_storage(x.ref)
+function Base.pop!(x::TArray{T, N}) where {T, N}
+    n, d = _local_storage(x.ref, Array{T, N})
     cn   = n_copies()
     newd = d
     if cn > n
         newd = deepcopy(d)
-        task_local_storage(x.ref, (cn, newd))
+        _local_storage(x.ref, (cn, newd))
     end
     pop!(d)
 end
