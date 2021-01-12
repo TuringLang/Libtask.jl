@@ -2,13 +2,13 @@ using BenchmarkTools
 using Libtask
 
 
- macro rep(cnt, exp)
-     blk =:(begin end)
-     for _ in 1:eval(cnt)
-         push!(blk.args, esc(exp))
-     end
-     blk
- end
+macro rep(cnt, exp)
+    blk =:(begin end)
+    for _ in 1:eval(cnt)
+        push!(blk.args, esc(exp))
+    end
+    blk
+end
 
 INTENSITY = 6
 
