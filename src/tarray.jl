@@ -23,10 +23,15 @@ for i in 1:4 ta[i] = i end  # assign
 Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 ```
 """
-struct TArray{T,N} <: AbstractArray{T,N}
-    ref :: Symbol  # object_id
+struct TArray{T, N} <: AbstractArray{T, N}
     orig_task :: Task
-    TArray{T,N}() where {T,N} = new(gensym(), current_task())
+    data::Dict{Task, Tuple{Int, AbstractArray{T, N}}}
+    function TArray{T,N}() where {T,N}
+        d = Dict{Task, Tuple{Int, AbstractArray{T, N}}}()
+        res = new(current_task(), d)
+        keep(res)
+        return res
+    end
 end
 
 TArray{T}(d::Integer...) where T = TArray(T, d)
@@ -37,34 +42,54 @@ TArray{T,N}(::UndefInitializer, d::Vararg{<:Integer,N}) where {T,N} = TArray{T,N
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 
 function TArray(T::Type, dim)
-    res = TArray{T,length(dim)}();
+    res = TArray{T, length(dim)}();
     n = n_copies()
     d = Array{T}(undef, dim)
-    _local_storage(res.ref, (n,d))
+    _local_storage(res, (n, d))
     res
 end
 
 TArray(x::AbstractArray) = convert(TArray, x)
 
-localize(x) = x
-localize(x::AbstractArray) = TArray(x)
+# TArray House-Keeper
+
+const TArrayKeeper = Vector{WeakRef}()
+keep(x::TArray) = push!(TArrayKeeper, WeakRef(x))
+function copy_tarrays(task1::Task, task2::Task)
+    deleteat!(TArrayKeeper, map(x -> x == nothing, TArrayKeeper))
+    for wref in TArrayKeeper
+        ta = wref.value
+        if haskey(ta.data, task1) && !haskey(ta.data, task2)
+            ta.data[task2] = ta.data[task1]
+        end
+    end
+end
 
 # _local_storage
-_local_storage(k) = task_local_storage(k)
-_local_storage(k, v) = task_local_storage(k, v)
-function _local_storage(k::Symbol, v::Tuple{Int, Array{Float64, 2}})
-    ctask::CTask = task_local_storage(:ctask)
-    ctask.data_f2[k] = v
-end
-function _local_storage(k::Symbol, ::Type{Array{T, N}}) where {T, N}
-    n::Int, d::Array{T, N} = task_local_storage(k)
-    return n, d
+_local_storage(x::TArray{T, N}) where {T, N} = x.data[current_task()]
+function _local_storage(x::TArray{T, N}, v::Tuple{Int, AbstractArray{T, N}}) where {T, N}
+    x.data[current_task()] = v
 end
 
-function _local_storage(k::Symbol, ::Type{Array{Float64, 2}})
-    ctask::CTask = task_local_storage(:ctask)
-    return ctask.data_f2[k]
+_get(x) = x
+function _get(x::TArray{T, N}) where {T, N}
+    n, d = x.data[current_task()]
+    return d
 end
+function _get_for_write(x::TArray{T, N}) where {T, N}
+    n, d = x.data[current_task()]
+    cn   = n_copies()
+    newd = d
+    if cn > n
+        # println("[setindex!]: $(x.ref) copying data")
+        newd = deepcopy(d)
+        x.data[current_task()] = (cn, newd)
+    end
+    return newd
+end
+
+localize(x) = x
+localize(x::AbstractArray) = TArray(x)
 
 # Constructors
 """
@@ -88,7 +113,7 @@ function tzeros(T::Type, dim)
     res = TArray{T,length(dim)}();
     n = n_copies()
     d = zeros(T,dim)
-    _local_storage(res.ref, (n,d))
+    _local_storage(res, (n, d))
     return res
 end
 
@@ -116,18 +141,13 @@ function tfill(val::Real, dim)
     res = TArray{typeof(val),length(dim)}();
     n = n_copies()
     d = fill(val,dim)
-    _local_storage(res.ref, (n,d))
+    _local_storage(res, (n, d))
     return res
 end
 
 #
 # Conversion between TArray and Array
 #
-_get(x) = x
-function _get(x::TArray{T, N}) where {T, N}
-    n, d = _local_storage(x.ref, Array{T, N})
-    return d
-end
 
 function Base.convert(::Type{Array}, x::TArray)
     return convert(Array{eltype(x), ndims(x)}, x)
@@ -138,12 +158,12 @@ function Base.convert(::Type{Array{T,N}}, x::TArray{T,N}) where {T,N}
 end
 
 function Base.convert(::Type{TArray}, x::AbstractArray)
-    return convert(TArray{eltype(x),ndims(x)}, x)
+    return convert(TArray{eltype(x), ndims(x)}, x)
 end
-function Base.convert(::Type{TArray{T,N}}, x::AbstractArray{T,N}) where {T,N}
-    res = TArray{T,N}()
+function Base.convert(::Type{TArray{T,N}}, x::AbstractArray{T, N}) where {T, N}
+    res = TArray{T, N}()
     n   = n_copies()
-    _local_storage(res.ref, (n,x))
+    _local_storage(res, (n, x))
     return res
 end
 
@@ -151,15 +171,19 @@ end
 # Representation
 #
 function Base.show(io::IO, ::MIME"text/plain", x::TArray)
-    arr = x.orig_task.storage[x.ref][2]
+    arr = x.data[x.orig_task][2]
     @warn "Here shows the originating task's storage, " *
         "not the current task's storage. " *
         "Please explicitly call show(::TArray) to display the current task's version of a TArray."
     show(io,  MIME("text/plain"), arr)
 end
 
-Base.show(io::IO, x::TArray{T, N}) where {T, N} =
-    Base.show(io::IO, _local_storage(x.ref, Array{T, N})[2])
+function Base.show(io::IO, x::TArray)
+    if haskey(x.data, current_task())
+        return Base.show(io::IO, _get(x))
+    end
+    show(io, MIME("text/plain"), x)
+end
 
 function Base.summary(io::IO, x::TArray)
   print(io, "Task Local Array: ")
@@ -193,40 +217,21 @@ end
 
 # Indexing Interface
 Base.@propagate_inbounds function Base.getindex(x::TArray{T, N}, I::Vararg{Int,N}) where {T, N}
-    return _local_storage(x.ref, Array{T, N})[2][I...]
+    return _get(x)[I...]
 end
 
 Base.@propagate_inbounds function Base.setindex!(x::TArray{T, N}, e, I::Vararg{Int,N}) where {T, N}
-    n, d = _local_storage(x.ref, Array{T, N})
-    cn   = n_copies()
-    newd = d
-    if cn > n
-        # println("[setindex!]: $(x.ref) copying data")
-        newd = deepcopy(d)
-        _local_storage(x.ref, (cn, newd))
-    end
-    newd[I...] = e
+    d = _get_for_write(x)
+    d[I...] = e
 end
 
 function Base.push!(x::TArray{T, N}, e) where {T, N}
-    n, d = _local_storage(x.ref, Array{T, N})
-    cn   = n_copies()
-    newd = d
-    if cn > n
-        newd = deepcopy(d)
-        _local_storage(x.ref, (cn, newd))
-    end
-    push!(newd, e)
+    d = _get_for_write(x)
+    push!(d, e)
 end
 
 function Base.pop!(x::TArray{T, N}) where {T, N}
-    n, d = _local_storage(x.ref, Array{T, N})
-    cn   = n_copies()
-    newd = d
-    if cn > n
-        newd = deepcopy(d)
-        _local_storage(x.ref, (cn, newd))
-    end
+    d = _get_for_write(x)
     pop!(d)
 end
 

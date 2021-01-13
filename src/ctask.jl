@@ -5,20 +5,15 @@ Wrapper of a [`Task`](@ref) for which deep copying of stack allocated objects is
 """
 struct CTask
     task::Task
-    data_f2::IdDict{Symbol, Tuple{Int, Array{Float64, 2}}}
 
-    function CTask(task::Task, df2::IdDict{Symbol, Tuple{Int, Array{Float64, 2}}})
-        ret = new(enable_stack_copying(task), df2)
+    function CTask(task::Task)
+        ret = new(enable_stack_copying(task))
         task.storage === nothing && (task.storage = IdDict())
         task.storage[:ctask] = ret
         ret
     end
 end
 
-function CTask(task::Task)
-    df2 = IdDict{Symbol, Tuple{Int, Array{Float64, 2}}}()
-    CTask(enable_stack_copying(task), df2)
-end
 CTask(f) = CTask(Task(task_wrapper(f)))
 
 # Iteration interface.
@@ -116,8 +111,8 @@ function Base.copy(ctask::CTask)
     setstate!(newtask, getstate(task))
     newtask.result = task.result
 
-    df2 = copy(ctask.data_f2)
-    return CTask(newtask, df2)
+    copy_tarrays(task, newtask)
+    return CTask(newtask)
 end
 
 function produce(v)
