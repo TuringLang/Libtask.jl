@@ -62,7 +62,7 @@ TArray(x::AbstractArray) = convert(TArray, x)
 const TArrayKeeper = Vector{WeakRef}()
 keep(x::TArray) = push!(TArrayKeeper, WeakRef(x))
 function copy_tarrays(task1::Task, task2::Task)
-    filter!(x -> x != nothing, TArrayKeeper)
+    filter!(x -> x.value !== nothing, TArrayKeeper)
     for wref in TArrayKeeper
         ta = wref.value
         if haskey(ta.data, task1) && !haskey(ta.data, task2)
