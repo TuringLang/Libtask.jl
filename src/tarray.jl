@@ -29,11 +29,11 @@ for i in 1:4 ta[i] = i end  # assign
 Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 ```
 """
-struct TArray{T, N} <: AbstractArray{T, N}
+struct TArray{T, N, A <: AbstractArray{T, N}} <: AbstractArray{T, N}
     orig_task :: Task
-    data::Dict{Task, Tuple{Int, AbstractArray{T, N}}}
-    function TArray{T,N}() where {T,N}
-        d = Dict{Task, Tuple{Int, AbstractArray{T, N}}}()
+    data::Dict{Task, Tuple{Int, A}}
+    function TArray{T, N, A}() where {T, N, A <: AbstractArray{T, N}}
+        d = Dict{Task, Tuple{Int, A}}()
         res = new(current_task(), d)
         keep(res)
         return res
@@ -48,7 +48,8 @@ TArray{T,N}(::UndefInitializer, d::Vararg{<:Integer,N}) where {T,N} = TArray{T,N
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 
 function TArray(T::Type, dim)
-    res = TArray{T, length(dim)}();
+    N_dim = length(dim)
+    res = TArray{T, N_dim, Array{T, N_dim}}()
     n = n_copies()
     d = Array{T}(undef, dim)
     _local_storage(res, (n, d))
@@ -116,7 +117,7 @@ Array(tz)                   # convert to 4-element Array{Int64,1}: [0, 0, 0, 0]
 ```
 """
 function tzeros(T::Type, dim)
-    res = TArray{T,length(dim)}();
+    res = TArray{T,length(dim), Array{T, length(dim)}}();
     n = n_copies()
     d = zeros(T,dim)
     _local_storage(res, (n, d))
@@ -144,7 +145,7 @@ Array(tz)                     # convert to 4-element Array{Float64,1}:  [9.0  9.
 ```
 """
 function tfill(val::Real, dim)
-    res = TArray{typeof(val),length(dim)}();
+    res = TArray{typeof(val), length(dim), Array{typeof(val), length(dim)}}();
     n = n_copies()
     d = fill(val,dim)
     _local_storage(res, (n, d))
@@ -158,7 +159,7 @@ end
 function Base.convert(::Type{Array}, x::TArray)
     return convert(Array{eltype(x), ndims(x)}, x)
 end
-function Base.convert(::Type{Array{T,N}}, x::TArray{T,N}) where {T,N}
+function Base.convert(::Type{Array{T, N}}, x::TArray{T, N}) where {T, N}
     c = convert(Array{T, N}, deepcopy(_get(x)))
     return c
 end
@@ -166,8 +167,8 @@ end
 function Base.convert(::Type{TArray}, x::AbstractArray)
     return convert(TArray{eltype(x), ndims(x)}, x)
 end
-function Base.convert(::Type{TArray{T,N}}, x::AbstractArray{T, N}) where {T, N}
-    res = TArray{T, N}()
+function Base.convert(::Type{TArray{T, N}}, x::AbstractArray{T, N}) where {T, N}
+    res = TArray{T, N, typeof(x)}()
     n   = n_copies()
     _local_storage(res, (n, x))
     return res
@@ -282,7 +283,7 @@ Base.:*(x::AbstractArray, y::TArray) = x * _get(y) |> localize
 Base.:*(x::TArray, y::AbstractArray) = _get(x) * y |> localize
 
 # broadcast
-Base.BroadcastStyle(::Type{TArray{T, N}}) where {T, N} = Broadcast.ArrayStyle{TArray}()
+Base.BroadcastStyle(::Type{TArray{T, N, A}}) where {T, N, A} = Broadcast.ArrayStyle{TArray}()
 Broadcast.broadcasted(::Broadcast.ArrayStyle{TArray}, f, args...) = f.(_get.(args)...) |> localize
 
 import LinearAlgebra
