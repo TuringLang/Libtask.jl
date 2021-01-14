@@ -7,7 +7,13 @@
 
 Implementation of data structures that automatically perform copy-on-write after task copying.
 
-If current_task is an existing key in `s`, then return `s[current_task]`. Otherwise, return `s[current_task] = s[last_task]`.
+Underlying `TArray`, we have an concrete array object for each task, i,e, if you access (read
+or write) a same `TArray` is different tasks, you may get different result because you are
+eventaully accessing different arrays wrapped by the `TArray` object.
+
+Now we store the underlying arrays in the field `TArray.data`, a dict whose keys are tasks,
+instead of storing them in the task local storage, because the latter way can't provide
+assistance for type inference thus may bring a perfomance penalty.
 
 Usage:
 
@@ -56,7 +62,7 @@ TArray(x::AbstractArray) = convert(TArray, x)
 const TArrayKeeper = Vector{WeakRef}()
 keep(x::TArray) = push!(TArrayKeeper, WeakRef(x))
 function copy_tarrays(task1::Task, task2::Task)
-    deleteat!(TArrayKeeper, map(x -> x == nothing, TArrayKeeper))
+    filter!(x -> x != nothing, TArrayKeeper)
     for wref in TArrayKeeper
         ta = wref.value
         if haskey(ta.data, task1) && !haskey(ta.data, task2)
@@ -66,17 +72,17 @@ function copy_tarrays(task1::Task, task2::Task)
 end
 
 # _local_storage
-_local_storage(x::TArray{T, N}) where {T, N} = x.data[current_task()]
+_local_storage(x::TArray) = x.data[current_task()]
 function _local_storage(x::TArray{T, N}, v::Tuple{Int, AbstractArray{T, N}}) where {T, N}
     x.data[current_task()] = v
 end
 
 _get(x) = x
-function _get(x::TArray{T, N}) where {T, N}
+function _get(x::TArray)
     n, d = x.data[current_task()]
     return d
 end
-function _get_for_write(x::TArray{T, N}) where {T, N}
+function _get_for_write(x::TArray)
     n, d = x.data[current_task()]
     cn   = n_copies()
     newd = d
@@ -178,12 +184,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::TArray)
     show(io,  MIME("text/plain"), arr)
 end
 
-function Base.show(io::IO, x::TArray)
-    if haskey(x.data, current_task())
-        return Base.show(io::IO, _get(x))
-    end
-    show(io, MIME("text/plain"), x)
-end
+Base.show(io::IO, x::TArray) = show(io::IO, _get(x))
 
 function Base.summary(io::IO, x::TArray)
   print(io, "Task Local Array: ")
@@ -225,12 +226,12 @@ Base.@propagate_inbounds function Base.setindex!(x::TArray{T, N}, e, I::Vararg{I
     d[I...] = e
 end
 
-function Base.push!(x::TArray{T, N}, e) where {T, N}
+function Base.push!(x::TArray, e)
     d = _get_for_write(x)
     push!(d, e)
 end
 
-function Base.pop!(x::TArray{T, N}) where {T, N}
+function Base.pop!(x::TArray)
     d = _get_for_write(x)
     pop!(d)
 end
