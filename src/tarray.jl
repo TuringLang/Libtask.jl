@@ -185,7 +185,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::TArray)
     show(io,  MIME("text/plain"), arr)
 end
 
-Base.show(io::IO, x::TArray) = show(io::IO, _get(x))
+Base.show(io::IO, x::TArray) = show(io, _get(x))
 
 function Base.summary(io::IO, x::TArray)
   print(io, "Task Local Array: ")
