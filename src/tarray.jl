@@ -48,7 +48,6 @@ TArray{T}(::UndefInitializer, dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 TArray{T,N}(d::Vararg{<:Integer,N}) where {T,N} = TArray(T, d)
 TArray{T,N}(::UndefInitializer, d::Vararg{<:Integer,N}) where {T,N} = TArray{T,N}(d)
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
-TArray{T, N, Array{T, N}}(::UndefInitializer, dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 
 function TArray(T::Type, dim)
     N_dim = length(dim)
@@ -282,10 +281,8 @@ Base.:*(x::AbstractArray, y::TArray) = x * _get_local_storage(y) |> localize
 Base.:*(x::TArray, y::AbstractArray) = _get_local_storage(x) * y |> localize
 
 # broadcast
-Base.BroadcastStyle(::Type{TArray{T, N, A}}) where {T, N, A} = Broadcast.ArrayStyle{TArray{T, N, A}}()
-# Broadcast.broadcasted(::Broadcast.ArrayStyle{TArray}, f, args...) = f.(_get_local_storage.(args)...) |> localize
-Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{TArray{T, N, A}}}, ::Type{T}) where {T, N, A} =
-    similar(TArray{T, N, Array{T, N}}, axes(bc))
+Base.BroadcastStyle(::Type{<:TArray}) = Broadcast.ArrayStyle{TArray}()
+Broadcast.broadcasted(::Broadcast.ArrayStyle{TArray}, f, args...) = f.(_get_local_storage.(args)...) |> localize
 
 import LinearAlgebra
 import LinearAlgebra:  \, /, inv, det, logdet, logabsdet, norm
