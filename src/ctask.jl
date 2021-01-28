@@ -7,7 +7,10 @@ struct CTask
     task::Task
 
     function CTask(task::Task)
-        new(enable_stack_copying(task))
+        ret = new(enable_stack_copying(task))
+        task.storage === nothing && (task.storage = IdDict())
+        task.storage[:ctask] = ret
+        ret
     end
 end
 
@@ -24,12 +27,13 @@ end
 
 function Base.showerror(io::IO, ex::CTaskException)
     println(io, "CTaskException:")
+    ct = ex.task
     bt = @static if VERSION < v"1.6.0-DEV.1145"
         ct.backtrace
     else
         ct.storage[:_libtask_bt]
     end
-    showerror(io, ex.task.exception, bt)
+    showerror(io, ct.exception, bt)
 end
 
 # Utility function for self-copying mechanism
@@ -107,6 +111,7 @@ function Base.copy(ctask::CTask)
     setstate!(newtask, getstate(task))
     newtask.result = task.result
 
+    copy_tarrays(task, newtask)
     return CTask(newtask)
 end
 
