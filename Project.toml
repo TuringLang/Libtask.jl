@@ -3,7 +3,7 @@ uuid = "6f1fad26-d15e-5dc8-ae53-837a1d7b8c9f"
 license = "MIT"
 desc = "C shim for task copying in Turing"
 repo = "https://github.com/TuringLang/Libtask.jl.git"
-version = "0.5.1"
+version = "0.5.2"
 
 [deps]
 Libtask_jll = "3ae2931a-708c-5973-9c38-ccf7496fb450"
