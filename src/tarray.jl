@@ -31,7 +31,7 @@ for i in 1:4 ta[i] = i end  # assign
 Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 ```
 """
-struct TArray{T, N, A <: AbstractArray{T, N}} <: AbstractArray{T, N}
+mutable struct TArray{T, N, A <: AbstractArray{T, N}} <: AbstractArray{T, N}
     orig_task :: Task
     data::Dict{Task, Tuple{Int, A}}
     function TArray{T, N, A}() where {T, N, A <: AbstractArray{T, N}}
@@ -61,14 +61,13 @@ end
 TArray(x::AbstractArray) = convert(TArray, x)
 
 # TArray House-Keeper
-
 const TArrayKeeper = Vector{WeakRef}()
 register_to_keeper(x::TArray) = push!(TArrayKeeper, WeakRef(x))
 function copy_tarrays(task1::Task, task2::Task)
     filter!(x -> x.value !== nothing, TArrayKeeper)
     for wref in TArrayKeeper
         ta = wref.value
-        if haskey(ta.data, task1) && !haskey(ta.data, task2)
+        if ta !== nothing && haskey(ta.data, task1) && !haskey(ta.data, task2)
             ta.data[task2] = ta.data[task1]
         end
     end

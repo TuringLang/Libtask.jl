@@ -165,4 +165,33 @@
         @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(a.task),
                                hash(a.task)]
     end
+
+    @testset "Issue: PR-86 (DynamicPPL.jl/pull/261)" begin
+        function f()
+            t = TArray(Int, 1)
+            t[1] = 0
+            while true
+                produce(t[1])
+                t[1]
+                t[1] = 1 + t[1]
+            end
+        end
+
+
+        ctask = CTask(f)
+
+        ex = try
+            for _ in 1:10000
+                consume(ctask)
+                consume(ctask)
+                a = copy(ctask)
+                consume(a)
+                consume(a)
+            end
+        catch ex
+            ex
+        end
+        @test ex === nothing
+    end
+
 end
