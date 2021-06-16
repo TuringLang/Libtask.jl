@@ -34,3 +34,23 @@ print("set indexing: ")
 @btime setindexing($TA, $x, $y)
 print("broadcast: ")
 @btime broadcasting($TA)
+
+print("= Benchmarks on task and TArray copying")
+function f()
+    t = TArray(Int, 1)
+    t[1] = 0
+    while true
+        produce(t[1])
+        t[1]
+        t[1] = 1 + t[1]
+    end
+end
+
+@btime begin
+    ctask = CTask(f)
+    consume(ctask)
+    consume(ctask)
+    a = copy(ctask)
+    consume(a)
+    consume(a)
+end
