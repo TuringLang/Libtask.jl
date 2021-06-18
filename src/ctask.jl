@@ -49,7 +49,23 @@ function enable_stack_copying(t::Task)
     if istaskfailed(t)
         error("only runnable or finished tasks' stack can be copied.")
     end
-    return ccall((:jl_enable_stack_copying, libtask_julia), Any, (Any,), t)::Task
+    # return ccall((:jl_enable_stack_copying, libtask_julia), Any, (Any,), t)::Task
+    copy_stack = ccall((:jl_getfield_int32_t, libtask_julia),
+                       Int32, (Any, Csize_t), t, TASK_OFFSETS[:copy_stack])
+    if copy_stack == 0
+        ccall((:jl_setfield_int32_t, libtask_julia),
+              Any, (Any, Csize_t, Int32),
+              t, TASK_OFFSETS[:copy_stack], 1)
+
+        ccall((:jl_setfield_size_t, libtask_julia),
+              Any, (Any, Csize_t, Csize_t),
+              t, TASK_OFFSETS[:bufsz], 0)
+
+        ccall((:jl_reset_task_ctx, libtask_julia),
+              Any, (Any, Csize_t, Csize_t, Csize_t),
+              t, TASK_OFFSETS[:ctx], TASK_OFFSETS[:sizeof_ctx], TASK_OFFSETS[:tls_base_context])
+    end
+    return t
 end
 
 """
@@ -101,7 +117,48 @@ function Base.copy(ctask::CTask)
         error("only runnable or finished tasks can be copied.")
     end
 
-    newtask = ccall((:jl_clone_task, libtask_julia), Any, (Any,), task)::Task
+    # memory copy
+    # newtask = ccall((:jl_clone_task, libtask_julia), Any, (Any,), task)::Task
+    newtask = ccall((:jl_clone_task_opaque, libtask_julia),
+                    Any, (Any, Csize_t), task, TASK_OFFSETS[:END])::Task
+    haskey(TASK_OFFSETS, :exception) && ccall(
+        (:jl_setfield_nothing, libtask_julia),
+        Any, (Any, Csize_t), newtask, TASK_OFFSETS[:exception])
+    haskey(TASK_OFFSETS, :backtrace) && ccall(
+        (:jl_setfield_nothing, libtask_julia),
+        Any, (Any, Csize_t), newtask, TASK_OFFSETS[:backtrace])
+    haskey(TASK_OFFSETS, :excstack) && ccall(
+        (:jl_setfield_null, libtask_julia),
+        Any, (Any, Csize_t), newtask, TASK_OFFSETS[:excstack])
+    haskey(TASK_OFFSETS, :tls) && ccall(
+        (:jl_setfield_nothing, libtask_julia),
+        Any, (Any, Csize_t), newtask, TASK_OFFSETS[:tls])
+    haskey(TASK_OFFSETS, :result) && ccall(
+        (:jl_setfield_nothing, libtask_julia),
+        Any, (Any, Csize_t), newtask, TASK_OFFSETS[:result])
+    haskey(TASK_OFFSETS, :donenotify) && ccall(
+        (:jl_setfield_nothing, libtask_julia),
+        Any, (Any, Csize_t), newtask, TASK_OFFSETS[:donenotify])
+    if haskey(TASK_OFFSETS, :stkbuf) && haskey(TASK_OFFSETS, :bufsz)
+        old_stkbuf = ccall((:jl_getfield_ptr, libtask_julia),
+                           Ptr{Cvoid}, (Any, Csize_t), task, TASK_OFFSETS[:stkbuf])
+        if old_stkbuf != C_NULL
+            ccall((:jl_setfield_size_t, libtask_julia),
+                  Any, (Any, Csize_t, Csize_t),
+                  task, TASK_OFFSETS[:bufsz], 0)
+        else
+            ccall((:jl_setfield_null, libtask_julia),
+                  Any, (Any, Csize_t),
+                  newtask, TASK_OFFSETS[:stkbuf])
+        end
+        ccall((:jl_setfield_size_t, libtask_julia),
+              Any, (Any, Csize_t, Csize_t),
+              newtask, TASK_OFFSETS[:bufsz], 0)
+    end
+    haskey(TASK_OFFSETS, :locks) && ccall(
+        (:jl_memset_0, libtask_julia),
+        Cvoid, (Any, Csize_t, Csize_t), newtask, TASK_OFFSETS[:locks], TASK_OFFSETS[:END])
+    # memory copy done
 
     task.storage[:n_copies] = 1 + n_copies(task)
     newtask.storage = copy(task.storage)
