@@ -1,4 +1,4 @@
-ALL_TASK_OFFSETS[("linux-x64", v"1.6.1")] = Dict(
+ALL_TASK_OFFSETS[("linux-x86_64", v"1.6.1")] = Dict(
     :END => 312,
     :_isexception => 58,
     :_state => 56,

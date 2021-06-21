@@ -1,8 +1,9 @@
-ALL_TASK_OFFSETS[("linux-x64", v"1.8.0")] = Dict(
+ALL_TASK_OFFSETS[("linux-x86_64", v"1.8.0")] = Dict(
     :END => 368,
     :_isexception => 58,
     :_state => 56,
     :bufsz => 352,
+    :copy_stack => 360,
     :ctx => 144,
     :donenotify => 24,
     :eh => 136,
@@ -18,10 +19,12 @@ ALL_TASK_OFFSETS[("linux-x64", v"1.8.0")] = Dict(
     :rngState1 => 72,
     :rngState2 => 80,
     :rngState3 => 88,
+    :sizeof_ctx => 200,
     :start => 48,
     :sticky => 57,
     :stkbuf => 344,
     :tid => 120,
     :tls => 16,
+    :tls_base_context => 6656,
     :world_age => 104,
 )

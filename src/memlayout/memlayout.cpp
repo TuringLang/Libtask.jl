@@ -18,16 +18,16 @@ std::string jl_ver(std::string sep=".") {
 std::string platform() {
 #ifdef _WIN32
 #ifdef _WIN64
-    return "win-x64";
+    return "windows-x86_64";
 #endif
-    return "win-x86";
+    return "windows-x86";
 #endif
 #ifdef __APPLE__
-    return "darwin-x64";
+    return "darwin-x86_64";
 #endif
 #ifdef __linux__
 #ifdef __x86_64
-    return "linux-x64";
+    return "linux-x86_64";
 #else
     return "linux-x86";
 #endif
