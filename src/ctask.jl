@@ -51,12 +51,12 @@ function enable_stack_copying(t::Task)
     end
     # return ccall((:jl_enable_stack_copying, libtask_julia),
     #             Any, (Any,), t)::Task
-    copy_stack = getfield_int32(t, :copy_stack)
+    copy_stack = internal_getfield(t, :copy_stack, Int32)
     if copy_stack == 0
-        setfield_int32(t, :copy_stack, 1)
-        setfield_size(t, :bufsz, 0)
+        internal_setfield(t, :copy_stack, Int32(1))
+        internal_setfield(t, :bufsz, Csize_t(0))
         ccall((:jl_reset_task_ctx, libtask_julia),
-              Any, (Any, Csize_t, Csize_t, Csize_t),
+              Cvoid, (Any, Csize_t, Csize_t, Csize_t),
               t, TASK_OFFSETS[:ctx], TASK_OFFSETS[:sizeof_ctx],
               TASK_OFFSETS[:tls_base_context])
     end
@@ -116,23 +116,25 @@ function Base.copy(ctask::CTask)
     # newtask = ccall((:jl_clone_task, libtask_julia), Any, (Any,), task)::Task
     newtask = ccall((:jl_clone_task_opaque, libtask_julia),
                     Any, (Any, Csize_t), task, TASK_OFFSETS[:END])::Task
-    setfield_nothing(newtask, :exception)
-    setfield_nothing(newtask, :backtrace)
-    setfield_null(newtask, :excstack)
-    setfield_nothing(newtask, :tls)
-    setfield_nothing(newtask, :result)
-    setfield_nothing(newtask, :donenotify)
+    internal_setfield(newtask, :exception, nothing)
+    internal_setfield(newtask, :backtrace, nothing)
+    internal_setfield(newtask, :tls, nothing)
+    internal_setfield(newtask, :result, nothing)
+    internal_setfield(newtask, :donenotify, nothing)
+    internal_setfield(newtask, :excstack, C_NULL)
+    internal_setfield(newtask, :ptls, C_NULL)
+    internal_setfield(newtask, :gcstack, C_NULL)
 
     if haskey(TASK_OFFSETS, :stkbuf) && haskey(TASK_OFFSETS, :bufsz)
-        old_stkbuf = getfield_ptr(task, :stkbuf)
+        old_stkbuf = internal_getfield(task, :stkbuf, Ptr)
         if old_stkbuf != C_NULL
-            setfield_size(task, :bufsz, 0)
+            internal_setfield(task, :bufsz, Csize_t(0))
         else
-            setfield_null(newtask, :stkbuf)
+            internal_setfield(newtask, :stkbuf, C_NULL)
         end
-        setfield_size(newtask, :bufsz, 0)
+        internal_setfield(newtask, :bufsz, Csize_t(0))
     end
-    memset_0(newtask, :locks; end_field=:END)
+    memset(newtask, 0, :locks)
     # memory copy done
 
     task.storage[:n_copies] = 1 + n_copies(task)

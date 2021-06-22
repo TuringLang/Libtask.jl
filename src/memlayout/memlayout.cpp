@@ -103,7 +103,9 @@ std::map<std::string, size_t> task_field_offsets() {
 #undef field_info
     data["copy_stack"] = offsetof(jl_task_t, bufsz) + sizeof(size_t);
     data["sizeof_ctx"] = sizeof(((jl_task_t*)0)->ctx);
+    // data["sizeof_stack_ctx"] = sizeof(((jl_task_t*)0)->copy_stack_ctx);
     data["tls_base_context"] = offsetof(struct _jl_tls_states_t, base_ctx);
+    // data["tls_copy_stack_ctx"] = offsetof(struct _jl_tls_states_t, copy_stack_ctx);
     return data;
 }
 

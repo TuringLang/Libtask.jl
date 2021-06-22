@@ -30,45 +30,46 @@ const TASK_OFFSETS = find_offsets()
 ## utilities
 
 # getter
-function getfield_ptr(task, field)
+function internal_getfield(task, field, ::Type{Ptr})
     ccall((:jl_getfield_ptr, libtask_julia),
           Ptr{Cvoid}, (Any, Csize_t),
           task, TASK_OFFSETS[field])
 end
 
-function getfield_int32(task, field)
+function internal_getfield(task, field, ::Type{Int32})
     ccall((:jl_getfield_int32_t, libtask_julia),
           Int32, (Any, Csize_t), task, TASK_OFFSETS[field])
 end
 
 # setter
-function setfield_nothing(task, field)
+function internal_setfield(task, field, ::Nothing)
     haskey(TASK_OFFSETS, field) && ccall(
         (:jl_setfield_nothing, libtask_julia),
         Any, (Any, Csize_t), task, TASK_OFFSETS[field])
 end
 
-function setfield_null(task, field)
+function internal_setfield(task, field, p::Ptr{Nothing})
+    p == C_NULL || error("this function is only for setting NULL value")
     haskey(TASK_OFFSETS, field) && ccall(
         (:jl_setfield_null, libtask_julia),
         Any, (Any, Csize_t), task, TASK_OFFSETS[field])
 end
 
-function memset_0(task, offset_field; end_field=:END)
-    haskey(TASK_OFFSETS, offset_field) && ccall(
-        (:jl_memset_0, libtask_julia),
-        Cvoid, (Any, Csize_t, Csize_t),
-        task, TASK_OFFSETS[offset_field], TASK_OFFSETS[end_field])
-end
-
-function setfield_size(task, field, val)
+function internal_setfield(task, field, val::Csize_t)
     ccall((:jl_setfield_size_t, libtask_julia),
           Any, (Any, Csize_t, Csize_t),
           task, TASK_OFFSETS[field], val)
 end
 
-function setfield_int32(task, field, val)
+function internal_setfield(task, field, val::Int32)
     ccall((:jl_setfield_int32_t, libtask_julia),
           Any, (Any, Csize_t, Int32),
           task, TASK_OFFSETS[field], val)
+end
+
+function memset(task, val, offset_field; end_field=:END)
+    haskey(TASK_OFFSETS, offset_field) && ccall(
+        (:jl_memset, libtask_julia),
+        Cvoid, (Any, Csize_t, Csize_t, Int),
+        task, TASK_OFFSETS[offset_field], TASK_OFFSETS[end_field], val)
 end
