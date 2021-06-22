@@ -2,12 +2,20 @@ const ALL_TASK_OFFSETS =
     Dict{Tuple{String, VersionNumber}, Dict{Symbol, Int}}()
 
 
+include("linux-x86-v1_3_1.jl")
+include("linux-x86-v1_4_2.jl")
+include("linux-x86-v1_5_3.jl")
+include("linux-x86-v1_5_4.jl")
+include("linux-x86-v1_6_1.jl")
+include("linux-x86-v1_8_0.jl")
+
 include("linux-x86_64-v1_3_1.jl")
 include("linux-x86_64-v1_4_2.jl")
 include("linux-x86_64-v1_5_3.jl")
 include("linux-x86_64-v1_5_4.jl")
 include("linux-x86_64-v1_6_1.jl")
 include("linux-x86_64-v1_8_0.jl")
+
 
 const PLATFORM = @static if Sys.islinux()
     "linux-" * string(Sys.ARCH)
