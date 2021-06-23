@@ -16,6 +16,11 @@ include("linux-x86_64-v1_5_4.jl")
 include("linux-x86_64-v1_6_1.jl")
 include("linux-x86_64-v1_8_0.jl")
 
+include("darwin-x86_64-v1_3_1.jl")
+include("darwin-x86_64-v1_4_2.jl")
+include("darwin-x86_64-v1_5_4.jl")
+include("darwin-x86_64-v1_6_1.jl")
+
 const ARCH = @static if string(Sys.ARCH)[1] == 'i'
     "x86"
 else
