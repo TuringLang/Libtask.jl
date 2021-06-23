@@ -16,13 +16,18 @@ include("linux-x86_64-v1_5_4.jl")
 include("linux-x86_64-v1_6_1.jl")
 include("linux-x86_64-v1_8_0.jl")
 
+const ARCH = @static if string(Sys.ARCH)[1] == 'i'
+    "x86"
+else
+    string(Sys.ARCH)
+end
 
 const PLATFORM = @static if Sys.islinux()
-    "linux-" * string(Sys.ARCH)
+    "linux-" * ARCH
 elseif Sys.iswindows()
-    "windows-" * string(Sys.ARCH)
+    "windows-" * ARCH
 elseif Sys.isapple()
-    "darwin-" * string(Sys.ARCH)
+    "darwin-" * ARCH
 end
 
 function find_offsets()
