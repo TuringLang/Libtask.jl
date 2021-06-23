@@ -1,3 +1,12 @@
+/**
+ * linux64: g++ -I $JULIA_HOME/include/julia/ memlayout.cpp -o memlayout
+ * linux32: apt-get install g++-multilib
+ *          g++ -march=pentium4 -m32 -I $JULIA_HOME/include/julia/ memlayout.cpp -o memlayout
+ * macOS:   g++ -std=c++11 -I $JULIA_APP/Contents/Resources/julia/include/julia/ memlayout.cpp -o memlayout
+ * win64:   g++ -I $JULIA_HOME/include/julia/ memlayout.cpp -o memlayout
+ * win32:   g++ -I $JULIA_HOME/include/julia/ memlayout.cpp -o memlayout
+ **/
+
 #include <string>
 #include <map>
 #include <fstream>
