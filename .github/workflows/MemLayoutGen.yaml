@@ -1,8 +1,5 @@
 name: MemLayout Info Generating
 on:
-  push:
-    branches:
-      - master
   pull_request:
 jobs:
   test:

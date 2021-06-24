@@ -13,6 +13,9 @@ elseif Sys.isapple()
 end
 
 OUTPUT = "$(PLATFORM)-v$(VERSION.major)_$(VERSION.minor)_$(VERSION.patch).jl"
+OUTPUT_DEST = joinpath("src/memlayout", OUTPUT)
+
+isfile(OUTPUT_DEST) && exit(0)
 
 const PROJECT_DIR = (@__DIR__) |> dirname |> dirname
 const INCLUDE = joinpath(dirname(Sys.BINDIR), "include/julia")
@@ -26,6 +29,4 @@ end
 run(`g++ $(OPTIONS) -I$(INCLUDE) $(PROJECT_DIR)/.github/workflows/memlayout.cpp -o memlayout`)
 run(`./memlayout`)
 
-if isfile(OUTPUT) && !isfile(joinpath("src/memlayout", OUTPUT))
-    Base.Filesystem.mv(OUTPUT, joinpath("src/memlayout", OUTPUT))
-end
+isfile(OUTPUT) && Base.Filesystem.mv(OUTPUT, OUTPUT_DEST)
