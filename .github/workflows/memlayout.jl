@@ -26,7 +26,7 @@ else
     ["-std=c++11"]
 end
 
-run(`g++ $(OPTIONS) -I$(INCLUDE) $(PROJECT_DIR)/.github/workflows/memlayout.cpp -o memlayout`)
-run(`./memlayout`)
+run(`g++ $(OPTIONS) -I$(INCLUDE) $(PROJECT_DIR)/.github/workflows/memlayout.cpp -o memlayout-gen.exe`)
+run(`./memlayout-gen.exe`)
 
 isfile(OUTPUT) && Base.Filesystem.mv(OUTPUT, OUTPUT_DEST)
