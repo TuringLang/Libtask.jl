@@ -18,16 +18,19 @@ include("linux-x86_64-v1_8_0.jl")
 
 include("darwin-x86_64-v1_3_1.jl")
 include("darwin-x86_64-v1_4_2.jl")
+include("darwin-x86_64-v1_5_3.jl")
 include("darwin-x86_64-v1_5_4.jl")
 include("darwin-x86_64-v1_6_1.jl")
 
 include("windows-x86-v1_3_1.jl")
 include("windows-x86-v1_4_2.jl")
+include("windows-x86-v1_5_3.jl")
 include("windows-x86-v1_5_4.jl")
 include("windows-x86-v1_6_1.jl")
 
 include("windows-x86_64-v1_3_1.jl")
 include("windows-x86_64-v1_4_2.jl")
+include("windows-x86_64-v1_5_3.jl")
 include("windows-x86_64-v1_5_4.jl")
 include("windows-x86_64-v1_6_1.jl")
 
