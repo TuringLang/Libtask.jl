@@ -35,7 +35,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - run: julia .github/workflows/memlayout.jl
+      - run: julia .github/workflows/tasklayout/memlayout.jl
       - uses: EndBug/add-and-commit@v7
         with:
           add: 'src/memlayout'

@@ -17,7 +17,7 @@ OUTPUT_DEST = joinpath("src/memlayout", OUTPUT)
 
 isfile(OUTPUT_DEST) && exit(0)
 
-const PROJECT_DIR = (@__DIR__) |> dirname |> dirname
+const PROJECT_DIR = (@__DIR__) |> dirname |> dirname |> dirname
 const INCLUDE = joinpath(dirname(Sys.BINDIR), "include/julia")
 const OPTIONS = if string(Sys.ARCH)[1] == 'i'
     Sys.islinux() && run(`sudo apt-get install g++-multilib -y`)
@@ -26,7 +26,7 @@ else
     ["-std=c++11"]
 end
 
-run(`g++ $(OPTIONS) -I$(INCLUDE) $(PROJECT_DIR)/.github/workflows/memlayout.cpp -o memlayout-gen.exe`)
+run(`g++ $(OPTIONS) -I$(INCLUDE) $(PROJECT_DIR)/.github/workflows/tasklayout/memlayout.cpp -o memlayout-gen.exe`)
 run(`./memlayout-gen.exe`)
 
 isfile(OUTPUT) && Base.Filesystem.mv(OUTPUT, OUTPUT_DEST)
