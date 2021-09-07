@@ -122,7 +122,7 @@ function Base.copy(ctask::CTask)
     internal_setfield(newtask, :result, nothing)
     internal_setfield(newtask, :donenotify, nothing)
     internal_setfield(newtask, :excstack, C_NULL)
-    internal_setfield(newtask, :ptls, C_NULL)
+    # internal_setfield(newtask, :ptls, C_NULL)
     internal_setfield(newtask, :gcstack, C_NULL)
 
     if haskey(TASK_OFFSETS, :stkbuf) && haskey(TASK_OFFSETS, :bufsz)

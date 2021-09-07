@@ -14,6 +14,7 @@ include("linux-x86_64-v1_4_2.jl")
 include("linux-x86_64-v1_5_3.jl")
 include("linux-x86_64-v1_5_4.jl")
 include("linux-x86_64-v1_6_1.jl")
+include("linux-x86_64-v1_7_0.jl")
 include("linux-x86_64-v1_8_0.jl")
 
 include("darwin-x86_64-v1_3_1.jl")
@@ -48,10 +49,18 @@ elseif Sys.isapple()
     "darwin-" * ARCH
 end
 
+function verle(v1::VersionNumber, v2::VersionNumber)
+    v1.major > v2.major && return false
+    v1.minor > v2.minor && return false
+    v1.patch > v2.patch && return false
+    # ignore the prerelase info
+    return true
+end
+
 function find_offsets()
     candi = [v for (p, v) in keys(ALL_TASK_OFFSETS) if p == PLATFORM]
     sort!(candi)
-    candi = [v for v in candi if v <= VERSION]
+    candi = [v for v in candi if verle(v, VERSION)]
     isempty(candi) && error("No suitable offsets")
     ALL_TASK_OFFSETS[(PLATFORM, candi[end])]
 end
