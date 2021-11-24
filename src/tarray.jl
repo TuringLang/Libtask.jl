@@ -36,7 +36,6 @@ TArray{T,N}(d::Vararg{<:Integer,N}) where {T,N} = TArray(T, d)
 TArray{T,N}(::UndefInitializer, d::Vararg{<:Integer,N}) where {T,N} = TArray{T,N}(d)
 TArray{T,N}(dim::NTuple{N,Int}) where {T,N} = TArray(T, dim)
 TArray(T::Type, dim) = TArray(Array{T}(undef, dim))
-TArray(x::AbstractArray) = convert(TArray, x)
 
 getdata(x::TArray) = x.data
 tape_copy(x::TArray) = TArray(deepcopy(x.data))
