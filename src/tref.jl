@@ -6,7 +6,7 @@
     TRef(x)
 
 Implementation of an abstract data structure that
-automatically performs copy-on-write after task copying.
+automatically performs deepcopy during task copying.
 
 Atomic (single-valued) TRef objects must be set or updated
 by indexing. For example, to access `val = TRef(1)`, you
@@ -34,51 +34,30 @@ d = TRef(Dict("A" => 1, 5 => "B"))
 d["A"] = 10
 ```
 """
-struct TRef
-    ref :: Symbol  # object_id
-    orig_task :: Task
-    TRef() = new(gensym(), current_task())
+mutable struct TRef{T}
+    val::T
 end
 
-function TRef(x)
-    res = TRef();
-    n = n_copies()
-    task_local_storage(res.ref, (n,Ref(x)))
-    return res
+Base.get(r::TRef) = r.val
+Base.show(io::IO, r::TRef) = Base.show(io::IO, get(r))
+Base.size(r::TRef) = Base.size(get(r))
+Base.ndims(r::TRef) = Base.ndims(get(r))
+tape_copy(r::TRef) = TRef(deepcopy(get(r)))
+
+function Base.getindex(r::TRef, I::Vararg{Any,N}) where {N}
+    return get(r)[I...]
 end
 
-function Base.getindex(S::TRef, I::Vararg{Any,N}) where {N}
-    _, d = task_local_storage(S.ref)
-    return d[][I...]
-end
-
-function Base.setindex!(S::TRef, x, I::Vararg{Any,N}) where {N}
-    n, d = task_local_storage(S.ref)
-    cn   = n_copies()
-    newd = d
-    if cn > n
-        # println("[setindex!]: $(S.ref) copying data")
-        newd = deepcopy(d)
-        task_local_storage(S.ref, (cn, newd))
-    end
-
-    if isa(newd[], Real)
-        newd[] = x
+function Base.setindex!(r::TRef, x, I::Vararg{Any,N}) where {N}
+    d = get(r)
+    if isa(d, Real)
+        r.val = x
     else
-        setindex!(newd[], x, I...)
+        setindex!(d, x, I...)
     end
-    return newd[]
+    return d
 end
 
-function Base.display(S::TRef)
-    display("Please use show(::TRef) instead.")
-end
-
-Base.show(io::IO, S::TRef) = Base.show(io::IO, task_local_storage(S.ref)[2][])
-Base.size(S::TRef) = Base.size(task_local_storage(S.ref)[2][])
-Base.ndims(S::TRef) = Base.ndims(task_local_storage(S.ref)[2][])
-
-Base.get(S::TRef) = (current_task().storage[S.ref][2][])
 
 # Implements eltype, firstindex, lastindex, and iterate
 # functions.

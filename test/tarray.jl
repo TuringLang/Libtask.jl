@@ -55,7 +55,7 @@
         @test_throws MethodError TArray{Int,2}(undef, 4)
 
         ta3 = TArray{Int, 4}(4, 3, 2, 1)
-        ta4 = Libtask._get_local_storage(ta3)
+        ta4 = Libtask.getdata(ta3)
         @test ta3[3] == ta4[3]
 
         ta5 = TArray{Int}(4)
@@ -116,14 +116,14 @@
 
         @test repeat(ta, 1, 2) == hcat(ta, ta)
 
-        @test ta .+ ta == Libtask._get_local_storage(ta) .+ Libtask._get_local_storage(ta)
+        @test ta .+ ta == Libtask.getdata(ta) .+ Libtask.getdata(ta)
     end
 
     @testset "task copy" begin
         function f()
             t = TArray(Int, 1)
             t[1] = 0
-            while true
+            for _ in 1:10
                 produce(t[1])
                 t[1]
                 t[1] = 1 + t[1]
@@ -139,14 +139,14 @@
         consume(a)
 
         @test consume(ctask) == 2
-        @task consume(a) == 4
+        @test consume(a) == 4
 
         DATA = Dict{Task, Array}()
         function g()
             ta = tzeros(UInt64, 4)
             for i in 1:4
-                ta[i] = hash(Libtask._current_task())
-                DATA[Libtask._current_task()] = convert(Array, ta)
+                ta[i] = hash(current_task())
+                DATA[current_task()] = convert(Array, ta)
                 produce(ta[i])
             end
         end
@@ -156,21 +156,24 @@
         @test consume(ctask) == hash(ctask.task) # index = 2
 
         a = copy(ctask)
-        @test consume(a) == hash(a.task) # index = 3
+        @test consume(a) == hash(ctask.task) # index = 3 # !!! COMPAT(produce+copy)
         @test consume(a) == hash(a.task) # index = 4
 
         @test consume(ctask) == hash(ctask.task) # index = 3
 
-        @test DATA[ctask.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), 0]
-        @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(a.task),
-                               hash(a.task)]
+        # !!! COMPAT(produce+copy)
+        # @test DATA[ctask.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), 0]
+        # @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(a.task), hash(a.task)]
+
+        @test DATA[ctask.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), hash(ctask.task)]
+        @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), hash(a.task)]
     end
 
     @testset "Issue: PR-86 (DynamicPPL.jl/pull/261)" begin
         function f()
             t = TArray(Int, 1)
             t[1] = 0
-            while true
+            for _ in 1:4000
                 produce(t[1])
                 t[1]
                 t[1] = 1 + t[1]
@@ -181,7 +184,7 @@
         ctask = CTask(f)
 
         ex = try
-            for _ in 1:10000
+            for _ in 1:999
                 consume(ctask)
                 consume(ctask)
                 a = copy(ctask)
