@@ -87,7 +87,9 @@
             catch ex
                 @test ex isa MethodError
             end
-            @test ctask.task.exception isa MethodError
+            if VERSION >= v"1.5"
+                @test ctask.task.exception isa MethodError
+            end
         end
 
         @testset "error test" begin
@@ -106,7 +108,9 @@
             catch ex
                 @test ex isa ErrorException
             end
-            @test ctask.task.exception isa ErrorException
+            if VERSION >= v"1.5"
+                @test ctask.task.exception isa ErrorException
+            end
         end
 
         @testset "OutOfBounds Test Before" begin
@@ -126,7 +130,9 @@
             catch ex
                 @test ex isa BoundsError
             end
-            @test ctask.task.exception isa BoundsError
+            if VERSION >= v"1.5"
+                @test ctask.task.exception isa BoundsError
+            end
         end
 
         @testset "OutOfBounds Test After `produce`" begin
@@ -147,7 +153,9 @@
             catch ex
                 @test ex isa BoundsError
             end
-            @test ctask.task.exception isa BoundsError
+            if VERSION >= v"1.5"
+                @test ctask.task.exception isa BoundsError
+            end
         end
 
         @testset "OutOfBounds Test After `copy`" begin
@@ -170,7 +178,9 @@
                 @test ex isa BoundsError
             end
             @test ctask.task.exception === nothing
-            @test ctask2.task.exception isa BoundsError
+            if VERSION >= v"1.5"
+                @test ctask2.task.exception isa BoundsError
+            end
         end
     end
 end
