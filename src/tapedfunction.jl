@@ -36,7 +36,7 @@ end
 result(t::Tape) = isempty(t) ? nothing : val(t[end].output)
 
 function Base.show(io::IO, box::Box)
-    println(io, "Box($(box.val)")
+    println(io, "Box($(box.val))")
 end
 
 function Base.show(io::IO, instruction::Instruction)

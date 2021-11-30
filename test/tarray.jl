@@ -156,17 +156,13 @@
         @test consume(ctask) == hash(ctask.task) # index = 2
 
         a = copy(ctask)
-        @test consume(a) == hash(ctask.task) # index = 3 # !!! COMPAT(produce+copy)
+        @test consume(a) == hash(a.task) # index = 3
         @test consume(a) == hash(a.task) # index = 4
 
         @test consume(ctask) == hash(ctask.task) # index = 3
 
-        # !!! COMPAT(produce+copy)
-        # @test DATA[ctask.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), 0]
-        # @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(a.task), hash(a.task)]
-
-        @test DATA[ctask.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), hash(ctask.task)]
-        @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), hash(a.task)]
+        @test DATA[ctask.task] == [hash(ctask.task), hash(ctask.task), hash(ctask.task), 0]
+        @test DATA[a.task] == [hash(ctask.task), hash(ctask.task), hash(a.task), hash(a.task)]
     end
 
     @testset "Issue: PR-86 (DynamicPPL.jl/pull/261)" begin

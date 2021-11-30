@@ -6,7 +6,8 @@ struct TapedTask
     task::Task
     tf::TapedFunction
     counter::Ref{Int}
-    channel::Channel{Any}
+    produce_ch::Channel{Any}
+    consume_ch::Channel{Int}
 end
 
 function TapedTask(tf::TapedFunction, args...)
@@ -14,20 +15,21 @@ function TapedTask(tf::TapedFunction, args...)
     # dry_run(tf)
     isempty(tf.tape) && tf(args...)
     counter = Ref{Int}(1)
-    ch = Channel()
+    produce_ch = Channel()
+    consume_ch = Channel{Int}()
     task = @task try
         step_in(tf, counter, args)
     catch e
-        put!(ch, TapedTaskException(e))
+        put!(produce_ch, TapedTaskException(e))
         # @error "TapedTask Error: " exception=(e, catch_backtrace())
         rethrow()
     finally
-        while !isempty(ch)
+        while !isempty(produce_ch)
             yield()
         end
-        close(ch)
+        close(produce_ch)
     end
-    t = TapedTask(task, tf, counter, ch)
+    t = TapedTask(task, tf, counter, produce_ch, consume_ch)
     tf.owner = t
     return t
 end
@@ -52,23 +54,21 @@ function (instr::Instruction{typeof(produce)})()
     tape = gettape(instr)
     tf = tape.owner
     ttask = tf.owner
-    ch = ttask.channel
-    put!(ch, args)
+    put!(ttask.produce_ch, args)
+    take!(ttask.consume_ch) # wait for next consumer
 end
 
 function consume(ttask::TapedTask)
-    schedule(ttask)
-    val = take!(ttask.channel)
+    if istaskstarted(ttask.task)
+        put!(ttask.consume_ch, 0)
+    else
+        schedule(ttask.task)
+    end
+    val = take!(ttask.produce_ch)
     yield()
     isa(val, TapedTaskException) && throw(val.exc)
     return val
 end
-
-function Base.schedule(t::TapedTask)
-    istaskstarted(t.task) && return
-    Base.schedule(t.task)
-end
-
 
 # Iteration interface.
 function Base.iterate(t::TapedTask, state=nothing)
@@ -141,6 +141,6 @@ function Base.copy(t::TapedTask)
     t.counter[] <= 1 && error("Can't copy a TapedTask which is not running.")
     tf = copy(t.tf)
     new_t = TapedTask(tf)
-    new_t.counter[] = t.counter[]
+    new_t.counter[] = t.counter[] + 1
     return new_t
 end

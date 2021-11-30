@@ -35,8 +35,7 @@
         a = copy(ctask)
         @test consume(a) == 2
         @test consume(a) == 3
-        # @test consume(ctask) == 4 # !!! COMPAT(produce+copy)
-        @test consume(ctask) == 2
+        @test consume(ctask) == 4
         @test consume(ctask) == 5
         @test consume(ctask) == 6
         @test consume(ctask) == 7
