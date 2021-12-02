@@ -28,6 +28,7 @@ function TapedTask(tf::TapedFunction, args...)
             yield()
         end
         close(produce_ch)
+        close(consume_ch)
     end
     t = TapedTask(task, tf, counter, produce_ch, consume_ch)
     tf.owner = t
@@ -60,6 +61,7 @@ end
 
 function consume(ttask::TapedTask)
     if istaskstarted(ttask.task)
+        # tell producer that a consumer is coming
         put!(ttask.consume_ch, 0)
     else
         schedule(ttask.task)
