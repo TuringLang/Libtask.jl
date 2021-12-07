@@ -35,7 +35,7 @@ function TapedTask(tf::TapedFunction, args...)
     return t
 end
 
-TapedTask(f::Function, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
+TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
 
 function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     len = length(tf.tape)
@@ -66,7 +66,13 @@ function consume(ttask::TapedTask)
     else
         schedule(ttask.task)
     end
-    val = take!(ttask.produce_ch)
+
+    val = try
+        take!(ttask.produce_ch)
+    catch e
+        # return nothing to indicate the finish of the task
+        isa(e, InvalidStateException) ?  nothing : rethrow()
+    end
     yield()
     isa(val, TapedTaskException) && throw(val.exc)
     return val
@@ -140,7 +146,7 @@ function Base.copy(tf::TapedFunction)
 end
 
 function Base.copy(t::TapedTask)
-    t.counter[] <= 1 && error("Can't copy a TapedTask which is not running.")
+    # t.counter[] <= 1 && error("Can't copy a TapedTask which is not running.")
     tf = copy(t.tf)
     new_t = TapedTask(tf)
     new_t.counter[] = t.counter[] + 1

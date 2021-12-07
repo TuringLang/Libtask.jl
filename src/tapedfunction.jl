@@ -64,7 +64,7 @@ function (instr::Instruction{F})() where F
 end
 
 function run(tape::Tape, args...)
-    input = map(x-> box(x), args)
+    input = map(box, args)
     tape[1].input = input
     for instruction in tape
         instruction()
@@ -167,7 +167,7 @@ function intercept(ir; recorder=:run_and_record!)
 end
 
 mutable struct TapedFunction
-    func::Function
+    func # ::Function # maybe a callable obejct
     arity::Int
     ir::Union{Nothing, IRTools.IR}
     tape::Tape
