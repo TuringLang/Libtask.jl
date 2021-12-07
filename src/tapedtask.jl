@@ -36,6 +36,7 @@ function TapedTask(tf::TapedFunction, args...)
 end
 
 TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
+func(t::TapedTask) = t.tf.func
 
 function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     len = length(tf.tape)
@@ -49,14 +50,18 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     end
 end
 
-function produce(val) end
-function (instr::Instruction{typeof(produce)})()
-    args = val(instr.input[1])
+function internel_produce(instr::Instruction, val)
     tape = gettape(instr)
     tf = tape.owner
     ttask = tf.owner
-    put!(ttask.produce_ch, args)
+    put!(ttask.produce_ch, val)
     take!(ttask.consume_ch) # wait for next consumer
+end
+
+function produce(val) end
+function (instr::Instruction{typeof(produce)})()
+    args = val(instr.input[1])
+    internel_produce(instr, args)
 end
 
 function consume(ttask::TapedTask)
