@@ -70,9 +70,16 @@ function consume(ttask::TapedTask)
     val = try
         take!(ttask.produce_ch)
     catch e
-        # return nothing to indicate the finish of the task
-        isa(e, InvalidStateException) ?  nothing : rethrow()
+        isa(e, InvalidStateException) || rethrow()
+        istaskfailed(ttask.task) && throw(ttask.task.exception)
+        # TODO: we return nothing to indicate the end of a task,
+        #       remove this when AdvancedPS is udpated.
+        istaskdone(ttask.task) && return nothing
     end
+
+    # yield to let the task resume, this is necessary when there's
+    # an exception is thrown in the task, it gives the task the chance
+    # to rethow the exception and set its proper status:
     yield()
     isa(val, TapedTaskException) && throw(val.exc)
     return val
