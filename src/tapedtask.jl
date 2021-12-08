@@ -31,6 +31,8 @@ function TapedTask(tf::TapedFunction, args...)
         close(consume_ch)
     end
     t = TapedTask(task, tf, counter, produce_ch, consume_ch)
+    task.storage === nothing && (task.storage = IdDict())
+    task.storage[:tapedtask] = t
     tf.owner = t
     return t
 end
@@ -50,7 +52,27 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     end
 end
 
-function internel_produce(instr::Instruction, val)
+@inline function is_in_tapedtask()
+    ct = current_task()
+    ct.storage === nothing && return false
+    haskey(ct.storage, :tapedtask) || return false
+    # check if we are recording a tape
+    ct.storage[:tapedtask].tf.tape === NULL_TAPE && return false
+    return true
+end
+
+function produce(val)
+    is_in_tapedtask() || return nothing
+    ttask = current_task().storage[:tapedtask]
+    put!(ttask.produce_ch, val)
+    take!(ttask.consume_ch) # wait for next consumer
+    return nothing
+end
+
+#=
+# Another way (the old way) to impl `produce`, which does NOT
+# support `produce` in a nested call
+function internal_produce(instr::Instruction, val)
     tape = gettape(instr)
     tf = tape.owner
     ttask = tf.owner
@@ -63,6 +85,7 @@ function (instr::Instruction{typeof(produce)})()
     args = val(instr.input[1])
     internel_produce(instr, args)
 end
+=#
 
 function consume(ttask::TapedTask)
     if istaskstarted(ttask.task)
