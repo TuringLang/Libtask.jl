@@ -52,6 +52,12 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     end
 end
 
+# A way to support `produce` in nested call. This way has its caveat:
+# `produce` may deeply hide in an instruction, but not be an instruction
+# itself, and when we copy a task, the newly copied task will resume from
+# the instruction after the one which contains this `produce` call. If the
+# call to `produce` is not the last expression in the instuction, that
+# instruction will not be whole executed in the copied task.
 @inline function is_in_tapedtask()
     ct = current_task()
     ct.storage === nothing && return false
