@@ -52,7 +52,27 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     end
 end
 
-# A way to support `produce` in nested call. This way has its caveat:
+# A way (the old way) to impl `produce`, which does NOT
+# support `produce` in a nested call
+function internal_produce(instr::Instruction, val)
+    tape = gettape(instr)
+    tf = tape.owner
+    ttask = tf.owner
+    put!(ttask.produce_ch, val)
+    take!(ttask.consume_ch) # wait for next consumer
+end
+
+function produce(val)
+    error("Libtask.produce can only be directly called in a task!")
+end
+
+function (instr::Instruction{typeof(produce)})()
+    args = val(instr.input[1])
+    internal_produce(instr, args)
+end
+
+#=
+# Another way to support `produce` in nested call. This way has its caveat:
 # `produce` may deeply hide in an instruction, but not be an instruction
 # itself, and when we copy a task, the newly copied task will resume from
 # the instruction after the one which contains this `produce` call. If the
@@ -73,23 +93,6 @@ function produce(val)
     put!(ttask.produce_ch, val)
     take!(ttask.consume_ch) # wait for next consumer
     return nothing
-end
-
-#=
-# Another way (the old way) to impl `produce`, which does NOT
-# support `produce` in a nested call
-function internal_produce(instr::Instruction, val)
-    tape = gettape(instr)
-    tf = tape.owner
-    ttask = tf.owner
-    put!(ttask.produce_ch, val)
-    take!(ttask.consume_ch) # wait for next consumer
-end
-
-function produce(val) end
-function (instr::Instruction{typeof(produce)})()
-    args = val(instr.input[1])
-    internel_produce(instr, args)
 end
 =#
 
