@@ -31,13 +31,14 @@ function TapedTask(tf::TapedFunction, args...)
         close(consume_ch)
     end
     t = TapedTask(task, tf, counter, produce_ch, consume_ch)
-    task.storage === nothing && (task.storage = IdDict())
-    task.storage[:tapedtask] = t
+    # task.storage === nothing && (task.storage = IdDict())
+    # task.storage[:tapedtask] = t
     tf.owner = t
     return t
 end
 
 TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
+TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
 function step_in(tf::TapedFunction, counter::Ref{Int}, args)
