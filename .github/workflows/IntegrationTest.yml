@@ -14,8 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - {user: TuringLang, repo: AdvancedPS.jl, ref: taped-libtask}
-          - {user: TuringLang, repo: Turing.jl, ref: master}
+          - {user: TuringLang, repo: AdvancedPS.jl}
+          - {user: TuringLang, repo: Turing.jl}
 
     steps:
       - uses: actions/checkout@v2
