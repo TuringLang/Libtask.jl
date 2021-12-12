@@ -4,7 +4,7 @@
         function f()
             t = TRef(1)
             t[] = 0
-            while true
+            for _ in 1:6
                 produce(t[])
                 t[]
                 t[] += 1
@@ -29,7 +29,7 @@
         function f()
             t = TRef(Dict("A" => 1, 5 => "B"))
             t["A"] = 0
-            while true
+            for _ in 1:6
                 produce(t["A"])
                 t["A"]
                 t["A"] += 1
