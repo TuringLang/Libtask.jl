@@ -24,8 +24,10 @@ function TapedTask(tf::TapedFunction, args...)
         # @error "TapedTask Error: " exception=(e, catch_backtrace())
         rethrow()
     finally
-        while !isempty(produce_ch)
-            yield()
+        @static if VERSION >= v"1.4"
+            while !isempty(produce_ch)
+                yield()
+            end
         end
         close(produce_ch)
         close(consume_ch)
