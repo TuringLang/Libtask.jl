@@ -25,6 +25,8 @@ function TapedTask(tf::TapedFunction, args...)
         rethrow()
     finally
         @static if VERSION >= v"1.4"
+            # we don't do this under Julia 1.3, because `isempty` always hangs on
+            # an empty channel.
             while !isempty(produce_ch)
                 yield()
             end

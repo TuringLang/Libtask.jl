@@ -2,7 +2,7 @@
 
 [![Libtask Testing](https://github.com/TuringLang/Libtask.jl/workflows/Libtask%20Testing/badge.svg)](https://github.com/TuringLang/Libtask.jl/actions?branch=master)
 
-C shim for [task copying](https://github.com/JuliaLang/julia/issues/4085) in Turing
+Tape based task copying in Turing
 
 ## Getting Started
 
@@ -13,7 +13,7 @@ using Libtask
 
 function f()
   t = 0
-  while true
+  for _ in 1:10
     produce(t)
     t = 1 + t
   end
@@ -39,7 +39,7 @@ using Libtask
 
 function f()
   t = [0 1 2]
-  while true
+  for _ in 1:10
     produce(t[1])
     t[1] = 1 + t[1]
   end
@@ -58,9 +58,9 @@ a = copy(t)
 @show consume(ctask) # 5
 ```
 
-`TArray` implements a copy-on-write array. This is useful for task copying.
-In constrast to standard arrays, which are only shallow copied during task copying,
-`TArray` are deep copied after task copying:
+In constrast to standard arrays, which are only shallow copied during
+task copying, `TArray`, an array data structure provided by Libtask,
+is deep copied during the copying process of a task:
 
 ```julia
 using Libtask
@@ -68,7 +68,7 @@ using Libtask
 function f()
   t = TArray(Int, 1)
   t[1] = 0
-  while true
+  for _ in 1:10
     produce(t[1])
     t[1] = 1 + t[1]
   end
@@ -87,20 +87,18 @@ a = copy(ctask)
 @show consume(ctask) # 3
 ```
 
-Note: The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming language uses this task copying feature in an efficient implementation of the [particle filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling algorithm for arbitary order [Markov processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
+Note: The [Turing](https://github.com/TuringLang/Turing.jl)
+probabilistic programming language uses this task copying feature in
+an efficient implementation of the [particle
+filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling
+algorithm for arbitary order [Markov
+processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
 
 ## Disclaimer
 
-This feature is still experimental and should only be used with caution. Some discussions on its potential caveats can be found [here](https://github.com/JuliaLang/julia/pull/15078).
-
-## Julia nightly
-
-Libtask uses the `libtask_julia` library which is pre-built for Julia versions 1.3, 1.4, and 1.5 and
-distributed via the [Libtask_jll](https://github.com/JuliaBinaryWrappers/Libtask_jll.jl/) package.
-
-Julia nightly might not be compatible with the latest version of the `libtask_julia` library and is
-not officially supported. If you want to use Julia nightly, you have to add the Libtask_jll package
-manually:
-```julia
-julia> ] add https://github.com/JuliaBinaryWrappers/Libtask_jll.jl.git
-```
+- This feature is still experimental and should only be used with caution:
+  - Dynamic control flow is not supported yet.
+- From v0.6.0, Libtask is implemented by recording all the computing
+  to a tape and copying that tape. Before that version, it is based on
+  a tricky hack on the Julia internals. You can check the commit
+  history of this repo to see the details.
