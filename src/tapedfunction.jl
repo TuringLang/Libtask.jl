@@ -13,6 +13,11 @@ mutable struct Instruction{F} <: AbstractInstruction
     tape::Tape
 end
 
+mutable struct TapeInstruction <: AbstractInstruction
+    subtape::Tape
+    tape::Tape
+end
+
 Tape() = Tape(Vector{AbstractInstruction}(), 1, nothing)
 Tape(owner) = Tape(Vector{AbstractInstruction}(), 1, owner)
 MacroTools.@forward Tape.tape Base.iterate, Base.length
@@ -21,6 +26,9 @@ const NULL_TAPE = Tape()
 
 function setowner!(tape::Tape, owner)
     tape.owner = owner
+    for ins in tape
+        isa(ins, TapeInstruction) && setowner!(ins.subtape, owner)
+    end
     return tape
 end
 
@@ -52,6 +60,12 @@ function Base.show(io::IO, instruction::Instruction)
     println(io, "Instruction($(fun)$(map(val, instruction.input)), tape=$(objectid(tape)))")
 end
 
+function Base.show(io::IO, ti::TapeInstruction)
+    subtape = ti.subtape
+    tape = ti.tape
+    println(io, "TapeInstruction($(subtape)), tape=$(objectid(tape)))")
+end
+
 function Base.show(io::IO, tp::Tape)
     buf = IOBuffer()
     print(buf, "$(length(tp))-element Tape")
@@ -70,10 +84,19 @@ function (instr::Instruction{F})() where F
     instr.output.val = output
 end
 
+function (instr::TapeInstruction)()
+    run(instr.subtape)
+end
+
 function increase_counter!(t::Tape)
     t.counter > length(t) && return
-    # instr = t[t.counter]
-    t.counter += 1
+    instr = t[t.counter]
+    if isa(instr, TapeInstruction)
+        increase_counter!(instr.subtape)
+    else
+        # must be a produce instruction?
+        t.counter += 1
+    end
     return t
 end
 
@@ -84,21 +107,62 @@ function run(tape::Tape, args...)
     end
     for instruction in tape
         instruction()
-        increase_counter!(tape)
+        tape.counter += 1
     end
 end
 
+# if we should trace into a function
+# TODO:
+#     overload (instr::Instruction{F})() to specify
+#     which function to trace into
+function trace_into end
+trace_into(x) = false
+
 function run_and_record!(tape::Tape, f, args...)
     f = val(f) # f maybe a Boxed closure
-    output = try
-        box(f(map(val, args)...))
-    catch e
-        @warn e
-        Box{Any}(nothing)
+    should_trace = trace_into(f)
+    if !should_trace
+        output = try
+            box(f(map(val, args)...))
+        catch e
+            @warn e
+            Box{Any}(nothing)
+        end
+        ins = Instruction(f, args, output, tape)
+        push!(tape, ins)
+        return output
+    else
+        real_args = map(val, args)
+        ir = IRTools.@code_ir f(real_args...)
+        ir = intercept(ir; recorder=:run_and_record!)
+        # 1. we should distinguish fixed args and varargs here
+        arg_len = ir |> IRTools.arguments |> length
+        arg_len -= 2 # 1 for f, 1 for vargs
+        p_args = real_args[1:arg_len]
+        v_args = arg_len < 1 ? real_args : real_args[arg_len+1:end]
+        # detect if there is an vararg for f
+        if length(v_args) == 1
+            m = which(f, typeof(real_args))
+            no_vararg = @static if VERSION >= v"1.7"
+                (m.sig <: Tuple) && hasproperty(m.sig, :types) &&
+                    !isa(m.sig.types[end], Core.TypeofVararg)
+            else
+                (m.sig <: Tuple) && hasproperty(m.sig, :types) &&
+                    !(m.sig.types[end] <: Vararg{Any})
+            end
+            if no_vararg
+                v_args = v_args[1]
+            end
+        end
+        subtape = IRTools.evalir(ir, f, p_args..., v_args)
+        # 2. we should recover the args after getting the tape
+        #    to keep the chain complete
+        subtape[1].input = args
+        ins = TapeInstruction(subtape, tape)
+        output = subtape[end].output
+        push!(tape, ins)
+        return output
     end
-    ins = Instruction(f, args, output, tape)
-    push!(tape, ins)
-    return output
 end
 
 function unbox_condition(ir)

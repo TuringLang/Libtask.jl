@@ -52,7 +52,6 @@ TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
-
 function step_in(t::Tape, args)
     len = length(t)
     if(t.counter <= 1 && length(args) > 0)
@@ -60,7 +59,12 @@ function step_in(t::Tape, args)
         t[1].input = input
     end
     while t.counter <= len
-        t[t.counter]()
+        ins = t[t.counter]
+        if isa(ins, TapeInstruction)
+            step_in(ins.subtape, ())
+        else
+            ins()
+        end
         # produce and wait after an instruction is done
         ttask = t.owner.owner
         if length(ttask.produced_val) > 0
@@ -68,9 +72,10 @@ function step_in(t::Tape, args)
             put!(ttask.produce_ch, val)
             take!(ttask.consume_ch) # wait for next consumer
         end
-        increase_counter!(t)
+        t.counter += 1
     end
 end
+
 
 function next_step!(t::TapedTask)
     increase_counter!(t.tf.tape)
@@ -99,7 +104,6 @@ function (instr::Instruction{typeof(produce)})()
 end
 =#
 
-
 # ** Approach (B) to implement `produce`:
 # This way has its caveat:
 # `produce` may deeply hide in an instruction, but not be an instruction
@@ -107,6 +111,8 @@ end
 # the instruction after the one which contains this `produce` call. If the
 # call to `produce` is not the last expression in the instuction, that
 # instruction will not be whole executed in the copied task.
+# With the abilty to trace into nested function call, we can minimize the
+# limitation of this caveat.
 @inline function is_in_tapedtask()
     ct = current_task()
     ct.storage === nothing && return false
@@ -119,6 +125,8 @@ end
 function produce(val)
     is_in_tapedtask() || return nothing
     ttask = current_task().storage[:tapedtask]
+    # put!(ttask.produce_ch, val)
+    # take!(ttask.consume_ch) # wait for next consumer
     length(ttask.produced_val) > 1 &&
         error("There is a produced value which is not consumed.")
     push!(ttask.produced_val, val)
@@ -199,6 +207,11 @@ function Base.copy(x::Instruction, on_tape::Tape, roster::Dict{UInt64, Any})
     Instruction(x.fun, input, output, on_tape)
 end
 
+function Base.copy(x::TapeInstruction, on_tape::Tape, roster::Dict{UInt64, Any})
+    subtape = copy(x.subtape, roster)
+    TapeInstruction(subtape, on_tape)
+end
+
 function Base.copy(t::Tape, roster::Dict{UInt64, Any})
     old_data = t.tape
     new_data = Vector{AbstractInstruction}()
@@ -223,7 +236,6 @@ function Base.copy(tf::TapedFunction)
 end
 
 function Base.copy(t::TapedTask)
-    # t.counter[] <= 1 && error("Can't copy a TapedTask which is not running.")
     tf = copy(t.tf)
     new_t = TapedTask(tf)
     new_t.task.storage = copy(t.task.storage)
