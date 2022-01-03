@@ -53,20 +53,20 @@ func(t::TapedTask) = t.tf.func
 
 function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     len = length(tf.tape)
-    if(counter[] <= 1)
+    if(counter[] <= 1 && length(args) > 0)
         input = map(box, args)
         tf.tape[1].input = input
     end
     while counter[] <= len
         tf.tape[counter[]]()
+        # produce and wait after an instruction is done
+        ttask = t.owner.owner
+        if length(ttask.produced_val) > 0
+            val = pop!(ttask.produced_val)
+            put!(ttask.produce_ch, val)
+            take!(ttask.consume_ch) # wait for next consumer
+        end
         counter[] += 1
-    end
-    # produce and wait after an instruction is done
-    ttask = t.owner.owner
-    if length(ttask.produced_val) > 0
-        val = pop!(ttask.produced_val)
-        put!(ttask.produce_ch, val)
-        take!(ttask.consume_ch) # wait for next consumer
     end
 end
 
