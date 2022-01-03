@@ -47,7 +47,9 @@ function TapedTask(tf::TapedFunction, args...)
     return t
 end
 
-TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...) # Issue: evaluating model without a trace
+# Issue: evaluating model without a trace, see 
+# https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
+TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...) 
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
