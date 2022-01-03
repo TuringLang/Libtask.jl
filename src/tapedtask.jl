@@ -108,7 +108,6 @@ end
 end
 
 function produce(val)
-    ## error("Libtask.produce can only be directly called in a task!")
     # put!(ttask.produce_ch, val)
     # take!(ttask.consume_ch) # wait for next consumer
     is_in_tapedtask() || return nothing
