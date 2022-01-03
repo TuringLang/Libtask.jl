@@ -8,6 +8,12 @@ struct TapedTask
     counter::Ref{Int}
     produce_ch::Channel{Any}
     consume_ch::Channel{Int}
+    produced_val::Vector{Any}
+
+    function TapedTask(
+        t::Task, tf::TapedFunction, counter, pch::Channel{Any}, cch::Channel{Int})
+        new(t, tf, counter, pch, cch, Any[])
+    end
 end
 
 function TapedTask(tf::TapedFunction, args...)
@@ -55,6 +61,13 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
         tf.tape[counter[]]()
         counter[] += 1
     end
+    # produce and wait after an instruction is done
+    ttask = t.owner.owner
+    if length(ttask.produced_val) > 0
+        val = pop!(ttask.produced_val)
+        put!(ttask.produce_ch, val)
+        take!(ttask.consume_ch) # wait for next consumer
+    end
 end
 
 # A way (the old way) to impl `produce`, which does NOT
@@ -68,7 +81,12 @@ function internal_produce(instr::Instruction, val)
 end
 
 function produce(val)
-    error("Libtask.produce can only be directly called in a task!")
+    ## error("Libtask.produce can only be directly called in a task!")
+    # put!(ttask.produce_ch, val)
+    # take!(ttask.consume_ch) # wait for next consumer
+    length(ttask.produced_val) > 1 &&
+        error("There is a produced value which is not consumed.")
+    push!(ttask.produced_val, val)
 end
 
 function (instr::Instruction{typeof(produce)})()
