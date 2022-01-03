@@ -108,7 +108,6 @@ end
 end
 
 function produce(val)
-    # take!(ttask.consume_ch) # wait for next consumer
     is_in_tapedtask() || return nothing
     ttask = current_task().storage[:tapedtask]
     length(ttask.produced_val) > 1 &&
