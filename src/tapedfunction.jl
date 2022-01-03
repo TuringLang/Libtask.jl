@@ -94,11 +94,14 @@ end
 function unbox_condition(ir)
     for blk in IRTools.blocks(ir)
         vars = keys(blk)
-        for br in IRTools.branches(blk)
+        brs = IRTools.branches(blk)
+        for (i, br) in enumerate(brs)
             IRTools.isconditional(br) || continue
             cond = br.condition
-            prev_cond = IRTools.insert!(ir, cond, ir[cond])
-            ir[cond] =  IRTools.xcall(@__MODULE__, :val, prev_cond)
+            new_cond = IRTools.push!(
+                blk,
+                IRTools.xcall(@__MODULE__, :val, cond))
+            brs[i] = IRTools.Branch(br; condition=new_cond)
         end
     end
 end
