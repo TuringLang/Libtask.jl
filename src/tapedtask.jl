@@ -41,13 +41,13 @@ function TapedTask(tf::TapedFunction, args...)
         close(consume_ch)
     end
     t = TapedTask(task, tf, counter, produce_ch, consume_ch)
-    # task.storage === nothing && (task.storage = IdDict())
-    # task.storage[:tapedtask] = t
+    task.storage === nothing && (task.storage = IdDict())
+    task.storage[:tapedtask] = t
     tf.owner = t
     return t
 end
 
-TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
+TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...) # Issue: evaluating model without a trace
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
@@ -60,7 +60,7 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     while counter[] <= len
         tf.tape[counter[]]()
         # produce and wait after an instruction is done
-        ttask = t.owner.owner
+        ttask = tf.owner
         if length(ttask.produced_val) > 0
             val = pop!(ttask.produced_val)
             put!(ttask.produce_ch, val)
@@ -81,12 +81,7 @@ function internal_produce(instr::Instruction, val)
 end
 
 function produce(val)
-    ## error("Libtask.produce can only be directly called in a task!")
-    # put!(ttask.produce_ch, val)
-    # take!(ttask.consume_ch) # wait for next consumer
-    length(ttask.produced_val) > 1 &&
-        error("There is a produced value which is not consumed.")
-    push!(ttask.produced_val, val)
+    error("Libtask.produce can only be directly called in a task!")
 end
 
 function (instr::Instruction{typeof(produce)})()
@@ -94,7 +89,7 @@ function (instr::Instruction{typeof(produce)})()
     internal_produce(instr, args)
 end
 
-#=
+
 # Another way to support `produce` in nested call. This way has its caveat:
 # `produce` may deeply hide in an instruction, but not be an instruction
 # itself, and when we copy a task, the newly copied task will resume from
@@ -111,13 +106,15 @@ end
 end
 
 function produce(val)
+    ## error("Libtask.produce can only be directly called in a task!")
+    # put!(ttask.produce_ch, val)
+    # take!(ttask.consume_ch) # wait for next consumer
     is_in_tapedtask() || return nothing
     ttask = current_task().storage[:tapedtask]
-    put!(ttask.produce_ch, val)
-    take!(ttask.consume_ch) # wait for next consumer
-    return nothing
+    length(ttask.produced_val) > 1 &&
+        error("There is a produced value which is not consumed.")
+    push!(ttask.produced_val, val)
 end
-=#
 
 function consume(ttask::TapedTask)
     if istaskstarted(ttask.task)

@@ -42,7 +42,7 @@ end
 function Base.show(io::IO, instruction::Instruction)
     fun = instruction.fun
     tape = instruction.tape
-    println(io, "Instruction($(fun)), tape=$(objectid(tape)))")
+    println(io, "Instruction($(fun)$(map(val, instruction.input)), tape=$(objectid(tape)))")
 end
 
 function Base.show(io::IO, tp::Tape)
@@ -75,7 +75,8 @@ function run_and_record!(tape::Tape, f, args...)
     f = val(f) # f maybe a Boxed closure
     output = try
         box(f(map(val, args)...))
-    catch
+    catch e
+        @warn e
         any_box(nothing)
     end
     ins = Instruction(f, args, output, tape)
