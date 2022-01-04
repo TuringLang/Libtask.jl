@@ -47,9 +47,9 @@ function TapedTask(tf::TapedFunction, args...)
     return t
 end
 
-# Issue: evaluating model without a trace, see 
+# Issue: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
-TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...) 
+TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
@@ -72,7 +72,9 @@ function step_in(tf::TapedFunction, counter::Ref{Int}, args)
     end
 end
 
-# A way (the old way) to impl `produce`, which does NOT
+#=
+# ** Approach (A) to implement `produce`:
+# Make`produce` a standalone instturction. This approach does NOT
 # support `produce` in a nested call
 function internal_produce(instr::Instruction, val)
     tape = gettape(instr)
@@ -90,9 +92,11 @@ function (instr::Instruction{typeof(produce)})()
     args = val(instr.input[1])
     internal_produce(instr, args)
 end
+=#
 
 
-# Another way to support `produce` in nested call. This way has its caveat:
+# ** Approach (B) to implement `produce`:
+# This way has its caveat:
 # `produce` may deeply hide in an instruction, but not be an instruction
 # itself, and when we copy a task, the newly copied task will resume from
 # the instruction after the one which contains this `produce` call. If the
