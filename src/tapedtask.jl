@@ -72,12 +72,6 @@ function step_in(t::Tape, args)
     end
 end
 
-function increase_counter(t::Tape)
-    t.counter > length(t) && return
-    # instr = t[t.counter]
-    # current instrunction must be a produce instruction?
-    t.counter += 1
-end
 next_step(t::TapedTask) = increase_counter(t.tf.tape)
 
 #=

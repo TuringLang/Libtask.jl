@@ -69,6 +69,12 @@ function (instr::Instruction{F})() where F
     instr.output.val = output
 end
 
+function increase_counter(t::Tape)
+    t.counter > length(t) && return
+    # instr = t[t.counter]
+    t.counter += 1
+end
+
 function run(tape::Tape, args...)
     if length(args) > 0
         input = map(box, args)
@@ -76,7 +82,7 @@ function run(tape::Tape, args...)
     end
     for instruction in tape
         instruction()
-        tape.counter += 1
+        increase_counter(tape)
     end
 end
 
