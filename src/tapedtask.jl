@@ -18,7 +18,6 @@ end
 
 function TapedTask(tf::TapedFunction, args...)
     tf.owner != nothing && error("TapedFunction is owned to another task.")
-    # dry_run(tf)
     isempty(tf.tape) && tf(args...)
     produce_ch = Channel()
     consume_ch = Channel{Int}()
@@ -69,7 +68,7 @@ function step_in(t::Tape, args)
             put!(ttask.produce_ch, val)
             take!(ttask.consume_ch) # wait for next consumer
         end
-        t.counter += 1
+        increase_counter(t)
     end
 end
 

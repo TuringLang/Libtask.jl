@@ -1,7 +1,7 @@
 abstract type AbstractInstruction end
 
 mutable struct Tape
-    tape::Vector{AbstractInstruction}
+    tape::Vector{<:AbstractInstruction}
     counter::Int
     owner
 end
@@ -31,8 +31,6 @@ val(x) = x
 val(x::Box) = x.val
 box(x) = Box(x)
 box(x::Box) = x
-any_box(x) = Box{Any}(x)
-any_box(x::Box) = Box{Any}(x.val)
 
 gettape(x) = nothing
 gettape(x::Instruction) = x.tape
@@ -88,16 +86,8 @@ function run_and_record!(tape::Tape, f, args...)
         box(f(map(val, args)...))
     catch e
         @warn e
-        any_box(nothing)
+        Box{Any}(nothing)
     end
-    ins = Instruction(f, args, output, tape)
-    push!(tape, ins)
-    return output
-end
-
-function dry_record!(tape::Tape, f, args...)
-    # We don't know the type of box.val now, so we use Box{Any}
-    output = any_box(nothing)
     ins = Instruction(f, args, output, tape)
     push!(tape, ins)
     return output
@@ -205,19 +195,6 @@ function (tf::TapedFunction)(args...)
     # TODO: use cache
     run(tf.tape, args...)
     return result(tf.tape)
-end
-
-function dry_run(tf::TapedFunction)
-    isempty(tf.tape) || (return tf)
-    @assert tf.arity >= 0 "TapedFunction need a fixed arity to dry run."
-    args = fill(nothing, tf.arity)
-    ir = IRTools.@code_ir tf.func(args...)
-    ir = intercept(ir; recorder=:dry_record!)
-    tape = IRTools.evalir(ir, tf.func, args...)
-    tf.ir = ir
-    tf.tape = tape
-    tape.owner = tf
-    return tf
 end
 
 function Base.show(io::IO, tf::TapedFunction)
