@@ -1,5 +1,5 @@
 struct TapedTaskException
-    exc
+    exc::Exception
     backtrace
 end
 
@@ -68,11 +68,14 @@ function step_in(t::Tape, args)
             put!(ttask.produce_ch, val)
             take!(ttask.consume_ch) # wait for next consumer
         end
-        increase_counter(t)
+        increase_counter!(t)
     end
 end
 
-next_step(t::TapedTask) = increase_counter(t.tf.tape)
+function next_step!(t::TapedTask)
+    increase_counter!(t.tf.tape)
+    return t
+end
 
 #=
 # ** Approach (A) to implement `produce`:
@@ -225,6 +228,6 @@ function Base.copy(t::TapedTask)
     new_t = TapedTask(tf)
     new_t.task.storage = copy(t.task.storage)
     new_t.task.storage[:tapedtask] = new_t
-    next_step(new_t)
+    next_step!(new_t)
     return new_t
 end

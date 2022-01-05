@@ -21,6 +21,7 @@ const NULL_TAPE = Tape()
 
 function setowner!(tape::Tape, owner)
     tape.owner = owner
+    return tape
 end
 
 mutable struct Box{T}
@@ -69,10 +70,11 @@ function (instr::Instruction{F})() where F
     instr.output.val = output
 end
 
-function increase_counter(t::Tape)
+function increase_counter!(t::Tape)
     t.counter > length(t) && return
     # instr = t[t.counter]
     t.counter += 1
+    return t
 end
 
 function run(tape::Tape, args...)
@@ -82,7 +84,7 @@ function run(tape::Tape, args...)
     end
     for instruction in tape
         instruction()
-        increase_counter(tape)
+        increase_counter!(tape)
     end
 end
 
