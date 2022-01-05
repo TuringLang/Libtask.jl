@@ -1,18 +1,18 @@
 struct TapedTaskException
     exc
+    backtrace
 end
 
 struct TapedTask
     task::Task
     tf::TapedFunction
-    counter::Ref{Int}
     produce_ch::Channel{Any}
     consume_ch::Channel{Int}
     produced_val::Vector{Any}
 
     function TapedTask(
-        t::Task, tf::TapedFunction, counter, pch::Channel{Any}, cch::Channel{Int})
-        new(t, tf, counter, pch, cch, Any[])
+        t::Task, tf::TapedFunction, pch::Channel{Any}, cch::Channel{Int})
+        new(t, tf, pch, cch, Any[])
     end
 end
 
@@ -20,14 +20,14 @@ function TapedTask(tf::TapedFunction, args...)
     tf.owner != nothing && error("TapedFunction is owned to another task.")
     # dry_run(tf)
     isempty(tf.tape) && tf(args...)
-    counter = Ref{Int}(1)
     produce_ch = Channel()
     consume_ch = Channel{Int}()
     task = @task try
-        step_in(tf, counter, args)
+        step_in(tf.tape, args)
     catch e
-        put!(produce_ch, TapedTaskException(e))
-        # @error "TapedTask Error: " exception=(e, catch_backtrace())
+        bt = catch_backtrace()
+        put!(produce_ch, TapedTaskException(e, bt))
+        # @error "TapedTask Error: " exception=(e, bt)
         rethrow()
     finally
         @static if VERSION >= v"1.4"
@@ -40,7 +40,7 @@ function TapedTask(tf::TapedFunction, args...)
         close(produce_ch)
         close(consume_ch)
     end
-    t = TapedTask(task, tf, counter, produce_ch, consume_ch)
+    t = TapedTask(task, tf, produce_ch, consume_ch)
     task.storage === nothing && (task.storage = IdDict())
     task.storage[:tapedtask] = t
     tf.owner = t
@@ -53,24 +53,33 @@ TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
-function step_in(tf::TapedFunction, counter::Ref{Int}, args)
-    len = length(tf.tape)
-    if(counter[] <= 1 && length(args) > 0)
+
+function step_in(t::Tape, args)
+    len = length(t)
+    if(t.counter <= 1 && length(args) > 0)
         input = map(box, args)
-        tf.tape[1].input = input
+        t[1].input = input
     end
-    while counter[] <= len
-        tf.tape[counter[]]()
+    while t.counter <= len
+        t[t.counter]()
         # produce and wait after an instruction is done
-        ttask = tf.owner
+        ttask = t.owner.owner
         if length(ttask.produced_val) > 0
             val = pop!(ttask.produced_val)
             put!(ttask.produce_ch, val)
             take!(ttask.consume_ch) # wait for next consumer
         end
-        counter[] += 1
+        t.counter += 1
     end
 end
+
+function increase_counter(t::Tape)
+    t.counter > length(t) && return
+    # instr = t[t.counter]
+    # current instrunction must be a produce instruction?
+    t.counter += 1
+end
+next_step(t::TapedTask) = increase_counter(t.tf.tape)
 
 #=
 # ** Approach (A) to implement `produce`:
@@ -186,18 +195,21 @@ function copy_box(old_box::Box{T}, roster::Dict{UInt64, Any}) where T
 end
 copy_box(o, roster::Dict{UInt64, Any}) = o
 
-function Base.copy(t::Tape)
-    old_data = t.tape
-    new_data = Vector{Instruction}()
-    new_tape = Tape(new_data, t.owner)
+function Base.copy(x::Instruction, on_tape::Tape, roster::Dict{UInt64, Any})
+    input = map(x.input) do ob
+        copy_box(ob, roster)
+    end
+    output = copy_box(x.output, roster)
+    Instruction(x.fun, input, output, on_tape)
+end
 
-    roster = Dict{UInt64, Any}()
+function Base.copy(t::Tape, roster::Dict{UInt64, Any})
+    old_data = t.tape
+    new_data = Vector{AbstractInstruction}()
+    new_tape = Tape(new_data, t.counter, t.owner)
+
     for x in old_data
-        input = map(x.input) do ob
-            copy_box(ob, roster)
-        end
-        output = copy_box(x.output, roster)
-        new_ins = Instruction(x.fun, input, output, new_tape)
+        new_ins = copy(x, new_tape, roster)
         push!(new_data, new_ins)
     end
 
@@ -207,8 +219,9 @@ end
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf.func; arity=tf.arity)
     new_tf.ir = tf.ir
-    new_tape = copy(tf.tape)
-    new_tape.owner = new_tf
+    roster = Dict{UInt64, Any}()
+    new_tape = copy(tf.tape, roster)
+    setowner!(new_tape, new_tf)
     new_tf.tape = new_tape
     return new_tf
 end
@@ -217,6 +230,8 @@ function Base.copy(t::TapedTask)
     # t.counter[] <= 1 && error("Can't copy a TapedTask which is not running.")
     tf = copy(t.tf)
     new_t = TapedTask(tf)
-    new_t.counter[] = t.counter[] + 1
+    new_t.task.storage = copy(t.task.storage)
+    new_t.task.storage[:tapedtask] = new_t
+    next_step(new_t)
     return new_t
 end

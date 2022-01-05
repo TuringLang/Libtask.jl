@@ -1,21 +1,27 @@
-mutable struct Instruction{F}
-    fun::F
-    input::Tuple
-    output
-    tape
-end
-
+abstract type AbstractInstruction end
 
 mutable struct Tape
-    tape::Vector{Instruction}
+    tape::Vector{AbstractInstruction}
+    counter::Int
     owner
 end
 
-Tape() = Tape(Vector{Instruction}(), nothing)
-Tape(owner) = Tape(Vector{Instruction}(), owner)
+mutable struct Instruction{F} <: AbstractInstruction
+    fun::F
+    input::Tuple
+    output
+    tape::Tape
+end
+
+Tape() = Tape(Vector{AbstractInstruction}(), 1, nothing)
+Tape(owner) = Tape(Vector{AbstractInstruction}(), 1, owner)
 MacroTools.@forward Tape.tape Base.iterate, Base.length
 MacroTools.@forward Tape.tape Base.push!, Base.getindex, Base.lastindex
 const NULL_TAPE = Tape()
+
+function setowner!(tape::Tape, owner)
+    tape.owner = owner
+end
 
 mutable struct Box{T}
     val::T
@@ -24,7 +30,9 @@ end
 val(x) = x
 val(x::Box) = x.val
 box(x) = Box(x)
+box(x::Box) = x
 any_box(x) = Box{Any}(x)
+any_box(x::Box) = Box{Any}(x.val)
 
 gettape(x) = nothing
 gettape(x::Instruction) = x.tape
@@ -64,10 +72,13 @@ function (instr::Instruction{F})() where F
 end
 
 function run(tape::Tape, args...)
-    input = map(box, args)
-    tape[1].input = input
+    if length(args) > 0
+        input = map(box, args)
+        tape[1].input = input
+    end
     for instruction in tape
         instruction()
+        tape.counter += 1
     end
 end
 
@@ -188,7 +199,7 @@ function (tf::TapedFunction)(args...)
         tape = IRTools.evalir(ir, tf.func, args...)
         tf.ir = ir
         tf.tape = tape
-        tape.owner = tf
+        setowner!(tape, tf)
         return result(tape)
     end
     # TODO: use cache
