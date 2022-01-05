@@ -117,6 +117,7 @@ function produce(val)
     length(ttask.produced_val) > 1 &&
         error("There is a produced value which is not consumed.")
     push!(ttask.produced_val, val)
+    return nothing
 end
 
 function consume(ttask::TapedTask)
