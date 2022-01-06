@@ -1,21 +1,28 @@
-mutable struct Instruction{F}
-    fun::F
-    input::Tuple
-    output
-    tape
-end
-
+abstract type AbstractInstruction end
 
 mutable struct Tape
-    tape::Vector{Instruction}
+    tape::Vector{<:AbstractInstruction}
+    counter::Int
     owner
 end
 
-Tape() = Tape(Vector{Instruction}(), nothing)
-Tape(owner) = Tape(Vector{Instruction}(), owner)
+mutable struct Instruction{F} <: AbstractInstruction
+    fun::F
+    input::Tuple
+    output
+    tape::Tape
+end
+
+Tape() = Tape(Vector{AbstractInstruction}(), 1, nothing)
+Tape(owner) = Tape(Vector{AbstractInstruction}(), 1, owner)
 MacroTools.@forward Tape.tape Base.iterate, Base.length
 MacroTools.@forward Tape.tape Base.push!, Base.getindex, Base.lastindex
 const NULL_TAPE = Tape()
+
+function setowner!(tape::Tape, owner)
+    tape.owner = owner
+    return tape
+end
 
 mutable struct Box{T}
     val::T
@@ -24,7 +31,7 @@ end
 val(x) = x
 val(x::Box) = x.val
 box(x) = Box(x)
-any_box(x) = Box{Any}(x)
+box(x::Box) = x
 
 gettape(x) = nothing
 gettape(x::Instruction) = x.tape
@@ -63,11 +70,21 @@ function (instr::Instruction{F})() where F
     instr.output.val = output
 end
 
+function increase_counter!(t::Tape)
+    t.counter > length(t) && return
+    # instr = t[t.counter]
+    t.counter += 1
+    return t
+end
+
 function run(tape::Tape, args...)
-    input = map(box, args)
-    tape[1].input = input
+    if length(args) > 0
+        input = map(box, args)
+        tape[1].input = input
+    end
     for instruction in tape
         instruction()
+        increase_counter!(tape)
     end
 end
 
@@ -77,16 +94,8 @@ function run_and_record!(tape::Tape, f, args...)
         box(f(map(val, args)...))
     catch e
         @warn e
-        any_box(nothing)
+        Box{Any}(nothing)
     end
-    ins = Instruction(f, args, output, tape)
-    push!(tape, ins)
-    return output
-end
-
-function dry_record!(tape::Tape, f, args...)
-    # We don't know the type of box.val now, so we use Box{Any}
-    output = any_box(nothing)
     ins = Instruction(f, args, output, tape)
     push!(tape, ins)
     return output
@@ -188,25 +197,12 @@ function (tf::TapedFunction)(args...)
         tape = IRTools.evalir(ir, tf.func, args...)
         tf.ir = ir
         tf.tape = tape
-        tape.owner = tf
+        setowner!(tape, tf)
         return result(tape)
     end
     # TODO: use cache
     run(tf.tape, args...)
     return result(tf.tape)
-end
-
-function dry_run(tf::TapedFunction)
-    isempty(tf.tape) || (return tf)
-    @assert tf.arity >= 0 "TapedFunction need a fixed arity to dry run."
-    args = fill(nothing, tf.arity)
-    ir = IRTools.@code_ir tf.func(args...)
-    ir = intercept(ir; recorder=:dry_record!)
-    tape = IRTools.evalir(ir, tf.func, args...)
-    tf.ir = ir
-    tf.tape = tape
-    tape.owner = tf
-    return tf
 end
 
 function Base.show(io::IO, tf::TapedFunction)
