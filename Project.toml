@@ -7,6 +7,7 @@ version = "0.6.2"
 
 [deps]
 AdvancedPS = "576499cb-2369-40b2-a588-c64705576edc"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DynamicPPL = "366bfd00-2699-11ea-058f-f148b4cae6d8"
 IRTools = "7869d1d1-7146-5819-86e3-90919afe41df"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
