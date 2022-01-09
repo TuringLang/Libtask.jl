@@ -91,7 +91,7 @@ end
 function run_and_record!(tape::Tape, f, args...)
     f = val(f) # f maybe a Boxed closure
     output = try
-        box(f(map(val, args)...))
+        Box{Any}(f(map(val, args)...))
     catch e
         @warn e
         Box{Any}(nothing)
@@ -188,6 +188,13 @@ mutable struct TapedFunction
     function TapedFunction(f; arity::Int=-1)
         new(f, arity, nothing, NULL_TAPE, nothing)
     end
+end
+
+function reset!(tf::TapedFunction, ir::IRTools.IR, tape::Tape)
+    tf.ir = ir
+    tf.tape = tape
+    setowner!(tape, tf)
+    return tf
 end
 
 function (tf::TapedFunction)(args...)

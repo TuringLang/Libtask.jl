@@ -16,9 +16,19 @@ struct TapedTask
     end
 end
 
+const TRCache = Dict{Any, Any}()
+
 function TapedTask(tf::TapedFunction, args...)
     tf.owner != nothing && error("TapedFunction is owned to another task.")
-    isempty(tf.tape) && tf(args...)
+    if isempty(tf.tape)
+        if haskey(TRCache, tf.func)
+            ir, tape = TRCache[tf.func]
+            reset!(tf, ir, copy(tape, Dict{UInt64, Any}()))
+        else
+            tf(args...)
+            TRCache[tf.func] = (tf.ir, tf.tape)
+        end
+    end
     produce_ch = Channel()
     consume_ch = Channel{Int}()
     task = @task try
