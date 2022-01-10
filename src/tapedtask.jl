@@ -16,7 +16,7 @@ struct TapedTask
     end
 end
 
-const TRCache = Dict{Any, Any}()
+const TRCache = LRU{Any, Any}(maxsize=10)
 
 function TapedTask(tf::TapedFunction, args...)
     tf.owner != nothing && error("TapedFunction is owned to another task.")
