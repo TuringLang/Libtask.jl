@@ -23,7 +23,7 @@ function TapedTask(tf::TapedFunction, args...)
     if isempty(tf.tape)
         if haskey(TRCache, tf.func)
             ir, tape = TRCache[tf.func]
-            reset!(tf, ir, copy(tape, Dict{UInt64, Any}()))
+            reset!(tf, ir, copy(tape, Dict{UInt64, Any}(); partial=false))
         else
             tf(args...)
             TRCache[tf.func] = (tf.ir, tf.tape)
@@ -209,14 +209,16 @@ function Base.copy(x::Instruction, on_tape::Tape, roster::Dict{UInt64, Any})
     Instruction(x.fun, input, output, on_tape)
 end
 
-function Base.copy(t::Tape, roster::Dict{UInt64, Any})
+function Base.copy(t::Tape, roster::Dict{UInt64, Any}; partial=true)
     old_data = t.tape
-    new_data = Vector{AbstractInstruction}()
-    new_tape = Tape(new_data, t.counter, t.owner)
+    len = partial ? length(old_data) - t.counter + 1 : length(old_data)
+    start = partial ? t.counter : 1
+    new_data = Vector{AbstractInstruction}(undef, len)
+    new_tape = Tape(new_data, 1, t.owner)
 
-    for x in old_data
+    for (i, x) in enumerate(old_data[start:end])
         new_ins = copy(x, new_tape, roster)
-        push!(new_data, new_ins)
+        new_data[i] = new_ins
     end
 
     return new_tape
