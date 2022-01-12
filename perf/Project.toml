@@ -1,9 +1,3 @@
-name = "LibtaskPerf"
-uuid = "09aeecf0-733b-11ec-8a4e-06c55de9177a"
-license = "MIT"
-desc = "Performance Tuning for Libtask"
-version = "0.0.1"
-
 [deps]
 AbstractMCMC = "80f14c24-f653-4e6a-9b94-39d6b0f70001"
 AdvancedPS = "576499cb-2369-40b2-a588-c64705576edc"
