@@ -19,7 +19,7 @@ end
 const TRCache = LRU{Any, Any}(maxsize=10)
 
 function TapedTask(tf::TapedFunction, args...)
-    tf.owner != nothing && error("TapedFunction is owned by another task.")
+    tf.owner !== nothing && error("TapedFunction is owned by another task.")
     if isempty(tf.tape)
         cache_key = (tf.func, typeof.(args)...)
         if haskey(TRCache, cache_key)
