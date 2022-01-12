@@ -32,7 +32,7 @@ end
 end
 
 alg = CSMC(15)
-chain = sample(gdemo_d(1.5, 2.0), alg, 5_00)
+chain = sample(gdemo_d(1.5, 2.0), alg, 5_000)
 
 @show chain
 
