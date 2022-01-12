@@ -53,6 +53,9 @@ function Base.show(io::IO, instruction::Instruction)
 end
 
 function Base.show(io::IO, tp::Tape)
+    # we use an extra IOBuffer to collect all the data and then
+    # output it once to avoid output interrupt during task context
+    # switching
     buf = IOBuffer()
     print(buf, "$(length(tp))-element Tape")
     isempty(tp) || println(buf, ":")
@@ -91,7 +94,7 @@ end
 function run_and_record!(tape::Tape, f, args...)
     f = val(f) # f maybe a Boxed closure
     output = try
-        Box{Any}(f(map(val, args)...))
+        box(f(map(val, args)...))
     catch e
         @warn e
         Box{Any}(nothing)

@@ -19,14 +19,17 @@ end
 const TRCache = LRU{Any, Any}(maxsize=10)
 
 function TapedTask(tf::TapedFunction, args...)
-    tf.owner != nothing && error("TapedFunction is owned to another task.")
+    tf.owner != nothing && error("TapedFunction is owned by another task.")
     if isempty(tf.tape)
-        if haskey(TRCache, tf.func)
-            ir, tape = TRCache[tf.func]
+        cache_key = (tf.func, typeof.(args)...)
+        if haskey(TRCache, cache_key)
+            ir, tape = TRCache[cache_key]
+            # Here we don't need change the initial arguments of the tape,
+            # it will be set when we `step_in` to the tape.
             reset!(tf, ir, copy(tape, Dict{UInt64, Any}(); partial=false))
         else
             tf(args...)
-            TRCache[tf.func] = (tf.ir, tf.tape)
+            TRCache[cache_key] = (tf.ir, tf.tape)
         end
     end
     produce_ch = Channel()
