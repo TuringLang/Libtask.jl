@@ -69,8 +69,13 @@ function Base.show(io::IO, tp::Tape)
 end
 
 function (instr::Instruction{F})() where F
-    output = instr.fun(map(val, instr.input)...)
+    try 
+        output = instr.fun(map(Libtask.val, instr.input)...)
     instr.output.val = output
+    catch e
+        println(e, catch_backtrace()); 
+        rethrow(e);
+    end
 end
 
 function increase_counter!(t::Tape)
