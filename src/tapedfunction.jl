@@ -6,6 +6,11 @@ mutable struct Tape
     owner
 end
 
+"""
+    Instruction
+
+An `Instruction` stands for a function call
+"""
 mutable struct Instruction{F} <: AbstractInstruction
     fun::F
     input::Tuple
@@ -13,6 +18,14 @@ mutable struct Instruction{F} <: AbstractInstruction
     tape::Tape
 end
 
+
+"""
+    NewInstruction
+
+A `NewInstruction` stands for a `new` operator, which only appears in
+an inner constructor. Its represtation in IRCode is not a function call,
+so we need a new intruction type to represent it on tapes.
+"""
 mutable struct NewInstruction <: AbstractInstruction
     input::Tuple
     output
@@ -79,6 +92,7 @@ function Base.show(io::IO, tp::Tape)
 end
 
 function (instr::Instruction{F})() where F
+    # Catch run-time exceptions / errors.
     try
         output = instr.fun(map(val, instr.input)...)
         instr.output.val = output
@@ -90,6 +104,7 @@ end
 
 
 function (instr::NewInstruction)()
+    # Catch run-time exceptions / errors.
     try
         expr = Expr(:new, map(val, instr.input)...)
         output = eval(expr)
