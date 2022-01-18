@@ -1,6 +1,7 @@
 using Libtask
 using Test
 
+include("tf.jl")
 include("ctask.jl")
 include("tarray.jl")
 include("tref.jl")

@@ -18,20 +18,6 @@ mutable struct Instruction{F} <: AbstractInstruction
     tape::Tape
 end
 
-
-"""
-    NewInstruction
-
-A `NewInstruction` stands for a `new` operator, which only appears in
-an inner constructor. Its represtation in IRCode is not a function call,
-so we need a new intruction type to represent it on tapes.
-"""
-mutable struct NewInstruction <: AbstractInstruction
-    input::Tuple
-    output
-    tape::Tape
-end
-
 Tape() = Tape(Vector{AbstractInstruction}(), 1, nothing)
 Tape(owner) = Tape(Vector{AbstractInstruction}(), 1, owner)
 MacroTools.@forward Tape.tape Base.iterate, Base.length
@@ -92,7 +78,7 @@ function Base.show(io::IO, tp::Tape)
 end
 
 function (instr::Instruction{F})() where F
-    # Catch run-time exceptions / errors.
+    # catch run-time exceptions / errors.
     try
         output = instr.fun(map(val, instr.input)...)
         instr.output.val = output
@@ -102,9 +88,9 @@ function (instr::Instruction{F})() where F
     end
 end
 
-
-function (instr::NewInstruction)()
-    # Catch run-time exceptions / errors.
+function _new end
+function (instr::Instruction{typeof(_new)})()
+    # catch run-time exceptions / errors.
     try
         expr = Expr(:new, map(val, instr.input)...)
         output = eval(expr)
@@ -147,7 +133,7 @@ function run_and_record!(tape::Tape, f, args...)
     return output
 end
 
-function run_and_record_new!(tape::Tape, args...)
+function run_and_record!(tape::Tape, ::typeof(_new), args...)
     output = try
         expr = Expr(:new, map(val, args)...)
         box(eval(expr))
@@ -155,7 +141,7 @@ function run_and_record_new!(tape::Tape, args...)
         @warn e
         Box{Any}(nothing)
     end
-    ins = NewInstruction(args, output, tape)
+    ins = Instruction(_new, args, output, tape)
     push!(tape, ins)
     return output
 end
@@ -233,7 +219,7 @@ function intercept(ir; recorder=:run_and_record!)
             ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, new_args...)
         elseif Meta.isexpr(st.expr, :new)
             args = st.expr.args
-            ir[x] = IRTools.xcall(@__MODULE__, :run_and_record_new!, tape, args...)
+            ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, _new, args...)
         else
             @warn "Unknown IR code: " st
         end

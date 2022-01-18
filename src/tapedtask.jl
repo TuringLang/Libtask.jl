@@ -212,14 +212,6 @@ function Base.copy(x::Instruction, on_tape::Tape, roster::Dict{UInt64, Any})
     Instruction(x.fun, input, output, on_tape)
 end
 
-function Base.copy(x::NewInstruction, on_tape::Tape, roster::Dict{UInt64, Any})
-    input = map(x.input) do ob
-        copy_box(ob, roster)
-    end
-    output = copy_box(x.output, roster)
-    NewInstruction(input, output, on_tape)
-end
-
 function Base.copy(t::Tape, roster::Dict{UInt64, Any}; partial=true)
     old_data = t.tape
     len = partial ? length(old_data) - t.counter + 1 : length(old_data)
