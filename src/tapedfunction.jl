@@ -13,6 +13,12 @@ mutable struct Instruction{F} <: AbstractInstruction
     tape::Tape
 end
 
+mutable struct NewInstruction <: AbstractInstruction
+    input::Tuple
+    output
+    tape::Tape
+end
+
 Tape() = Tape(Vector{AbstractInstruction}(), 1, nothing)
 Tape(owner) = Tape(Vector{AbstractInstruction}(), 1, owner)
 MacroTools.@forward Tape.tape Base.iterate, Base.length
@@ -46,6 +52,10 @@ function Base.show(io::IO, box::Box)
     println(io, "Box($(box.val))")
 end
 
+function Base.show(io::IO, instruction::AbstractInstruction)
+    println(io, "A $(typeof(instruction))")
+end
+
 function Base.show(io::IO, instruction::Instruction)
     fun = instruction.fun
     tape = instruction.tape
@@ -69,14 +79,27 @@ function Base.show(io::IO, tp::Tape)
 end
 
 function (instr::Instruction{F})() where F
-    try 
-        output = instr.fun(map(Libtask.val, instr.input)...)
-    instr.output.val = output
+    try
+        output = instr.fun(map(val, instr.input)...)
+        instr.output.val = output
     catch e
-        println(e, catch_backtrace()); 
+        println(e, catch_backtrace());
         rethrow(e);
     end
 end
+
+
+function (instr::NewInstruction)()
+    try
+        expr = Expr(:new, map(val, instr.input)...)
+        output = eval(expr)
+        instr.output.val = output
+    catch e
+        println(e, catch_backtrace());
+        rethrow(e);
+    end
+end
+
 
 function increase_counter!(t::Tape)
     t.counter > length(t) && return
@@ -105,6 +128,19 @@ function run_and_record!(tape::Tape, f, args...)
         Box{Any}(nothing)
     end
     ins = Instruction(f, args, output, tape)
+    push!(tape, ins)
+    return output
+end
+
+function run_and_record_new!(tape::Tape, args...)
+    output = try
+        expr = Expr(:new, map(val, args)...)
+        box(eval(expr))
+    catch e
+        @warn e
+        Box{Any}(nothing)
+    end
+    ins = NewInstruction(args, output, tape)
     push!(tape, ins)
     return output
 end
@@ -177,9 +213,13 @@ function intercept(ir; recorder=:run_and_record!)
 
     for (x, st) in ir
         x == tape && continue
-        Meta.isexpr(st.expr, :call) || continue
-        new_args = (x == args_var) ? st.expr.args : _replace_args(st.expr.args, arg_pairs)
-        ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, new_args...)
+        if Meta.isexpr(st.expr, :call)
+            new_args = (x == args_var) ? st.expr.args : _replace_args(st.expr.args, arg_pairs)
+            ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, new_args...)
+        elseif Meta.isexpr(st.expr, :new)
+            args = st.expr.args
+            ir[x] = IRTools.xcall(@__MODULE__, :run_and_record_new!, tape, args...)
+        end
     end
     # the real return value will be in the last instruction on the tape
     IRTools.return!(ir, tape)
