@@ -234,6 +234,8 @@ function intercept(ir; recorder=:run_and_record!)
         elseif Meta.isexpr(st.expr, :new)
             args = st.expr.args
             ir[x] = IRTools.xcall(@__MODULE__, :run_and_record_new!, tape, args...)
+        else
+            @warn "Unknown IR code: " st
         end
     end
     # the real return value will be in the last instruction on the tape
