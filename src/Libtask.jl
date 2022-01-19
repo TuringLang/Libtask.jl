@@ -3,6 +3,8 @@ module Libtask
 using IRTools
 using MacroTools
 
+using LRUCache
+
 export CTask, consume, produce
 export TArray, tzeros, tfill, TRef
 

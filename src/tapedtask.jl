@@ -16,9 +16,22 @@ struct TapedTask
     end
 end
 
+const TRCache = LRU{Any, Any}(maxsize=10)
+
 function TapedTask(tf::TapedFunction, args...)
-    tf.owner != nothing && error("TapedFunction is owned to another task.")
-    isempty(tf.tape) && tf(args...)
+    tf.owner !== nothing && error("TapedFunction is owned by another task.")
+    if isempty(tf.tape)
+        cache_key = (tf.func, typeof.(args)...)
+        if haskey(TRCache, cache_key)
+            ir, tape = TRCache[cache_key]
+            # Here we don't need change the initial arguments of the tape,
+            # it will be set when we `step_in` to the tape.
+            reset!(tf, ir, copy(tape, Dict{UInt64, Any}(); partial=false))
+        else
+            tf(args...)
+            TRCache[cache_key] = (tf.ir, tf.tape)
+        end
+    end
     produce_ch = Channel()
     consume_ch = Channel{Int}()
     task = @task try
@@ -199,14 +212,16 @@ function Base.copy(x::Instruction, on_tape::Tape, roster::Dict{UInt64, Any})
     Instruction(x.fun, input, output, on_tape)
 end
 
-function Base.copy(t::Tape, roster::Dict{UInt64, Any})
+function Base.copy(t::Tape, roster::Dict{UInt64, Any}; partial=true)
     old_data = t.tape
-    new_data = Vector{AbstractInstruction}()
-    new_tape = Tape(new_data, t.counter, t.owner)
+    len = partial ? length(old_data) - t.counter + 1 : length(old_data)
+    start = partial ? t.counter : 1
+    new_data = Vector{AbstractInstruction}(undef, len)
+    new_tape = Tape(new_data, 1, t.owner)
 
-    for x in old_data
+    for (i, x) in enumerate(old_data[start:end])
         new_ins = copy(x, new_tape, roster)
-        push!(new_data, new_ins)
+        new_data[i] = new_ins
     end
 
     return new_tape

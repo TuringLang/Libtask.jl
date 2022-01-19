@@ -6,6 +6,11 @@ mutable struct Tape
     owner
 end
 
+"""
+    Instruction
+
+An `Instruction` stands for a function call
+"""
 mutable struct Instruction{F} <: AbstractInstruction
     fun::F
     input::Tuple
@@ -46,6 +51,10 @@ function Base.show(io::IO, box::Box)
     println(io, "Box($(box.val))")
 end
 
+function Base.show(io::IO, instruction::AbstractInstruction)
+    println(io, "A $(typeof(instruction))")
+end
+
 function Base.show(io::IO, instruction::Instruction)
     fun = instruction.fun
     tape = instruction.tape
@@ -53,6 +62,9 @@ function Base.show(io::IO, instruction::Instruction)
 end
 
 function Base.show(io::IO, tp::Tape)
+    # we use an extra IOBuffer to collect all the data and then
+    # output it once to avoid output interrupt during task context
+    # switching
     buf = IOBuffer()
     print(buf, "$(length(tp))-element Tape")
     isempty(tp) || println(buf, ":")
@@ -66,9 +78,29 @@ function Base.show(io::IO, tp::Tape)
 end
 
 function (instr::Instruction{F})() where F
-    output = instr.fun(map(val, instr.input)...)
-    instr.output.val = output
+    # catch run-time exceptions / errors.
+    try
+        output = instr.fun(map(val, instr.input)...)
+        instr.output.val = output
+    catch e
+        println(e, catch_backtrace());
+        rethrow(e);
+    end
 end
+
+function _new end
+function (instr::Instruction{typeof(_new)})()
+    # catch run-time exceptions / errors.
+    try
+        expr = Expr(:new, map(val, instr.input)...)
+        output = eval(expr)
+        instr.output.val = output
+    catch e
+        println(e, catch_backtrace());
+        rethrow(e);
+    end
+end
+
 
 function increase_counter!(t::Tape)
     t.counter > length(t) && return
@@ -97,6 +129,19 @@ function run_and_record!(tape::Tape, f, args...)
         Box{Any}(nothing)
     end
     ins = Instruction(f, args, output, tape)
+    push!(tape, ins)
+    return output
+end
+
+function run_and_record!(tape::Tape, ::typeof(_new), args...)
+    output = try
+        expr = Expr(:new, map(val, args)...)
+        box(eval(expr))
+    catch e
+        @warn e
+        Box{Any}(nothing)
+    end
+    ins = Instruction(_new, args, output, tape)
     push!(tape, ins)
     return output
 end
@@ -169,9 +214,15 @@ function intercept(ir; recorder=:run_and_record!)
 
     for (x, st) in ir
         x == tape && continue
-        Meta.isexpr(st.expr, :call) || continue
-        new_args = (x == args_var) ? st.expr.args : _replace_args(st.expr.args, arg_pairs)
-        ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, new_args...)
+        if Meta.isexpr(st.expr, :call)
+            new_args = (x == args_var) ? st.expr.args : _replace_args(st.expr.args, arg_pairs)
+            ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, new_args...)
+        elseif Meta.isexpr(st.expr, :new)
+            args = st.expr.args
+            ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, _new, args...)
+        else
+            @warn "Unknown IR code: " st
+        end
     end
     # the real return value will be in the last instruction on the tape
     IRTools.return!(ir, tape)
@@ -188,6 +239,13 @@ mutable struct TapedFunction
     function TapedFunction(f; arity::Int=-1)
         new(f, arity, nothing, NULL_TAPE, nothing)
     end
+end
+
+function reset!(tf::TapedFunction, ir::IRTools.IR, tape::Tape)
+    tf.ir = ir
+    tf.tape = tape
+    setowner!(tape, tf)
+    return tf
 end
 
 function (tf::TapedFunction)(args...)
