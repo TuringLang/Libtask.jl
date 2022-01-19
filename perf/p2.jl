@@ -58,6 +58,6 @@ args = m.evaluator[2:end]
 
 t = Libtask.CTask(f, args...)
 
-Libtask.step_in(t.tf.tape, args)
+Libtask.step_in(t.tf, args)
 
-@show Libtask.result(t.tf.tape)
+@show Libtask.result(t.tf)

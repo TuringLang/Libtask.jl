@@ -1,10 +1,6 @@
 abstract type AbstractInstruction end
-
-mutable struct Tape
-    tape::Vector{<:AbstractInstruction}
-    counter::Int
-    owner
-end
+abstract type Taped end
+const Tape = Vector{AbstractInstruction}
 
 """
     Instruction
@@ -15,50 +11,93 @@ mutable struct Instruction{F} <: AbstractInstruction
     fun::F
     input::Tuple
     output
-    tape::Tape
+    tape::Taped
 end
 
-Tape() = Tape(Vector{AbstractInstruction}(), 1, nothing)
-Tape(owner) = Tape(Vector{AbstractInstruction}(), 1, owner)
-MacroTools.@forward Tape.tape Base.iterate, Base.length
-MacroTools.@forward Tape.tape Base.push!, Base.getindex, Base.lastindex
-const NULL_TAPE = Tape()
-
-function setowner!(tape::Tape, owner)
-    tape.owner = owner
-    return tape
+mutable struct TapedFunction <: Taped
+    func # ::Function # maybe a callable obejct
+    arity::Int
+    ir::Union{Nothing, IRTools.IR}
+    tape::Tape
+    counter::Int
+    owner
+    function TapedFunction(f; arity::Int=-1)
+        new(f, arity, nothing, NULL_TAPE, 1, nothing)
+    end
 end
 
 mutable struct Box{T}
     val::T
 end
 
+## methods for Box
 val(x) = x
 val(x::Box) = x.val
+val(x::TapedFunction) = x.func
 box(x) = Box(x)
 box(x::Box) = x
-
-gettape(x) = nothing
-gettape(x::Instruction) = x.tape
-function gettape(x::Tuple)
-    for i in x
-        gettape(i) != nothing && return gettape(i)
-    end
-end
-result(t::Tape) = isempty(t) ? nothing : val(t[end].output)
-
 function Base.show(io::IO, box::Box)
     println(io, "Box($(box.val))")
 end
 
-function Base.show(io::IO, instruction::AbstractInstruction)
-    println(io, "A $(typeof(instruction))")
+## methods for Tape and Taped
+const NULL_TAPE = Tape()
+MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
+MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
+
+result(t::Tape) = isempty(t) ? nothing : val(t[end].output)
+result(t::TapedFunction) = result(t.tape)
+
+function increase_counter!(t::TapedFunction)
+    t.counter > length(t) && return
+    # instr = t[t.counter]
+    t.counter += 1
+    return t
 end
 
-function Base.show(io::IO, instruction::Instruction)
-    fun = instruction.fun
-    tape = instruction.tape
-    println(io, "Instruction($(fun)$(map(val, instruction.input)), tape=$(objectid(tape)))")
+function reset!(tf::TapedFunction, ir::IRTools.IR, tape::Tape)
+    tf.ir = ir
+    tf.tape = tape
+    return tf
+end
+
+function (tf::TapedFunction)(args...)
+    if isempty(tf.tape)
+        ir = IRTools.@code_ir tf.func(args...)
+        ir = intercept(ir; recorder=:run_and_record!)
+        tf.ir = ir
+        tf.tape = Tape()
+        tf2 = IRTools.evalir(ir, tf, args...)
+        @assert tf === tf2
+        return result(tf)
+    end
+    run(tf.tape, args...)
+    return result(tf)
+end
+
+function Base.show(io::IO, tf::TapedFunction)
+    buf = IOBuffer()
+    println(buf, "TapedFunction:")
+    println(buf, "* .func => $(tf.func)")
+    println(buf, "* .ir   =>")
+    println(buf, "------------------")
+    println(buf, tf.ir)
+    println(buf, "------------------")
+    println(buf, "* .tape =>")
+    println(buf, "------------------")
+    println(buf, tf.tape)
+    println(buf, "------------------")
+    print(io, String(take!(buf)))
+end
+
+function run(tape::Tape, args...)
+    if length(args) > 0
+        input = map(box, args)
+        tape[1].input = input
+    end
+    for instruction in tape
+        instruction()
+    end
 end
 
 function Base.show(io::IO, tp::Tape)
@@ -75,6 +114,25 @@ function Base.show(io::IO, tp::Tape)
         i += 1
     end
     print(io, String(take!(buf)))
+end
+
+## methods for Instruction
+gettape(x) = nothing
+gettape(x::Instruction) = x.tape
+function gettape(x::Tuple)
+    for i in x
+        gettape(i) != nothing && return gettape(i)
+    end
+end
+
+function Base.show(io::IO, instruction::AbstractInstruction)
+    println(io, "A $(typeof(instruction))")
+end
+
+function Base.show(io::IO, instruction::Instruction)
+    fun = instruction.fun
+    tape = instruction.tape
+    println(io, "Instruction($(fun)$(map(val, instruction.input)), tape=$(objectid(tape)))")
 end
 
 function (instr::Instruction{F})() where F
@@ -101,26 +159,9 @@ function (instr::Instruction{typeof(_new)})()
     end
 end
 
+## internal functions
 
-function increase_counter!(t::Tape)
-    t.counter > length(t) && return
-    # instr = t[t.counter]
-    t.counter += 1
-    return t
-end
-
-function run(tape::Tape, args...)
-    if length(args) > 0
-        input = map(box, args)
-        tape[1].input = input
-    end
-    for instruction in tape
-        instruction()
-        increase_counter!(tape)
-    end
-end
-
-function run_and_record!(tape::Tape, f, args...)
+function run_and_record!(tape::Taped, f, args...)
     f = val(f) # f maybe a Boxed closure
     output = try
         box(f(map(val, args)...))
@@ -133,7 +174,7 @@ function run_and_record!(tape::Tape, f, args...)
     return output
 end
 
-function run_and_record!(tape::Tape, ::typeof(_new), args...)
+function run_and_record!(tape::Taped, ::typeof(_new), args...)
     output = try
         expr = Expr(:new, map(val, args)...)
         box(eval(expr))
@@ -173,7 +214,9 @@ end
 
 function intercept(ir; recorder=:run_and_record!)
     ir == nothing && return
-    tape = pushfirst!(ir, IRTools.xcall(@__MODULE__, :Tape))
+    # we use tf instead of the original function as the first argument
+    # get the TapedFunction
+    tape = pushfirst!(ir, IRTools.xcall(Base, :identity, IRTools.arguments(ir)[1]))
 
     # box the args
     first_blk = IRTools.blocks(ir)[1]
@@ -228,52 +271,4 @@ function intercept(ir; recorder=:run_and_record!)
     IRTools.return!(ir, tape)
     unbox_condition(ir)
     return ir
-end
-
-mutable struct TapedFunction
-    func # ::Function # maybe a callable obejct
-    arity::Int
-    ir::Union{Nothing, IRTools.IR}
-    tape::Tape
-    owner
-    function TapedFunction(f; arity::Int=-1)
-        new(f, arity, nothing, NULL_TAPE, nothing)
-    end
-end
-
-function reset!(tf::TapedFunction, ir::IRTools.IR, tape::Tape)
-    tf.ir = ir
-    tf.tape = tape
-    setowner!(tape, tf)
-    return tf
-end
-
-function (tf::TapedFunction)(args...)
-    if isempty(tf.tape)
-        ir = IRTools.@code_ir tf.func(args...)
-        ir = intercept(ir; recorder=:run_and_record!)
-        tape = IRTools.evalir(ir, tf.func, args...)
-        tf.ir = ir
-        tf.tape = tape
-        setowner!(tape, tf)
-        return result(tape)
-    end
-    # TODO: use cache
-    run(tf.tape, args...)
-    return result(tf.tape)
-end
-
-function Base.show(io::IO, tf::TapedFunction)
-    buf = IOBuffer()
-    println(buf, "TapedFunction:")
-    println(buf, "* .func => $(tf.func)")
-    println(buf, "* .ir   =>")
-    println(buf, "------------------")
-    println(buf, tf.ir)
-    println(buf, "------------------")
-    println(buf, "* .tape =>")
-    println(buf, "------------------")
-    println(buf, tf.tape)
-    println(buf, "------------------")
-    print(io, String(take!(buf)))
 end
