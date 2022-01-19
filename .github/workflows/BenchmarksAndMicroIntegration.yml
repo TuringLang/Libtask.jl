@@ -1,0 +1,40 @@
+name: Benchmarks and MicroIntegration
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  test:
+    name: Benchmarks and MicroIntegration
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: 1
+          arch: x64
+      - uses: julia-actions/julia-buildpkg@latest
+      - name: setup enviroment
+        shell: julia --color=yes --project=perf {0}
+        run: |
+          using Pkg
+          try
+            # force it to use this PR's version of the package
+            pkg"add Turing#hg/new-libtask2" # TODO: remove this when Turing is updated
+            Pkg.develop(PackageSpec(path="."))  # resolver may fail with main deps
+            Pkg.update()
+          catch err
+            err isa Pkg.Resolve.ResolverError || rethrow()
+            # If we can't resolve that means this is incompatible by SemVer and this is fine
+            # It means we marked this as a breaking change, so we don't need to worry about
+            # Mistakenly introducing a breaking change, as we have intentionally made one
+            @info "Not compatible with this release. No problem." exception=err
+            exit(0)  # Exit immediately, as a success
+          end
+      - name: run
+        run: julia --color=yes --project=perf perf/runtests.jl
