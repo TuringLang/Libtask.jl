@@ -67,9 +67,16 @@ function (tf::TapedFunction)(args...)
         tf.tape = RawTape()
         tf2 = IRTools.evalir(ir, tf, args...)
         @assert tf === tf2
-        return result(tf)
+    else
+        # run the raw tape
+        if length(args) > 0
+            input = map(box, args)
+            tf.tape[1].input = input
+        end
+        for instruction in tf.tape
+            instruction()
+        end
     end
-    run(tf.tape, args...)
     return result(tf)
 end
 
@@ -86,16 +93,6 @@ function Base.show(io::IO, tf::TapedFunction)
     println(buf, tf.tape)
     println(buf, "------------------")
     print(io, String(take!(buf)))
-end
-
-function run(tape::RawTape, args...)
-    if length(args) > 0
-        input = map(box, args)
-        tape[1].input = input
-    end
-    for instruction in tape
-        instruction()
-    end
 end
 
 function Base.show(io::IO, tp::RawTape)
