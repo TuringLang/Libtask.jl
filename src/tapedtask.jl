@@ -209,7 +209,7 @@ function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
         copy_box(ob, roster)
     end
     output = copy_box(x.output, roster)
-    Instruction(x.fun, input, output, on_tape)
+    Instruction(x.func, input, output, on_tape)
 end
 
 function Base.copy(t::RawTape, on_tape::Taped, roster::Dict{UInt64, Any}; start::Int=1)

@@ -7,22 +7,22 @@ const RawTape = Vector{AbstractInstruction}
 
 An `Instruction` stands for a function call
 """
-mutable struct Instruction{F} <: AbstractInstruction
-    fun::F
+mutable struct Instruction{F, T<:Taped} <: AbstractInstruction
+    func::F
     input::Tuple
     output
-    tape::Taped
+    tape::T
 end
 
-mutable struct TapedFunction <: Taped
-    func # ::Function # maybe a callable obejct
+mutable struct TapedFunction{F} <: Taped
+    func::F # maybe a function or a callable obejct
     arity::Int
     ir::Union{Nothing, IRTools.IR}
     tape::RawTape
     counter::Int
     owner
-    function TapedFunction(f; arity::Int=-1)
-        new(f, arity, nothing, NULL_TAPE, 1, nothing)
+    function TapedFunction(f::F; arity::Int=-1) where {F}
+        new{F}(f, arity, nothing, NULL_TAPE, 1, nothing)
     end
 end
 
@@ -36,9 +36,7 @@ val(x::Box) = x.val
 val(x::TapedFunction) = x.func
 box(x) = Box(x)
 box(x::Box) = x
-function Base.show(io::IO, box::Box)
-    println(io, "Box($(box.val))")
-end
+Base.show(io::IO, box::Box) = print(io, "Box(", box.val, ")")
 
 ## methods for RawTape and Taped
 const NULL_TAPE = RawTape()
@@ -121,24 +119,22 @@ gettape(x) = nothing
 gettape(x::Instruction) = x.tape
 function gettape(x::Tuple)
     for i in x
-        gettape(i) != nothing && return gettape(i)
+        gettape(i) !== nothing && return gettape(i)
     end
 end
 
-function Base.show(io::IO, instruction::AbstractInstruction)
-    println(io, "A $(typeof(instruction))")
-end
+Base.show(io::IO, instruction::AbstractInstruction) = print(io, "A ", typeof(instruction))
 
 function Base.show(io::IO, instruction::Instruction)
-    fun = instruction.fun
+    func = instruction.func
     tape = instruction.tape
-    println(io, "Instruction($(fun)$(map(val, instruction.input)), tape=$(objectid(tape)))")
+    println(io, "Instruction($(func)$(map(val, instruction.input)), tape=$(objectid(tape)))")
 end
 
 function (instr::Instruction{F})() where F
     # catch run-time exceptions / errors.
     try
-        output = instr.fun(map(val, instr.input)...)
+        output = instr.func(map(val, instr.input)...)
         instr.output.val = output
     catch e
         println(e, catch_backtrace());
