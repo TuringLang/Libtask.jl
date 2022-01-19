@@ -1,6 +1,6 @@
 abstract type AbstractInstruction end
 abstract type Taped end
-const Tape = Vector{AbstractInstruction}
+const RawTape = Vector{AbstractInstruction}
 
 """
     Instruction
@@ -18,7 +18,7 @@ mutable struct TapedFunction <: Taped
     func # ::Function # maybe a callable obejct
     arity::Int
     ir::Union{Nothing, IRTools.IR}
-    tape::Tape
+    tape::RawTape
     counter::Int
     owner
     function TapedFunction(f; arity::Int=-1)
@@ -40,12 +40,12 @@ function Base.show(io::IO, box::Box)
     println(io, "Box($(box.val))")
 end
 
-## methods for Tape and Taped
-const NULL_TAPE = Tape()
+## methods for RawTape and Taped
+const NULL_TAPE = RawTape()
 MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
 MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
 
-result(t::Tape) = isempty(t) ? nothing : val(t[end].output)
+result(t::RawTape) = isempty(t) ? nothing : val(t[end].output)
 result(t::TapedFunction) = result(t.tape)
 
 function increase_counter!(t::TapedFunction)
@@ -55,7 +55,7 @@ function increase_counter!(t::TapedFunction)
     return t
 end
 
-function reset!(tf::TapedFunction, ir::IRTools.IR, tape::Tape)
+function reset!(tf::TapedFunction, ir::IRTools.IR, tape::RawTape)
     tf.ir = ir
     tf.tape = tape
     return tf
@@ -66,7 +66,7 @@ function (tf::TapedFunction)(args...)
         ir = IRTools.@code_ir tf.func(args...)
         ir = intercept(ir; recorder=:run_and_record!)
         tf.ir = ir
-        tf.tape = Tape()
+        tf.tape = RawTape()
         tf2 = IRTools.evalir(ir, tf, args...)
         @assert tf === tf2
         return result(tf)
@@ -90,7 +90,7 @@ function Base.show(io::IO, tf::TapedFunction)
     print(io, String(take!(buf)))
 end
 
-function run(tape::Tape, args...)
+function run(tape::RawTape, args...)
     if length(args) > 0
         input = map(box, args)
         tape[1].input = input
@@ -100,12 +100,12 @@ function run(tape::Tape, args...)
     end
 end
 
-function Base.show(io::IO, tp::Tape)
+function Base.show(io::IO, tp::RawTape)
     # we use an extra IOBuffer to collect all the data and then
     # output it once to avoid output interrupt during task context
     # switching
     buf = IOBuffer()
-    print(buf, "$(length(tp))-element Tape")
+    print(buf, "$(length(tp))-element RawTape")
     isempty(tp) || println(buf, ":")
     i = 1
     for instruction in tp

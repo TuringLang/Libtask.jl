@@ -212,10 +212,10 @@ function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
     Instruction(x.fun, input, output, on_tape)
 end
 
-function Base.copy(t::Tape, on_tape::Taped, roster::Dict{UInt64, Any}; start::Int=1)
+function Base.copy(t::RawTape, on_tape::Taped, roster::Dict{UInt64, Any}; start::Int=1)
     old_data = t
     len = length(old_data) - start + 1
-    new_data = Tape(undef, len)
+    new_data = RawTape(undef, len)
 
     for (i, x) in enumerate(old_data[start:end])
         new_ins = copy(x, on_tape, roster)
