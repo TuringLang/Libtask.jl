@@ -95,8 +95,7 @@ end
 # Make`produce` a standalone instturction. This approach does NOT
 # support `produce` in a nested call
 function internal_produce(instr::Instruction, val)
-    tape = gettape(instr)
-    tf = tape.owner
+    tf = instr.tape
     ttask = tf.owner
     put!(ttask.produce_ch, val)
     take!(ttask.consume_ch) # wait for next consumer

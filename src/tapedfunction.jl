@@ -115,14 +115,6 @@ function Base.show(io::IO, tp::RawTape)
 end
 
 ## methods for Instruction
-gettape(x) = nothing
-gettape(x::Instruction) = x.tape
-function gettape(x::Tuple)
-    for i in x
-        gettape(i) !== nothing && return gettape(i)
-    end
-end
-
 Base.show(io::IO, instruction::AbstractInstruction) = print(io, "A ", typeof(instruction))
 
 function Base.show(io::IO, instruction::Instruction)
