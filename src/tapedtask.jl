@@ -65,7 +65,6 @@ TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
-
 function step_in(tf::TapedFunction, args)
     len = length(tf)
     if(tf.counter <= 1 && length(args) > 0)
@@ -124,7 +123,7 @@ end
     ct.storage === nothing && return false
     haskey(ct.storage, :tapedtask) || return false
     # check if we are recording a tape
-    ct.storage[:tapedtask].tf.tape === NULL_TAPE && return false
+    isempty(ct.storage[:tapedtask].tf.tape) && return false
     return true
 end
 

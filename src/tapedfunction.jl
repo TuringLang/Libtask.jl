@@ -22,7 +22,7 @@ mutable struct TapedFunction{F} <: Taped
     counter::Int
     owner
     function TapedFunction(f::F; arity::Int=-1) where {F}
-        new{F}(f, arity, nothing, NULL_TAPE, 1, nothing)
+        new{F}(f, arity, nothing, RawTape(), 1, nothing)
     end
 end
 
@@ -39,7 +39,6 @@ box(x::Box) = x
 Base.show(io::IO, box::Box) = print(io, "Box(", box.val, ")")
 
 ## methods for RawTape and Taped
-const NULL_TAPE = RawTape()
 MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
 MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
 
@@ -62,7 +61,7 @@ end
 function (tf::TapedFunction)(args...)
     if isempty(tf.tape)
         ir = IRTools.@code_ir tf.func(args...)
-        ir = intercept(ir; recorder=:run_and_record!)
+        ir = intercept(ir; recorder=:track!)
         tf.ir = ir
         tf.tape = RawTape()
         tf2 = IRTools.evalir(ir, tf, args...)
@@ -146,7 +145,7 @@ end
 
 ## internal functions
 
-function run_and_record!(tape::Taped, f, args...)
+function track!(tape::Taped, f, args...)
     f = val(f) # f maybe a Boxed closure
     output = try
         box(f(map(val, args)...))
@@ -159,7 +158,7 @@ function run_and_record!(tape::Taped, f, args...)
     return output
 end
 
-function run_and_record!(tape::Taped, ::typeof(_new), args...)
+function track!(tape::Taped, ::typeof(_new), args...)
     output = try
         expr = Expr(:new, map(val, args)...)
         box(eval(expr))
@@ -197,7 +196,7 @@ function _replace_args(args, pairs::Dict)
     end
 end
 
-function intercept(ir; recorder=:run_and_record!)
+function intercept(ir; recorder=:track!)
     ir == nothing && return
     # we use tf instead of the original function as the first argument
     # get the TapedFunction
