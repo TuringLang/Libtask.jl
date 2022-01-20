@@ -29,9 +29,9 @@ args = m.evaluator[2:end];
 @show "CTask construction..."
 t = @btime  Libtask.CTask(f, args...)
 # schedule(t.task) # work fine!
-# @show Libtask.result(t.tf.tape)
+# @show Libtask.result(t.tf)
 @show "Step in a tape..."
-@btime Libtask.step_in(t.tf.tape, args)
+@btime Libtask.step_in(t.tf, args)
 
 # Case 2: SMC sampler
 
@@ -44,4 +44,4 @@ t = @btime Libtask.CTask(m.evaluator[1], m.evaluator[2:end]...);
 # schedule(t.task)
 # @show Libtask.result(t.tf.tape)
 @show "Step in a tape..."
-@btime Libtask.step_in(t.tf.tape, m.evaluator[2:end])
+@btime Libtask.step_in(t.tf, m.evaluator[2:end])

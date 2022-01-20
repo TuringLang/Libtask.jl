@@ -26,7 +26,7 @@ function TapedTask(tf::TapedFunction, args...)
             ir, tape = TRCache[cache_key]
             # Here we don't need change the initial arguments of the tape,
             # it will be set when we `step_in` to the tape.
-            reset!(tf, ir, copy(tape, Dict{UInt64, Any}(); partial=false))
+            reset!(tf, ir, copy(tape, tf, Dict{UInt64, Any}(); start=1))
         else
             tf(args...)
             TRCache[cache_key] = (tf.ir, tf.tape)
@@ -35,7 +35,7 @@ function TapedTask(tf::TapedFunction, args...)
     produce_ch = Channel()
     consume_ch = Channel{Int}()
     task = @task try
-        step_in(tf.tape, args)
+        step_in(tf, args)
     catch e
         bt = catch_backtrace()
         put!(produce_ch, TapedTaskException(e, bt))
@@ -65,28 +65,27 @@ TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
-
-function step_in(t::Tape, args)
-    len = length(t)
-    if(t.counter <= 1 && length(args) > 0)
+function step_in(tf::TapedFunction, args)
+    len = length(tf)
+    if(tf.counter <= 1 && length(args) > 0)
         input = map(box, args)
-        t[1].input = input
+        tf[1].input = input
     end
-    while t.counter <= len
-        t[t.counter]()
+    while tf.counter <= len
+        tf[tf.counter]()
         # produce and wait after an instruction is done
-        ttask = t.owner.owner
+        ttask = tf.owner
         if length(ttask.produced_val) > 0
             val = pop!(ttask.produced_val)
             put!(ttask.produce_ch, val)
             take!(ttask.consume_ch) # wait for next consumer
         end
-        increase_counter!(t)
+        increase_counter!(tf)
     end
 end
 
 function next_step!(t::TapedTask)
-    increase_counter!(t.tf.tape)
+    increase_counter!(t.tf)
     return t
 end
 
@@ -95,8 +94,7 @@ end
 # Make`produce` a standalone instturction. This approach does NOT
 # support `produce` in a nested call
 function internal_produce(instr::Instruction, val)
-    tape = gettape(instr)
-    tf = tape.owner
+    tf = instr.tape
     ttask = tf.owner
     put!(ttask.produce_ch, val)
     take!(ttask.consume_ch) # wait for next consumer
@@ -125,7 +123,7 @@ end
     ct.storage === nothing && return false
     haskey(ct.storage, :tapedtask) || return false
     # check if we are recording a tape
-    ct.storage[:tapedtask].tf.tape === NULL_TAPE && return false
+    isempty(ct.storage[:tapedtask].tf.tape) && return false
     return true
 end
 
@@ -204,36 +202,34 @@ function copy_box(old_box::Box{T}, roster::Dict{UInt64, Any}) where T
 end
 copy_box(o, roster::Dict{UInt64, Any}) = o
 
-function Base.copy(x::Instruction, on_tape::Tape, roster::Dict{UInt64, Any})
+function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
     input = map(x.input) do ob
         copy_box(ob, roster)
     end
     output = copy_box(x.output, roster)
-    Instruction(x.fun, input, output, on_tape)
+    Instruction(x.func, input, output, on_tape)
 end
 
-function Base.copy(t::Tape, roster::Dict{UInt64, Any}; partial=true)
-    old_data = t.tape
-    len = partial ? length(old_data) - t.counter + 1 : length(old_data)
-    start = partial ? t.counter : 1
-    new_data = Vector{AbstractInstruction}(undef, len)
-    new_tape = Tape(new_data, 1, t.owner)
+function Base.copy(t::RawTape, on_tape::Taped, roster::Dict{UInt64, Any}; start::Int=1)
+    old_data = t
+    len = length(old_data) - start + 1
+    new_data = RawTape(undef, len)
 
     for (i, x) in enumerate(old_data[start:end])
-        new_ins = copy(x, new_tape, roster)
+        new_ins = copy(x, on_tape, roster)
         new_data[i] = new_ins
     end
 
-    return new_tape
+    return new_data
 end
 
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf.func; arity=tf.arity)
     new_tf.ir = tf.ir
     roster = Dict{UInt64, Any}()
-    new_tape = copy(tf.tape, roster)
-    setowner!(new_tape, new_tf)
+    new_tape = copy(tf.tape, new_tf, roster; start=tf.counter)
     new_tf.tape = new_tape
+    new_tf.counter = 1
     return new_tf
 end
 
