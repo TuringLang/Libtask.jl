@@ -26,9 +26,9 @@ function TapedTask(tf::TapedFunction, args...)
             ir, tape = TRCache[cache_key]
             # Here we don't need change the initial arguments of the tape,
             # it will be set when we `step_in` to the tape.
-            reset!(tf, ir, copy(tape, tf, Dict{UInt64, Any}(); start=1))
+            reset!(tf, ir, copy(tape, tf, Dict{UInt64, Any}()))
         else
-            tf(args...)
+            init!(tf, args)
             TRCache[cache_key] = (tf.ir, tf.tape)
         end
     end
@@ -66,27 +66,25 @@ TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
 function step_in(tf::TapedFunction, args)
-    len = length(tf)
+    ttask = tf.owner
+
     if(tf.counter <= 1 && length(args) > 0)
         input = map(box, args)
         tf[1].input = input
     end
-    while tf.counter <= len
-        tf[tf.counter]()
+    while true
+        ins = tf[tf.counter]
+        ins()
+
         # produce and wait after an instruction is done
-        ttask = tf.owner
         if length(ttask.produced_val) > 0
             val = pop!(ttask.produced_val)
             put!(ttask.produce_ch, val)
             take!(ttask.consume_ch) # wait for next consumer
         end
-        increase_counter!(tf)
-    end
-end
 
-function next_step!(t::TapedTask)
-    increase_counter!(t.tf)
-    return t
+        isa(ins, ReturnInstruction) && break
+    end
 end
 
 #=
@@ -210,26 +208,44 @@ function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
     Instruction(x.func, input, output, on_tape)
 end
 
-function Base.copy(t::RawTape, on_tape::Taped, roster::Dict{UInt64, Any}; start::Int=1)
-    old_data = t
-    len = length(old_data) - start + 1
-    new_data = RawTape(undef, len)
+function Base.copy(x::BlockInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    args = map(x.args) do ob
+        copy_box(ob, roster)
+    end
+    BlockInstruction(x.id, args, on_tape)
+end
 
-    for (i, x) in enumerate(old_data[start:end])
+function Base.copy(x::BranchInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    cond = copy_box(x.condition, roster)
+    args = map(x.args) do ob
+        copy_box(ob, roster)
+    end
+
+    BranchInstruction(cond, x.block, args, on_tape)
+end
+
+function Base.copy(x::ReturnInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    arg = copy_box(x.arg, roster)
+    ReturnInstruction(arg, on_tape)
+end
+
+function Base.copy(old_data::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
+    new_data = RawTape(undef, length(old_data))
+    for (i, x) in enumerate(old_data)
         new_ins = copy(x, on_tape, roster)
         new_data[i] = new_ins
     end
-
     return new_data
 end
 
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf.func; arity=tf.arity)
+    new_tf.block_map = tf.block_map
     new_tf.ir = tf.ir
     roster = Dict{UInt64, Any}()
-    new_tape = copy(tf.tape, new_tf, roster; start=tf.counter)
+    new_tape = copy(tf.tape, new_tf, roster)
     new_tf.tape = new_tape
-    new_tf.counter = 1
+    new_tf.counter = tf.counter
     return new_tf
 end
 
@@ -239,6 +255,5 @@ function Base.copy(t::TapedTask)
     new_t = TapedTask(tf)
     new_t.task.storage = copy(t.task.storage)
     new_t.task.storage[:tapedtask] = new_t
-    next_step!(new_t)
     return new_t
 end
