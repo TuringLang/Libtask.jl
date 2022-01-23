@@ -15,7 +15,7 @@ jobs:
       matrix:
         package:
           - {user: TuringLang, repo: AdvancedPS.jl}
-          - {user: TuringLang, repo: Turing.jl}
+          - {user: TuringLang, repo: Turing.jl, ref: hg/new-libtask2}
 
     steps:
       - uses: actions/checkout@v2
