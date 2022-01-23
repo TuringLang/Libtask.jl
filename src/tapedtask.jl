@@ -201,11 +201,12 @@ end
 copy_box(o, roster::Dict{UInt64, Any}) = o
 
 function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    func = copy_box(x.func, roster)
     input = map(x.input) do ob
         copy_box(ob, roster)
     end
     output = copy_box(x.output, roster)
-    Instruction(x.func, input, output, on_tape)
+    Instruction(func, input, output, on_tape)
 end
 
 function Base.copy(x::BlockInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
@@ -235,6 +236,10 @@ function Base.copy(old_data::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
         new_ins = copy(x, on_tape, roster)
         new_data[i] = new_ins
     end
+
+    init_ins = Instruction(args_initializer(new_data[2]), (),
+                           Box{Any}(nothing), on_tape)
+    new_data[1] = init_ins
     return new_data
 end
 

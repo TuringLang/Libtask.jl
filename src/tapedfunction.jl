@@ -79,7 +79,7 @@ function reset!(tf::TapedFunction, ir::IRTools.IR, tape::RawTape)
     tf.tape = tape
     blk_map = Dict{Int, Int}()
 
-    for (i, ins) in tf.tape
+    for (i, ins) in enumerate(tf.tape)
         isa(ins, BlockInstruction) || continue
         blk_map[ins.id] = i
     end
@@ -159,7 +159,8 @@ end
 function (instr::Instruction{F})() where F
     # catch run-time exceptions / errors.
     try
-        output = instr.func(map(val, instr.input)...)
+        func = val(instr.func)
+        output = func(map(val, instr.input)...)
         instr.output.val = output
         instr.tape.counter += 1
     catch e
@@ -225,7 +226,7 @@ end
 
 function translate!(taped::Taped, ir::IRTools.IR)
     tape = taped.tape
-    boxes = Dict{Any, Box{Any}}()
+    boxes = Dict{IRTools.Variable, Box{Any}}()
     _box = (x) -> arg_boxer(x, boxes)
     for (blk_id, blk) in enumerate(IRTools.blocks(ir))
         # blocks
