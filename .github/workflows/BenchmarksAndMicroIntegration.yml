@@ -25,7 +25,7 @@ jobs:
           using Pkg
           try
             # force it to use this PR's version of the package
-            pkg"add Turing#hg/new-libtask2" # TODO: remove this when Turing is updated
+            pkg"add Turing#master"
             Pkg.develop(PackageSpec(path="."))  # resolver may fail with main deps
             Pkg.update()
           catch err
