@@ -1,3 +1,7 @@
+mutable struct Box{T}
+    val::T
+end
+
 abstract type AbstractInstruction end
 abstract type Taped end
 const RawTape = Vector{AbstractInstruction}
@@ -10,7 +14,7 @@ An `Instruction` stands for a function call
 mutable struct Instruction{F, T<:Taped} <: AbstractInstruction
     func::F
     input::Tuple
-    output
+    output::Box
     tape::T
 end
 
@@ -21,7 +25,7 @@ mutable struct BlockInstruction{T<:Taped} <: AbstractInstruction
 end
 
 mutable struct BranchInstruction{T<:Taped} <: AbstractInstruction
-    condition::Any
+    condition::Union{Bool, Box{Any}, Nothing}
     block::Int
     args::Vector
     tape::T
@@ -45,10 +49,6 @@ mutable struct TapedFunction{F} <: Taped
         new{F}(f, arity, nothing, RawTape(), 1,
                Dict{Int, Int}(), nothing, nothing)
     end
-end
-
-mutable struct Box{T}
-    val::T
 end
 
 ## methods for Box
@@ -248,9 +248,13 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 ins = Instruction(_new, args |> Tuple, _box(x), taped)
                 push!(tape, ins)
             else
-                @warn "Unknown IR code: " st
-                ins = Instruction(identity, (eval(st.expr),), _box(x), taped)
-                push!(tape, ins)
+                try
+                    v = eval(st.expr)
+                    ins = Instruction(identity, (v,), _box(x), taped)
+                    push!(tape, ins)
+                catch
+                    @warn "Unknown IR code: " st
+                end
             end
         end
 
