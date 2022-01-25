@@ -248,11 +248,11 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 ins = Instruction(_new, args |> Tuple, _box(x), taped)
                 push!(tape, ins)
             else
-                try
+                if isa(st.expr, Symbol) || isa(st.expr, GlobalRef)
                     v = eval(st.expr)
                     ins = Instruction(identity, (v,), _box(x), taped)
                     push!(tape, ins)
-                catch
+                else
                     @warn "Unknown IR code: " st
                 end
             end
