@@ -11,9 +11,9 @@ const RawTape = Vector{AbstractInstruction}
 
 An `Instruction` stands for a function call
 """
-mutable struct Instruction{F, TO, T<:Taped} <: AbstractInstruction
+mutable struct Instruction{F, TI<:Tuple, TO, T<:Taped} <: AbstractInstruction
     func::F
-    input::Tuple
+    input::TI
     output::Box{TO}
     tape::T
 end
@@ -25,7 +25,7 @@ mutable struct BlockInstruction{TA, T<:Taped} <: AbstractInstruction
 end
 
 mutable struct BranchInstruction{TA, T<:Taped} <: AbstractInstruction
-    condition::Union{Bool, Box{Any}}
+    condition::Box{Any}
     block_id::Int
     args::Vector{TA}
     tape::T
@@ -39,7 +39,7 @@ end
 mutable struct TapedFunction{F} <: Taped
     func::F # maybe a function, a constructor, or a callable obejct
     arity::Int
-    ir::Union{Nothing, IRTools.IR}
+    ir::IRTools.IR
     tape::RawTape
     counter::Int
     # map from BlockInstruction.block_id to its index on tape
@@ -47,8 +47,13 @@ mutable struct TapedFunction{F} <: Taped
     retval
     owner
     function TapedFunction(f::F, args...; init=true) where {F}
-        tf = new{F}(f, -1, nothing, RawTape(), 1,
-                    Dict{Int, Int}(), nothing, nothing)
+        tf = new{F}() # leave some fields to be undef
+        tf.func = f
+        tf.tape = RawTape()
+        tf.counter = 1
+        tf.block_map = Dict{Int, Int}()
+
+        # init
         if init
             tf.arity = length(args)
             ir = IRTools.@code_ir tf.func(args...)
@@ -65,7 +70,6 @@ val(x::Box) = x.val
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
-val(x::GlobalRef) = getproperty(x.mod, x.name)
 box(x) = Box(x)
 box(x::Box) = x
 Base.show(io::IO, box::Box) = print(io, "Box(", box.val, ")")
@@ -79,7 +83,7 @@ result(t::TapedFunction) = t.retval
 function (tf::TapedFunction)(args...)
     # run the raw tape
     if length(args) > 0
-        input = map(box, args)
+        input = map(Box{Any}, args)
         tf.tape[1].input = input
     end
     tf.counter = 1
@@ -196,8 +200,9 @@ end
 
 ## internal functions
 
-arg_boxer(var, boxes) = var
-arg_boxer(var::IRTools.Variable, boxes) = get!(boxes, var, Box{Any}(nothing))
+arg_boxer(var, boxes::Dict{IRTools.Variable, Box{Any}}) = var
+arg_boxer(var::IRTools.Variable, boxes::Dict{IRTools.Variable, Box{Any}}) =
+    get!(boxes, var, Box{Any}(nothing))
 function args_initializer(ins::BlockInstruction)
     return (args...) -> begin
         @assert length(args) + 1 == length(ins.args)
@@ -235,7 +240,7 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 ins = Instruction(val, (st.expr,), _box(x), taped)
                 push!(tape, ins)
             else
-                @warn "Unknown IR code: " st
+                @error "Unknown IR code: " st
             end
         end
 
@@ -246,13 +251,14 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 push!(tape, ins)
             else
                 cond = br.condition === nothing ? false : _box(br.condition)
+                isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
                 ins = BranchInstruction(
                     cond, br.block, map(_box, br.args), taped)
                 push!(tape, ins)
             end
         end
     end
-    init_ins = Instruction(args_initializer(tape[1]), (),
+    init_ins = Instruction(args_initializer(tape[1]), tuple(tape[1].args[2:end]...),
                            Box{Any}(nothing), taped)
     insert!(tape, 1, init_ins)
 end

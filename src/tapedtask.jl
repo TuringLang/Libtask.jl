@@ -46,6 +46,8 @@ function TapedTask(tf::TapedFunction, args...)
     return t
 end
 
+# NOTE: evaluating model without a trace, see
+# https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
 function TapedTask(f, args...)
     cache_key = (f, typeof.(args)...)
     if haskey(TRCache, cache_key)
@@ -68,7 +70,7 @@ function step_in(tf::TapedFunction, args)
     ttask = tf.owner
 
     if(tf.counter <= 1 && length(args) > 0)
-        input = map(box, args)
+        input = map(Box{Any}, args)
         tf[1].input = input
     end
     while true
@@ -230,17 +232,17 @@ function Base.copy(x::ReturnInstruction, on_tape::Taped, roster::Dict{UInt64, An
     ReturnInstruction(arg, on_tape)
 end
 
-function Base.copy(old_data::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
-    new_data = RawTape(undef, length(old_data))
-    for (i, x) in enumerate(old_data)
+function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
+    new_tape = RawTape(undef, length(old_tape))
+    for (i, x) in enumerate(old_tape)
         new_ins = copy(x, on_tape, roster)
-        new_data[i] = new_ins
+        new_tape[i] = new_ins
     end
 
-    init_ins = Instruction(args_initializer(new_data[2]), (),
+    init_ins = Instruction(args_initializer(new_tape[2]), tuple(new_tape[2].args[2:end]...),
                            Box{Any}(nothing), on_tape)
-    new_data[1] = init_ins
-    return new_data
+    new_tape[1] = init_ins
+    return new_tape
 end
 
 function Base.copy(tf::TapedFunction)
