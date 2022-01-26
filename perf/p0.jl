@@ -30,8 +30,8 @@ args = m.evaluator[2:end];
 t = @btime  Libtask.CTask(f, args...)
 # schedule(t.task) # work fine!
 # @show Libtask.result(t.tf)
-@show "Step in a tape..."
-@btime Libtask.step_in(t.tf, args)
+@show "Run a tape..."
+@btime t.tf(args...)
 
 # Case 2: SMC sampler
 
@@ -43,5 +43,5 @@ m = Turing.Core.TracedModel(gdemo(1.5, 2.), Sampler(SMC(50)), VarInfo());
 t = @btime Libtask.CTask(m.evaluator[1], m.evaluator[2:end]...);
 # schedule(t.task)
 # @show Libtask.result(t.tf.tape)
-@show "Step in a tape..."
-@btime Libtask.step_in(t.tf, m.evaluator[2:end])
+@show "Run a tape..."
+@btime t.tf(m.evaluator[2:end]...)
