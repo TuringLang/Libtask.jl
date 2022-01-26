@@ -19,19 +19,6 @@ end
 const TRCache = LRU{Any, Any}(maxsize=10)
 
 function TapedTask(tf::TapedFunction, args...)
-    tf.owner !== nothing && error("TapedFunction is owned by another task.")
-    if isempty(tf.tape)
-        cache_key = (tf.func, typeof.(args)...)
-        if haskey(TRCache, cache_key)
-            ir, tape = TRCache[cache_key]
-            # Here we don't need change the initial arguments of the tape,
-            # it will be set when we `step_in` to the tape.
-            reset!(tf, ir, copy(tape, tf, Dict{UInt64, Any}()))
-        else
-            init!(tf, args)
-            TRCache[cache_key] = (tf.ir, tf.tape)
-        end
-    end
     produce_ch = Channel()
     consume_ch = Channel{Int}()
     task = @task try
@@ -59,9 +46,21 @@ function TapedTask(tf::TapedFunction, args...)
     return t
 end
 
-# Issue: evaluating model without a trace, see
-# https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
-TapedTask(f, args...) = TapedTask(TapedFunction(f, arity=length(args)), args...)
+function TapedTask(f, args...)
+    cache_key = (f, typeof.(args)...)
+    if haskey(TRCache, cache_key)
+        cached_tf = TRCache[cache_key]
+        # Here we don't need change the initial arguments of the tape,
+        # it will be set when we `step_in` to the tape.
+        tf = copy(cached_tf)
+        tf.counter = 1
+    else
+        tf = TapedFunction(f, args...)
+        TRCache[cache_key] = tf
+    end
+    TapedTask(tf, args...)
+end
+
 TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
 func(t::TapedTask) = t.tf.func
 
@@ -201,6 +200,7 @@ end
 copy_box(o, roster::Dict{UInt64, Any}) = o
 
 function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    # func may also be a boxed variable
     func = copy_box(x.func, roster)
     input = map(x.input) do ob
         copy_box(ob, roster)
@@ -213,7 +213,7 @@ function Base.copy(x::BlockInstruction, on_tape::Taped, roster::Dict{UInt64, Any
     args = map(x.args) do ob
         copy_box(ob, roster)
     end
-    BlockInstruction(x.id, args, on_tape)
+    BlockInstruction(x.block_id, args, on_tape)
 end
 
 function Base.copy(x::BranchInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
@@ -222,7 +222,7 @@ function Base.copy(x::BranchInstruction, on_tape::Taped, roster::Dict{UInt64, An
         copy_box(ob, roster)
     end
 
-    BranchInstruction(cond, x.block, args, on_tape)
+    BranchInstruction(cond, x.block_id, args, on_tape)
 end
 
 function Base.copy(x::ReturnInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
@@ -244,7 +244,7 @@ function Base.copy(old_data::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
 end
 
 function Base.copy(tf::TapedFunction)
-    new_tf = TapedFunction(tf.func; arity=tf.arity)
+    new_tf = TapedFunction(tf.func; init=false)
     new_tf.block_map = tf.block_map
     new_tf.ir = tf.ir
     roster = Dict{UInt64, Any}()

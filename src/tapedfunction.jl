@@ -11,28 +11,28 @@ const RawTape = Vector{AbstractInstruction}
 
 An `Instruction` stands for a function call
 """
-mutable struct Instruction{F, T<:Taped} <: AbstractInstruction
+mutable struct Instruction{F, TO, T<:Taped} <: AbstractInstruction
     func::F
     input::Tuple
-    output::Box
+    output::Box{TO}
     tape::T
 end
 
-mutable struct BlockInstruction{T<:Taped} <: AbstractInstruction
-    id::Int
-    args::Vector
+mutable struct BlockInstruction{TA, T<:Taped} <: AbstractInstruction
+    block_id::Int
+    args::Vector{TA}
     tape::T
 end
 
-mutable struct BranchInstruction{T<:Taped} <: AbstractInstruction
-    condition::Union{Bool, Box{Any}, Nothing}
-    block::Int
-    args::Vector
+mutable struct BranchInstruction{TA, T<:Taped} <: AbstractInstruction
+    condition::Union{Bool, Box{Any}}
+    block_id::Int
+    args::Vector{TA}
     tape::T
 end
 
-mutable struct ReturnInstruction{T<:Taped} <: AbstractInstruction
-    arg
+mutable struct ReturnInstruction{TA, T<:Taped} <: AbstractInstruction
+    arg::TA
     tape::T
 end
 
@@ -45,15 +45,23 @@ mutable struct TapedFunction{F} <: Taped
     block_map::Dict{Int, Int}
     retval
     owner
-    function TapedFunction(f::F; arity::Int=-1) where {F}
-        new{F}(f, arity, nothing, RawTape(), 1,
-               Dict{Int, Int}(), nothing, nothing)
+    function TapedFunction(f::F, args...; init=true) where {F}
+        tf = new{F}(f, length(args), nothing, RawTape(), 1,
+                    Dict{Int, Int}(), nothing, nothing)
+        if init
+            ir = IRTools.@code_ir tf.func(args...)
+            tf.ir = ir
+            translate!(tf, ir)
+        end
+        return tf
     end
 end
 
 ## methods for Box
 val(x) = x
 val(x::Box) = x.val
+val(x::GlobalRef) = getproperty(x.mod, x.name)
+val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
 box(x) = Box(x)
 box(x::Box) = x
@@ -65,32 +73,7 @@ MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
 
 result(t::TapedFunction) = t.retval
 
-function init!(tf::TapedFunction, args)
-    if isempty(tf.tape)
-        ir = IRTools.@code_ir tf.func(args...)
-        tf.ir = ir
-        translate!(tf, ir)
-    end
-    return tf
-end
-
-function reset!(tf::TapedFunction, ir::IRTools.IR, tape::RawTape)
-    tf.ir = ir
-    tf.tape = tape
-    blk_map = Dict{Int, Int}()
-
-    for (i, ins) in enumerate(tf.tape)
-        isa(ins, BlockInstruction) || continue
-        blk_map[ins.id] = i
-    end
-
-    tf.block_map = blk_map
-    tf.counter = 1
-    return tf
-end
-
 function (tf::TapedFunction)(args...)
-    init!(tf, args)
     # run the raw tape
     if length(args) > 0
         input = map(box, args)
@@ -146,7 +129,7 @@ function Base.show(io::IO, instruction::Instruction)
 end
 
 function Base.show(io::IO, instruction::BlockInstruction)
-    id = instruction.id
+    id = instruction.block_id
     tape = instruction.tape
     println(io, "BlockInstruction($(id)->$(map(val, instruction.args)), tape=$(objectid(tape)))")
 end
@@ -189,7 +172,7 @@ end
 
 function (instr::BranchInstruction)()
     if instr.condition === nothing || !val(instr.condition) # unless
-        target = instr.block
+        target = instr.block_id
         target_idx = instr.tape.block_map[target]
         blk_ins = instr.tape[target_idx]
         @assert isa(blk_ins, BlockInstruction)
@@ -211,8 +194,6 @@ end
 ## internal functions
 
 arg_boxer(var, boxes) = var
-arg_boxer(var::GlobalRef, boxes) = eval(var)
-arg_boxer(var::QuoteNode, boxes) = eval(var)
 arg_boxer(var::IRTools.Variable, boxes) = get!(boxes, var, Box{Any}(nothing))
 function args_initializer(ins::BlockInstruction)
     return (args...) -> begin
@@ -247,25 +228,24 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 args = map(_box, st.expr.args)
                 ins = Instruction(_new, args |> Tuple, _box(x), taped)
                 push!(tape, ins)
+            elseif isa(st.expr, GlobalRef)
+                v = eval(st.expr)
+                ins = Instruction(val, (st.expr,), _box(x), taped)
+                push!(tape, ins)
             else
-                if isa(st.expr, Symbol) || isa(st.expr, GlobalRef)
-                    v = eval(st.expr)
-                    ins = Instruction(identity, (v,), _box(x), taped)
-                    push!(tape, ins)
-                else
-                    @warn "Unknown IR code: " st
-                end
+                @warn "Unknown IR code: " st
             end
         end
 
         # branches (including `return`)
         for br in IRTools.branches(blk)
-            if br.condition === nothing && br.block == 0
+            if br.condition === nothing && br.block == 0 # a return
                 ins = ReturnInstruction(_box(br.args[1]), taped)
                 push!(tape, ins)
             else
+                cond = br.condition === nothing ? false : _box(br.condition)
                 ins = BranchInstruction(
-                    _box(br.condition), br.block, map(_box, br.args), taped)
+                    cond, br.block, map(_box, br.args), taped)
                 push!(tape, ins)
             end
         end
