@@ -34,6 +34,7 @@ end
 val(x) = x
 val(x::Box) = x.val
 val(x::TapedFunction) = x.func
+val(x::GlobalRef) = getproperty(x.mod, x.name)
 box(x) = Box(x)
 box(x::Box) = x
 Base.show(io::IO, box::Box) = print(io, "Box(", box.val, ")")
@@ -247,6 +248,8 @@ function intercept(ir; recorder=:track!)
         elseif Meta.isexpr(st.expr, :new)
             args = st.expr.args
             ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, _new, args...)
+        elseif isa(st.expr, GlobalRef)
+            ir[x] = IRTools.xcall(@__MODULE__, recorder, tape, val, st.expr)
         else
             @warn "Unknown IR code: " st
         end
