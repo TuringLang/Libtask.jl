@@ -63,6 +63,7 @@ val(x::Box) = x.val
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
+val(x::GlobalRef) = getproperty(x.mod, x.name)
 box(x) = Box(x)
 box(x::Box) = x
 Base.show(io::IO, box::Box) = print(io, "Box(", box.val, ")")
