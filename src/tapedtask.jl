@@ -16,8 +16,6 @@ struct TapedTask
     end
 end
 
-const TRCache = LRU{Any, Any}(maxsize=10)
-
 function TapedTask(tf::TapedFunction, args...)
     produce_ch = Channel()
     consume_ch = Channel{Int}()
@@ -57,17 +55,7 @@ end
 # NOTE: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
 function TapedTask(f, args...)
-    cache_key = (f, typeof.(args)...)
-    if haskey(TRCache, cache_key)
-        cached_tf = TRCache[cache_key]
-        # Here we don't need change the initial arguments of the tape,
-        # it will be set when we `step_in` to the tape.
-        tf = copy(cached_tf)
-        tf.counter = 1
-    else
-        tf = TapedFunction(f, args...)
-        TRCache[cache_key] = tf
-    end
+    tf = TapedFunction(f, args...; cache=true, init=true)
     TapedTask(tf, args...)
 end
 

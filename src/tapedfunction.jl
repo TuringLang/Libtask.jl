@@ -36,6 +36,8 @@ mutable struct ReturnInstruction{TA, T<:Taped} <: AbstractInstruction
     tape::T
 end
 
+const TRCache = LRU{Any, Any}(maxsize=10)
+
 mutable struct TapedFunction{F} <: Taped
     func::F # maybe a function, a constructor, or a callable obejct
     arity::Int
@@ -46,19 +48,30 @@ mutable struct TapedFunction{F} <: Taped
     block_map::Dict{Int, Int}
     retval
     owner
-    function TapedFunction(f::F, args...; init=true) where {F}
+
+    function TapedFunction(f::F, args...; cache=false, init=true) where {F}
+        cache_key = (f, typeof.(args)...)
+
+        if cache && haskey(TRCache, cache_key) # use cache
+            cached_tf = TRCache[cache_key]
+            tf = copy(cached_tf)
+            tf.counter = 1
+            return tf
+        end
+
         tf = new{F}() # leave some fields to be undef
         tf.func = f
         tf.tape = RawTape()
         tf.counter = 1
         tf.block_map = Dict{Int, Int}()
 
-        # init
-        if init
+        if init # init
             tf.arity = length(args)
             ir = IRTools.@code_ir tf.func(args...)
             tf.ir = ir
             translate!(tf, ir)
+            # set cache
+            TRCache[cache_key] = tf
         end
         return tf
     end
@@ -337,7 +350,8 @@ function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
 end
 
 function Base.copy(tf::TapedFunction)
-    new_tf = TapedFunction(tf.func; init=false)
+    # create a new uninitialized TapedFunction
+    new_tf = TapedFunction(tf.func; cache=false, init=false)
     new_tf.block_map = tf.block_map
     new_tf.ir = tf.ir
     roster = Dict{UInt64, Any}()
