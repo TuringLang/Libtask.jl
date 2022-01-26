@@ -80,16 +80,17 @@ MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
 
 result(t::TapedFunction) = t.retval
 
-function (tf::TapedFunction)(args...)
+function (tf::TapedFunction)(args...; callback=nothing)
     # run the raw tape
-    if length(args) > 0
+    if(tf.counter <= 1 && length(args) > 0)
         input = map(Box{Any}, args)
         tf.tape[1].input = input
     end
-    tf.counter = 1
+
     while true
         ins = tf[tf.counter]
         ins()
+        callback !== nothing && callback()
         isa(ins, ReturnInstruction) && break
     end
     return result(tf)
@@ -261,4 +262,87 @@ function translate!(taped::Taped, ir::IRTools.IR)
     init_ins = Instruction(args_initializer(tape[1]), tuple(tape[1].args[2:end]...),
                            Box{Any}(nothing), taped)
     insert!(tape, 1, init_ins)
+end
+
+
+## copy Box, RawTape, and TapedFunction
+
+"""
+    tape_copy(x)
+
+Function `tape_copy` is used to copy data while copying a TapedTask, the
+default behavior is: 1. for `Array` and `Dict`, we do `deepcopy`; 2. for
+other data types, we do not copy and share the data between tasks, i.e.,
+`tape_copy(x) = x`. If one wants some kinds of data to be copied, or
+deeply copied, one can add a method to this function.
+"""
+function tape_copy end
+tape_copy(x) = x
+# tape_copy(x::Array) = deepcopy(x)
+# tape_copy(x::Dict) = deepcopy(x)
+
+function copy_box(old_box::Box{T}, roster::Dict{UInt64, Any}) where T
+    oid = objectid(old_box)
+    haskey(roster, oid) && (return roster[oid])
+
+    # We don't know the type of box.val now, so we use Box{Any}
+    new_box = Box{T}(tape_copy(old_box.val))
+    roster[oid] = new_box
+    return new_box
+end
+copy_box(o, roster::Dict{UInt64, Any}) = o
+
+function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    # func may also be a boxed variable
+    func = copy_box(x.func, roster)
+    input = map(x.input) do ob
+        copy_box(ob, roster)
+    end
+    output = copy_box(x.output, roster)
+    Instruction(func, input, output, on_tape)
+end
+
+function Base.copy(x::BlockInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    args = map(x.args) do ob
+        copy_box(ob, roster)
+    end
+    BlockInstruction(x.block_id, args, on_tape)
+end
+
+function Base.copy(x::BranchInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    cond = copy_box(x.condition, roster)
+    args = map(x.args) do ob
+        copy_box(ob, roster)
+    end
+
+    BranchInstruction(cond, x.block_id, args, on_tape)
+end
+
+function Base.copy(x::ReturnInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+    arg = copy_box(x.arg, roster)
+    ReturnInstruction(arg, on_tape)
+end
+
+function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
+    new_tape = RawTape(undef, length(old_tape))
+    for (i, x) in enumerate(old_tape)
+        new_ins = copy(x, on_tape, roster)
+        new_tape[i] = new_ins
+    end
+
+    init_ins = Instruction(args_initializer(new_tape[2]), tuple(new_tape[2].args[2:end]...),
+                           Box{Any}(nothing), on_tape)
+    new_tape[1] = init_ins
+    return new_tape
+end
+
+function Base.copy(tf::TapedFunction)
+    new_tf = TapedFunction(tf.func; init=false)
+    new_tf.block_map = tf.block_map
+    new_tf.ir = tf.ir
+    roster = Dict{UInt64, Any}()
+    new_tape = copy(tf.tape, new_tf, roster)
+    new_tf.tape = new_tape
+    new_tf.counter = tf.counter
+    return new_tf
 end
