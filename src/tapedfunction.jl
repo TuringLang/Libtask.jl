@@ -37,18 +37,20 @@ mutable struct ReturnInstruction{TA, T<:Taped} <: AbstractInstruction
 end
 
 mutable struct TapedFunction{F} <: Taped
-    func::F # maybe a function or a callable obejct
+    func::F # maybe a function, a constructor, or a callable obejct
     arity::Int
     ir::Union{Nothing, IRTools.IR}
     tape::RawTape
     counter::Int
+    # map from BlockInstruction.block_id to its index on tape
     block_map::Dict{Int, Int}
     retval
     owner
     function TapedFunction(f::F, args...; init=true) where {F}
-        tf = new{F}(f, length(args), nothing, RawTape(), 1,
+        tf = new{F}(f, -1, nothing, RawTape(), 1,
                     Dict{Int, Int}(), nothing, nothing)
         if init
+            tf.arity = length(args)
             ir = IRTools.@code_ir tf.func(args...)
             tf.ir = ir
             translate!(tf, ir)
