@@ -232,7 +232,6 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 ins = Instruction(_new, args |> Tuple, _box(x), taped)
                 push!(tape, ins)
             elseif isa(st.expr, GlobalRef)
-                v = eval(st.expr)
                 ins = Instruction(val, (st.expr,), _box(x), taped)
                 push!(tape, ins)
             else
