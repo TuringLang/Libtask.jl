@@ -123,7 +123,7 @@
         function f()
             t = TArray(Int, 1)
             t[1] = 0
-            for _ in 1:10
+            while true
                 produce(t[1])
                 t[1]
                 t[1] = 1 + t[1]

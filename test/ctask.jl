@@ -3,7 +3,7 @@
     @testset "stack allocated objects" begin
         function f()
             t = 0
-            while t < 4
+            while true
                 produce(t)
                 t = 1 + t
             end
@@ -23,7 +23,7 @@
     @testset "heap allocated objects" begin
         function f()
             t = [0 1 2]
-            for _ in 1:10
+            while true
                 produce(t[1])
                 t[1] = 1 + t[1]
             end
@@ -44,7 +44,7 @@
     @testset "iteration" begin
         function f()
             t = 1
-            for _ in 1:12
+            while true
                 produce(t)
                 t = 1 + t
             end
@@ -73,7 +73,7 @@
         @testset "method error" begin
             function f()
                 t = 0
-                for _ in 1:3
+                while true
                     t[3] = 1
                     produce(t)
                     t = t + 1
@@ -94,7 +94,7 @@
         @testset "error test" begin
             function f()
                 x = 1
-                for _ in 1:3
+                while true
                     error("error test")
                     produce(x)
                     x += 1
@@ -115,7 +115,7 @@
         @testset "OutOfBounds Test Before" begin
             function f()
                 x = zeros(2)
-                for _ in 1:3
+                while true
                     x[1] = 1
                     x[2] = 2
                     x[3] = 3
@@ -137,7 +137,7 @@
         @testset "OutOfBounds Test After `produce`" begin
             function f()
                 x = zeros(2)
-                for _ in 1:3
+                while true
                     x[1] = 1
                     x[2] = 2
                     produce(x[2])
@@ -160,7 +160,7 @@
         @testset "OutOfBounds Test After `copy`" begin
             function f()
                 x = zeros(2)
-                for _ in 1:3
+                while true
                     x[1] = 1
                     x[2] = 2
                     produce(x[2])
