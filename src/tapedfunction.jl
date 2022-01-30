@@ -291,8 +291,8 @@ deeply copied, one can add a method to this function.
 """
 function tape_copy end
 tape_copy(x) = x
-# tape_copy(x::Array) = deepcopy(x)
-# tape_copy(x::Dict) = deepcopy(x)
+tape_copy(x::Array) = deepcopy(x)
+tape_copy(x::Dict) = deepcopy(x)
 
 function copy_box(old_box::Box{T}, roster::Dict{UInt64, Any}) where T
     oid = objectid(old_box)
