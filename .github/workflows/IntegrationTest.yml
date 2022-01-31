@@ -15,7 +15,7 @@ jobs:
       matrix:
         package:
           - {user: TuringLang, repo: AdvancedPS.jl, ref: releases}
-          - {user: TuringLang, repo: Turing.jl, ref: libtask-integration}
+          - {user: TuringLang, repo: Turing.jl, ref: master}
 
     steps:
       - uses: actions/checkout@v2
