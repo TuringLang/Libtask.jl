@@ -96,8 +96,7 @@ processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
 
 ## Disclaimer
 
-- This feature is still experimental and should only be used with caution:
-  - Dynamic control flow is not supported yet.
+- This feature is still experimental and should only be used with caution.
 - From v0.6.0, Libtask is implemented by recording all the computing
   to a tape and copying that tape. Before that version, it is based on
   a tricky hack on the Julia internals. You can check the commit
