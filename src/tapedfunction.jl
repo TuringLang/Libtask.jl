@@ -291,6 +291,9 @@ deeply copied, one can add a method to this function.
 """
 function tape_copy end
 tape_copy(x) = x
+# Core.Box is used as closure captured variable container, so we should tape_copy its contents
+tape_copy(x::Core.Box) = Core.Box(tape_copy(x.contents))
+# ?? should we deepcopy Array and Dict by default?
 # tape_copy(x::Array) = deepcopy(x)
 # tape_copy(x::Dict) = deepcopy(x)
 
