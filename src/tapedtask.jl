@@ -1,6 +1,6 @@
 struct TapedTaskException
     exc::Exception
-    backtrace
+    backtrace::Vector{Any}
 end
 
 struct TapedTask
