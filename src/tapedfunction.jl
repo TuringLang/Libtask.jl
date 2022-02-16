@@ -36,10 +36,8 @@ mutable struct ReturnInstruction{TA, T<:Taped} <: AbstractInstruction
     tape::T
 end
 
-const TRCache = LRU{Any, Any}(maxsize=10)
-
 mutable struct TapedFunction{F} <: Taped
-    func::F # maybe a function, a constructor, or a callable obejct
+    func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::IRTools.IR
     tape::RawTape
@@ -53,7 +51,7 @@ mutable struct TapedFunction{F} <: Taped
         cache_key = (f, typeof.(args)...)
 
         if cache && haskey(TRCache, cache_key) # use cache
-            cached_tf = TRCache[cache_key]
+            cached_tf = TRCache[cache_key]::TapedFunction{F}
             tf = copy(cached_tf)
             tf.counter = 1
             return tf
@@ -76,6 +74,8 @@ mutable struct TapedFunction{F} <: Taped
         return tf
     end
 end
+
+const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
 
 ## methods for Box
 val(x) = x

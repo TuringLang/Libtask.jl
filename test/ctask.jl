@@ -17,6 +17,8 @@
         @test consume(a) == 3
         @test consume(ctask) == 2
         @test consume(ctask) == 3
+
+        @inferred Libtask.TapedFunction(f)
     end
 
     # Test case 2: heap allocated objects are shallowly copied.
