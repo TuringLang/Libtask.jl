@@ -179,7 +179,7 @@ end
 Return a new instance of `T` with `args` even when there is no inner constructor for these args.
 Source: https://discourse.julialang.org/t/create-a-struct-with-uninitialized-fields/6967/5
 """
-@generated function __new__(T, args)::T
+@generated function __new__(T, args)
     return Expr(:splatnew, :T, :args)
 end
 
