@@ -173,12 +173,25 @@ function (instr::Instruction{F})() where F
     end
 end
 
+"""
+    __new__(T, args)
+
+Return a new instance of `T` with `args` even when there is no inner constructor for these args.
+Source: https://discourse.julialang.org/t/create-a-struct-with-uninitialized-fields/6967/5
+"""
+@generated function __new__(T, args)
+    return Expr(:splatnew, :T, :args)
+end
+
 function _new end
 function (instr::Instruction{typeof(_new)})()
     # catch run-time exceptions / errors.
     try
-        expr = Expr(:new, map(val, instr.input)...)
-        output = eval(expr)
+        input = map(val, instr.input)
+        T = input[1]
+        args = input[2:end]
+        output = __new__(T, args)
+
         instr.output.val = output
         instr.tape.counter += 1
     catch e
