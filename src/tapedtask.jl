@@ -16,10 +16,8 @@ struct TapedTask
     end
 end
 
-function TapedTask(tf::TapedFunction, args...)
-    produce_ch = Channel()
-    consume_ch = Channel{Int}()
-    task = @task try
+function wrap_task(tf, produce_ch, consume_ch, args...)
+    try
         producer = () -> begin
             ttask = current_task().storage[:tapedtask]
             if length(ttask.produced_val) > 0
@@ -45,6 +43,12 @@ function TapedTask(tf::TapedFunction, args...)
         close(produce_ch)
         close(consume_ch)
     end
+end
+
+function TapedTask(tf::TapedFunction, args...)
+    produce_ch = Channel()
+    consume_ch = Channel{Int}()
+    task = @task wrap_task(tf, produce_ch, consume_ch, args...)
     t = TapedTask(task, tf, produce_ch, consume_ch)
     task.storage === nothing && (task.storage = IdDict())
     task.storage[:tapedtask] = t
