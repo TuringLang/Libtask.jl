@@ -103,8 +103,7 @@ end
     haskey(ct.storage, :tapedtask) || return false
     # check if we are recording a tape
     ttask = ct.storage[:tapedtask]::TapedTask
-    isempty(ttask.tf.tape) && return false
-    return true
+    return !isempty(ttask.tf.tape)
 end
 
 function produce(val)
