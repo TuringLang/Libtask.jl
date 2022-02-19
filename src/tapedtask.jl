@@ -102,13 +102,14 @@ end
     ct.storage === nothing && return false
     haskey(ct.storage, :tapedtask) || return false
     # check if we are recording a tape
-    isempty(ct.storage[:tapedtask].tf.tape) && return false
+    ttask = ct.storage[:tapedtask]::TapedTask
+    isempty(ttask.tf.tape) && return false
     return true
 end
 
 function produce(val)
     is_in_tapedtask() || return nothing
-    ttask = current_task().storage[:tapedtask]
+    ttask = current_task().storage[:tapedtask]::TapedTask
     length(ttask.produced_val) > 1 &&
         error("There is a produced value which is not consumed.")
     push!(ttask.produced_val, val)
@@ -159,7 +160,8 @@ Base.IteratorEltype(::Type{TapedTask}) = Base.EltypeUnknown()
 function Base.copy(t::TapedTask)
     tf = copy(t.tf)
     new_t = TapedTask(tf)
-    new_t.task.storage = copy(t.task.storage)
+    storage = t.task.storage::IdDict{Any,Any}
+    new_t.task.storage = copy(storage)
     new_t.task.storage[:tapedtask] = new_t
     return new_t
 end
