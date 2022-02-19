@@ -103,7 +103,7 @@ function (tf::TapedFunction)(args...; callback=nothing)
     while true
         ins = tf[tf.counter]
         ins()
-        callback !== nothing && callback()
+        @time callback !== nothing && callback()
         isa(ins, ReturnInstruction) && break
     end
     return result(tf)

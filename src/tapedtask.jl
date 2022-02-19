@@ -16,16 +16,18 @@ struct TapedTask
     end
 end
 
+function producer()
+    ttask = current_task().storage[:tapedtask]::TapedTask
+    if length(ttask.produced_val) > 0
+        val = pop!(ttask.produced_val)
+        put!(ttask.produce_ch, val)
+        take!(ttask.consume_ch) # wait for next consumer
+    end
+    return nothing
+end
+
 function wrap_task(tf, produce_ch, consume_ch, args...)
     try
-        producer = () -> begin
-            ttask = current_task().storage[:tapedtask]
-            if length(ttask.produced_val) > 0
-                val = pop!(ttask.produced_val)
-                put!(ttask.produce_ch, val)
-                take!(ttask.consume_ch) # wait for next consumer
-            end
-        end
         tf(args...; callback=producer)
     catch e
         bt = catch_backtrace()
