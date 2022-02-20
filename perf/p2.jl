@@ -56,7 +56,7 @@ m = Turing.Core.TracedModel(model_fun, Sampler(SMC(50)), VarInfo())
 f = m.evaluator[1]
 args = m.evaluator[2:end]
 
-t = Libtask.CTask(f, args...)
+t = TapedTask(f, args...)
 
 t.tf(args...)
 

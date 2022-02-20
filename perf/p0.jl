@@ -1,5 +1,3 @@
-# ]add  Turing#hg/new-libtask2
-
 using Libtask
 using Turing, DynamicPPL, AdvancedPS
 using BenchmarkTools
@@ -26,8 +24,8 @@ args = m.evaluator[2:end];
 @btime f(args...)
 # (2.0, VarInfo (2 variables (μ, σ), dimension 2; logp: -6.162))
 
-@show "CTask construction..."
-t = @btime  Libtask.CTask(f, args...)
+@show "TapedTask construction..."
+t = @btime TapedTask(f, args...)
 # schedule(t.task) # work fine!
 # @show Libtask.result(t.tf)
 @show "Run a tape..."
@@ -39,8 +37,8 @@ m = Turing.Core.TracedModel(gdemo(1.5, 2.), Sampler(SMC(50)), VarInfo());
 @show "Directly call..."
 @btime m.evaluator[1](m.evaluator[2:end]...)
 
-@show "CTask construction..."
-t = @btime Libtask.CTask(m.evaluator[1], m.evaluator[2:end]...);
+@show "TapedTask construction..."
+t = @btime TapedTask(m.evaluator[1], m.evaluator[2:end]...);
 # schedule(t.task)
 # @show Libtask.result(t.tf.tape)
 @show "Run a tape..."
