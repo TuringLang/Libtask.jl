@@ -16,6 +16,6 @@ include("tapedtask.jl")
 include("tarray.jl")
 include("tref.jl")
 
-CTask = TapedTask
+const CTask = TapedTask
 
 end
