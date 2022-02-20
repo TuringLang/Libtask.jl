@@ -3,16 +3,20 @@ struct TapedTaskException
     backtrace::Vector{Any}
 end
 
-struct TapedTask
+struct TapedTask{F}
     task::Task
-    tf::TapedFunction
+    tf::TapedFunction{F}
     produce_ch::Channel{Any}
     consume_ch::Channel{Int}
     produced_val::Vector{Any}
 
     function TapedTask(
-        t::Task, tf::TapedFunction, pch::Channel{Any}, cch::Channel{Int})
-        new(t, tf, pch, cch, Any[])
+        t::Task,
+        tf::TapedFunction{F},
+        produce_ch::Channel{Any},
+        consume_ch::Channel{Int}
+    ) where {F}
+        new{F}(t, tf, produce_ch, consume_ch, Any[])
     end
 end
 
@@ -150,8 +154,8 @@ function Base.iterate(t::TapedTask, state=nothing)
         nothing
     end
 end
-Base.IteratorSize(::Type{TapedTask}) = Base.SizeUnknown()
-Base.IteratorEltype(::Type{TapedTask}) = Base.EltypeUnknown()
+Base.IteratorSize(::Type{<:TapedTask}) = Base.SizeUnknown()
+Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 
 # copy the task

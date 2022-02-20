@@ -2,10 +2,10 @@ using Libtask
 using Test
 
 include("tf.jl")
-include("ctask.jl")
+include("tapedtask.jl")
 include("tarray.jl")
 include("tref.jl")
 
-if get(ENV, "BENCHMARK", nothing) != nothing
+if haskey(ENV, "BENCHMARK")
     include("benchmarks.jl")
 end

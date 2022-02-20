@@ -19,17 +19,17 @@ function f()
   end
 end
 
-ctask = CTask(f)
+ttask = TapedTask(f)
 
-@show consume(ctask) # 0
-@show consume(ctask) # 1
+@show consume(ttask) # 0
+@show consume(ttask) # 1
 
-a = copy(ctask)
+a = copy(ttask)
 @show consume(a) # 2
 @show consume(a) # 3
 
-@show consume(ctask) # 2
-@show consume(ctask) # 3
+@show consume(ttask) # 2
+@show consume(ttask) # 3
 ```
 
 Heap allocated objects are shallow copied:
@@ -45,17 +45,17 @@ function f()
   end
 end
 
-ctask = CTask(f)
+ttask = TapedTask(f)
 
-@show consume(ctask) # 0
-@show consume(ctask) # 1
+@show consume(ttask) # 0
+@show consume(ttask) # 1
 
 a = copy(t)
 @show consume(a) # 2
 @show consume(a) # 3
 
-@show consume(ctask) # 4
-@show consume(ctask) # 5
+@show consume(ttask) # 4
+@show consume(ttask) # 5
 ```
 
 In constrast to standard arrays, which are only shallow copied during
@@ -74,17 +74,17 @@ function f()
   end
 end
 
-ctask = CTask(f)
+ttask = TapedTask(f)
 
-@show consume(ctask) # 0
-@show consume(ctask) # 1
+@show consume(ttask) # 0
+@show consume(ttask) # 1
 
-a = copy(ctask)
+a = copy(ttask)
 @show consume(a) # 2
 @show consume(a) # 3
 
-@show consume(ctask) # 2
-@show consume(ctask) # 3
+@show consume(ttask) # 2
+@show consume(ttask) # 3
 ```
 
 Note: The [Turing](https://github.com/TuringLang/Turing.jl)
