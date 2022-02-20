@@ -20,16 +20,18 @@ struct TapedTask{F}
     end
 end
 
+function producer()
+    ttask = current_task().storage[:tapedtask]::TapedTask
+    if length(ttask.produced_val) > 0
+        val = pop!(ttask.produced_val)
+        put!(ttask.produce_ch, val)
+        take!(ttask.consume_ch) # wait for next consumer
+    end
+    return nothing
+end
+
 function wrap_task(tf, produce_ch, consume_ch, args...)
     try
-        producer = () -> begin
-            ttask = current_task().storage[:tapedtask]
-            if length(ttask.produced_val) > 0
-                val = pop!(ttask.produced_val)
-                put!(ttask.produce_ch, val)
-                take!(ttask.consume_ch) # wait for next consumer
-            end
-        end
         tf(args...; callback=producer)
     catch e
         bt = catch_backtrace()
@@ -104,13 +106,13 @@ end
     ct.storage === nothing && return false
     haskey(ct.storage, :tapedtask) || return false
     # check if we are recording a tape
-    isempty(ct.storage[:tapedtask].tf.tape) && return false
-    return true
+    ttask = ct.storage[:tapedtask]::TapedTask
+    return !isempty(ttask.tf.tape)
 end
 
 function produce(val)
     is_in_tapedtask() || return nothing
-    ttask = current_task().storage[:tapedtask]
+    ttask = current_task().storage[:tapedtask]::TapedTask
     length(ttask.produced_val) > 1 &&
         error("There is a produced value which is not consumed.")
     push!(ttask.produced_val, val)
@@ -161,7 +163,8 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 function Base.copy(t::TapedTask)
     tf = copy(t.tf)
     new_t = TapedTask(tf)
-    new_t.task.storage = copy(t.task.storage)
+    storage = t.task.storage::IdDict{Any,Any}
+    new_t.task.storage = copy(storage)
     new_t.task.storage[:tapedtask] = new_t
     return new_t
 end
