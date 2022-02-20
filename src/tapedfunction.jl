@@ -183,8 +183,7 @@ Source: https://discourse.julialang.org/t/create-a-struct-with-uninitialized-fie
     return Expr(:splatnew, :T, :args)
 end
 
-function _new end
-function (instr::Instruction{typeof(_new)})()
+function (instr::Instruction{typeof(__new__)})()
     # catch run-time exceptions / errors.
     try
         input = map(val, instr.input)
@@ -261,7 +260,7 @@ function translate!(taped::Taped, ir::IRTools.IR)
                 push!(tape, ins)
             elseif Meta.isexpr(st.expr, :new)
                 args = map(_box, st.expr.args)
-                ins = Instruction(_new, args |> Tuple, _box(x), taped)
+                ins = Instruction(__new__, args |> Tuple, _box(x), taped)
                 push!(tape, ins)
             elseif isa(st.expr, GlobalRef)
                 ins = Instruction(val, (st.expr,), _box(x), taped)
