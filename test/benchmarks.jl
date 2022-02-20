@@ -1,7 +1,6 @@
 using BenchmarkTools
 using Libtask
 
-
 macro rep(cnt, exp)
     blk =:(begin end)
     for _ in 1:eval(cnt)
@@ -47,10 +46,10 @@ function f()
 end
 
 @btime begin
-    ctask = CTask(f)
-    consume(ctask)
-    consume(ctask)
-    a = copy(ctask)
+    ttask = TapedTask(f)
+    consume(ttask)
+    consume(ttask)
+    a = copy(ttask)
     consume(a)
     consume(a)
 end

@@ -1,4 +1,4 @@
-@testset "ctask" begin
+@testset "tapedtask" begin
     # Test case 1: stack allocated objects are deep copied.
     @testset "stack allocated objects" begin
         function f()
@@ -9,14 +9,14 @@
             end
         end
 
-        ctask = CTask(f)
-        @test consume(ctask) == 0
-        @test consume(ctask) == 1
-        a = copy(ctask)
+        ttask = TapedTask(f)
+        @test consume(ttask) == 0
+        @test consume(ttask) == 1
+        a = copy(ttask)
         @test consume(a) == 2
         @test consume(a) == 3
-        @test consume(ctask) == 2
-        @test consume(ctask) == 3
+        @test consume(ttask) == 2
+        @test consume(ttask) == 3
 
         @inferred Libtask.TapedFunction(f)
     end
@@ -31,16 +31,16 @@
             end
         end
 
-        ctask = CTask(f)
-        @test consume(ctask) == 0
-        @test consume(ctask) == 1
-        a = copy(ctask)
+        ttask = TapedTask(f)
+        @test consume(ttask) == 0
+        @test consume(ttask) == 1
+        a = copy(ttask)
         @test consume(a) == 2
         @test consume(a) == 3
-        @test consume(ctask) == 4
-        @test consume(ctask) == 5
-        @test consume(ctask) == 6
-        @test consume(ctask) == 7
+        @test consume(ttask) == 4
+        @test consume(ttask) == 5
+        @test consume(ttask) == 6
+        @test consume(ttask) == 7
     end
 
     @testset "iteration" begin
@@ -52,20 +52,20 @@
             end
         end
 
-        ctask = CTask(f)
+        ttask = TapedTask(f)
 
-        next = iterate(ctask)
+        next = iterate(ttask)
         @test next === (1, nothing)
 
         val, state = next
-        next = iterate(ctask, state)
+        next = iterate(ttask, state)
         @test next === (2, nothing)
 
         val, state = next
-        next = iterate(ctask, state)
+        next = iterate(ttask, state)
         @test next === (3, nothing)
 
-        a = collect(Iterators.take(ctask, 7))
+        a = collect(Iterators.take(ttask, 7))
         @test eltype(a) === Int
         @test a == 4:10
     end
@@ -82,14 +82,14 @@
                 end
             end
 
-            ctask = CTask(f)
+            ttask = TapedTask(f)
             try
-                consume(ctask)
+                consume(ttask)
             catch ex
                 @test ex isa MethodError
             end
             if VERSION >= v"1.5"
-                @test ctask.task.exception isa MethodError
+                @test ttask.task.exception isa MethodError
             end
         end
 
@@ -103,14 +103,14 @@
                 end
             end
 
-            ctask = CTask(f)
+            ttask = TapedTask(f)
             try
-                consume(ctask)
+                consume(ttask)
             catch ex
                 @test ex isa ErrorException
             end
             if VERSION >= v"1.5"
-                @test ctask.task.exception isa ErrorException
+                @test ttask.task.exception isa ErrorException
             end
         end
 
@@ -125,14 +125,14 @@
                 end
             end
 
-            ctask = CTask(f)
+            ttask = TapedTask(f)
             try
-                consume(ctask)
+                consume(ttask)
             catch ex
                 @test ex isa BoundsError
             end
             if VERSION >= v"1.5"
-                @test ctask.task.exception isa BoundsError
+                @test ttask.task.exception isa BoundsError
             end
         end
 
@@ -147,15 +147,15 @@
                 end
             end
 
-            ctask = CTask(f)
-            @test consume(ctask) == 2
+            ttask = TapedTask(f)
+            @test consume(ttask) == 2
             try
-                consume(ctask)
+                consume(ttask)
             catch ex
                 @test ex isa BoundsError
             end
             if VERSION >= v"1.5"
-                @test ctask.task.exception isa BoundsError
+                @test ttask.task.exception isa BoundsError
             end
         end
 
@@ -170,17 +170,17 @@
                 end
             end
 
-            ctask = CTask(f)
-            @test consume(ctask) == 2
-            ctask2 = copy(ctask)
+            ttask = TapedTask(f)
+            @test consume(ttask) == 2
+            ttask2 = copy(ttask)
             try
-                consume(ctask2)
+                consume(ttask2)
             catch ex
                 @test ex isa BoundsError
             end
-            @test ctask.task.exception === nothing
+            @test ttask.task.exception === nothing
             if VERSION >= v"1.5"
-                @test ctask2.task.exception isa BoundsError
+                @test ttask2.task.exception isa BoundsError
             end
         end
     end

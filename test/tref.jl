@@ -11,7 +11,7 @@
             end
         end
 
-        ctask = CTask(f)
+        ctask = TapedTask(f)
 
         consume(ctask)
         consume(ctask)
@@ -36,7 +36,7 @@
             end
         end
 
-        ctask = CTask(f)
+        ctask = TapedTask(f)
 
         consume(ctask)
         consume(ctask)
