@@ -56,7 +56,7 @@ mutable struct TapedFunction{F} <: Taped
 
         if init # init
             tf.arity = length(args)
-            ir = code_inferred(tf.func, typeof.(args)...)
+            ir = code_inferred(tf.func, typeof(args))
             tf.ir = ir
             translate!(tf, ir)
             # set cache
@@ -74,11 +74,8 @@ val(x::Box) = x.val
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
-box(x::Box) = x
-box(x) = Box(gensym(), x)
-box(id::Symbol, x) = Box(id, x)
-box_any(x) = Box{Any}(gensym(), x)
-box_any(id::Symbol, x) = Box{Any}(id, x)
+Box(x) = Box(gensym(), x)
+Box{T}(x) where {T} = Box{T}(gensym(), x)
 Base.show(io::IO, box::Box) = print(io, "Box(", box.id, ", ", box.val, ")")
 
 ## methods for RawTape and Taped
@@ -90,7 +87,7 @@ result(t::TapedFunction) = t.retval
 function (tf::TapedFunction)(args...; callback=nothing)
     # run the raw tape
     if(tf.counter <= 1 && length(args) > 0)
-        input = map(box_any, args)
+        input = map(Box{Any}, args)
         tf.tape[1].input = input
     end
 
@@ -208,7 +205,7 @@ arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{Any}}) = arg_boxer(Symbol(
 arg_boxer(var::Core.SlotNumber, boxes::Dict{Symbol, Box{Any}}) =
     arg_boxer(Symbol("_$(var.id)"), boxes)
 arg_boxer(var::Symbol, boxes::Dict{Symbol, Box{Any}}) =
-    get!(boxes, var, box_any(var, nothing))
+    get!(boxes, var, Box{Any}(var, nothing))
 
 function _find_box(tape::RawTape, slot::Int)
     box_id = Symbol("_$(slot)")
@@ -219,9 +216,9 @@ function _find_box(tape::RawTape, slot::Int)
         end
         ins.output.id === box_id && return ins.output
     end
-    slot == 1 && return box_any(nothing) # func is not used
-    @error "None box found for slot" slot
+    return Box{Any}(nothing) # func or argument is not used
 end
+
 function args_initializer(taped::Taped)
     funcbox = _find_box(taped.tape, 1)
     argsbox = [_find_box(taped.tape, i + 1) for i in 1:taped.arity]
@@ -251,11 +248,11 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
             push!(tape, ins)
         elseif isa(line, Core.GotoIfNot)
             cond = _box(line.cond)
-            isa(cond, Bool) && (cond = box_any(cond)) # unify the condiftion type
+            isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
             ins = GotoInstruction(cond, line.dest + 1, taped)
             push!(tape, ins)
         elseif isa(line, Core.GotoNode)
-            cond = box_any(false) # unify the condiftion type
+            cond = Box{Any}(false) # unify the condiftion type
             ins = GotoInstruction(cond, line.label + 1, taped)
             push!(tape, ins)
         elseif isa(line, Core.ReturnNode)
@@ -298,8 +295,8 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
 
     init_ins = Instruction(
         args_initializer(taped),
-        tuple((box_any(nothing) for _ in 1:taped.arity)...),
-        box_any(nothing), taped)
+        tuple((Box{Any}(nothing) for _ in 1:taped.arity)...),
+        Box{Any}(nothing), taped)
     insert!(tape, 1, init_ins)
 end
 
@@ -362,8 +359,8 @@ function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
 
     init_ins = Instruction(
         args_initializer(on_tape),
-        tuple((box_any(nothing) for _ in 1:on_tape.arity)...),
-        box_any(nothing), on_tape)
+        tuple((Box{Any}(nothing) for _ in 1:on_tape.arity)...),
+        Box{Any}(nothing), on_tape)
     new_tape[1] = init_ins
     return new_tape
 end
