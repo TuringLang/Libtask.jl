@@ -1,4 +1,5 @@
 mutable struct Box{T}
+    id::Symbol
     val::T
 end
 
@@ -18,16 +19,9 @@ mutable struct Instruction{F, TI<:Tuple, TO, T<:Taped} <: AbstractInstruction
     tape::T
 end
 
-mutable struct BlockInstruction{TA, T<:Taped} <: AbstractInstruction
-    block_id::Int
-    args::Vector{TA}
-    tape::T
-end
-
-mutable struct BranchInstruction{TA, T<:Taped} <: AbstractInstruction
+mutable struct GotoInstruction{T<:Taped} <: AbstractInstruction
     condition::Box{Any}
-    block_id::Int
-    args::Vector{TA}
+    dest::Int
     tape::T
 end
 
@@ -39,11 +33,9 @@ end
 mutable struct TapedFunction{F} <: Taped
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
-    ir::IRTools.IR
+    ir::Core.CodeInfo
     tape::RawTape
     counter::Int
-    # map from BlockInstruction.block_id to its index on tape
-    block_map::Dict{Int, Int}
     retval
     owner
 
@@ -61,11 +53,10 @@ mutable struct TapedFunction{F} <: Taped
         tf.func = f
         tf.tape = RawTape()
         tf.counter = 1
-        tf.block_map = Dict{Int, Int}()
 
         if init # init
             tf.arity = length(args)
-            ir = IRTools.@code_ir tf.func(args...)
+            ir = code_inferred(tf.func, typeof.(args)...)
             tf.ir = ir
             translate!(tf, ir)
             # set cache
@@ -83,9 +74,12 @@ val(x::Box) = x.val
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
-box(x) = Box(x)
 box(x::Box) = x
-Base.show(io::IO, box::Box) = print(io, "Box(", box.val, ")")
+box(x) = Box(gensym(), x)
+box(id::Symbol, x) = Box(id, x)
+box_any(x) = Box{Any}(gensym(), x)
+box_any(id::Symbol, x) = Box{Any}(id, x)
+Base.show(io::IO, box::Box) = print(io, "Box(", box.id, ", ", box.val, ")")
 
 ## methods for RawTape and Taped
 MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
@@ -96,7 +90,7 @@ result(t::TapedFunction) = t.retval
 function (tf::TapedFunction)(args...; callback=nothing)
     # run the raw tape
     if(tf.counter <= 1 && length(args) > 0)
-        input = map(Box{Any}, args)
+        input = map(box_any, args)
         tf.tape[1].input = input
     end
 
@@ -149,15 +143,9 @@ function Base.show(io::IO, instruction::Instruction)
     println(io, "Instruction($(func)$(map(val, instruction.input)), tape=$(objectid(tape)))")
 end
 
-function Base.show(io::IO, instruction::BlockInstruction)
-    id = instruction.block_id
+function Base.show(io::IO, instruction::GotoInstruction)
     tape = instruction.tape
-    println(io, "BlockInstruction($(id)->$(map(val, instruction.args)), tape=$(objectid(tape)))")
-end
-
-function Base.show(io::IO, instruction::BranchInstruction)
-    tape = instruction.tape
-    println(io, "BranchInstruction($(val(instruction.condition)), tape=$(objectid(tape)))")
+    println(io, "GotoInstruction($(val(instruction.condition)), tape=$(objectid(tape)))")
 end
 
 function (instr::Instruction{F})() where F
@@ -199,21 +187,10 @@ function (instr::Instruction{typeof(__new__)})()
     end
 end
 
-function (instr::BlockInstruction)()
-    instr.tape.counter += 1
-end
-
-function (instr::BranchInstruction)()
+function (instr::GotoInstruction)()
     if instr.condition === nothing || !val(instr.condition) # unless
-        target = instr.block_id
-        target_idx = instr.tape.block_map[target]
-        blk_ins = instr.tape[target_idx]
-        @assert isa(blk_ins, BlockInstruction)
-        @assert length(instr.args) == length(blk_ins.args)
-        for i in 1:length(instr.args)
-            blk_ins.args[i].val = val(instr.args[i])
-        end
-        instr.tape.counter = target_idx
+        target = instr.dest
+        instr.tape.counter = target
     else
         instr.tape.counter += 1
     end
@@ -226,69 +203,105 @@ end
 
 ## internal functions
 
-arg_boxer(var, boxes::Dict{IRTools.Variable, Box{Any}}) = var
-arg_boxer(var::IRTools.Variable, boxes::Dict{IRTools.Variable, Box{Any}}) =
-    get!(boxes, var, Box{Any}(nothing))
-function args_initializer(ins::BlockInstruction)
+arg_boxer(var, boxes::Dict{Symbol, Box{Any}}) = var
+arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{Any}}) = arg_boxer(Symbol(var.id), boxes)
+arg_boxer(var::Core.SlotNumber, boxes::Dict{Symbol, Box{Any}}) =
+    arg_boxer(Symbol("_$(var.id)"), boxes)
+arg_boxer(var::Symbol, boxes::Dict{Symbol, Box{Any}}) =
+    get!(boxes, var, box_any(var, nothing))
+
+function _find_box(tape::RawTape, slot::Int)
+    box_id = Symbol("_$(slot)")
+    for ins in tape
+        isa(ins, Instruction) || continue
+        for b in ins.input
+            isa(b, Box) && b.id === box_id && return b
+        end
+        ins.output.id === box_id && return ins.output
+    end
+    slot == 1 && return box_any(nothing) # func is not used
+    @error "None box found for slot" slot
+end
+function args_initializer(taped::Taped)
+    funcbox = _find_box(taped.tape, 1)
+    argsbox = [_find_box(taped.tape, i + 1) for i in 1:taped.arity]
     return (args...) -> begin
-        @assert length(args) + 1 == length(ins.args)
-        ins.args[1].val = ins.tape.func
+        funcbox.val = taped.func
+        @assert length(args) == taped.arity
         for i in 1:length(args)
-            ins.args[i + 1].val = val(args[i]) # fill the boxes
+            argsbox[i].val = val(args[i]) # fill the boxes
         end
     end
 end
 
-function translate!(taped::Taped, ir::IRTools.IR)
+function translate!(taped::Taped, ir::Core.CodeInfo)
     tape = taped.tape
-    boxes = Dict{IRTools.Variable, Box{Any}}()
+    boxes = Dict{Symbol, Box{Any}}()
     _box = (x) -> arg_boxer(x, boxes)
-    for (blk_id, blk) in enumerate(IRTools.blocks(ir))
-        # blocks
-        blk_args = IRTools.arguments(blk)
-        push!(tape, BlockInstruction(blk_id, map(_box, blk_args), taped))
-        # `+ 1` because we will have an extra ins at the beginning
-        taped.block_map[blk_id] = length(tape) + 1
-        # normal instructions
-        for (x, st) in blk
-            if Meta.isexpr(st.expr, :call)
-                args = map(_box, st.expr.args)
-                # args[1] is the function
+
+    for (idx, line) in enumerate(ir.code)
+        isa(line, Core.Const) && (line = line.val) # unbox Core.Const
+
+        if isa(line, Core.NewvarNode)
+            # _box(line.slot) # we should deal its type later
+        elseif isa(line, Core.TypedSlot)
+            # TODO: type
+            ins = Instruction(identity, (_box(Core.SlotNumber(line.id)),),
+                              _box(Core.SSAValue(idx)), taped)
+            push!(tape, ins)
+        elseif isa(line, Core.GotoIfNot)
+            cond = _box(line.cond)
+            isa(cond, Bool) && (cond = box_any(cond)) # unify the condiftion type
+            ins = GotoInstruction(cond, line.dest + 1, taped)
+            push!(tape, ins)
+        elseif isa(line, Core.GotoNode)
+            cond = box_any(false) # unify the condiftion type
+            ins = GotoInstruction(cond, line.label + 1, taped)
+            push!(tape, ins)
+        elseif isa(line, Core.ReturnNode)
+            ins = ReturnInstruction(_box(line.val), taped)
+            push!(tape, ins)
+        elseif Meta.isexpr(line, :new)
+            args = map(_box, line.args)
+            ins = Instruction(__new__, args |> Tuple, _box(Core.SSAValue(idx)), taped)
+            push!(tape, ins)
+        elseif isa(line, GlobalRef)
+            ins = Instruction(val, (line,), _box(Core.SSAValue(idx)), taped)
+            push!(tape, ins)
+        elseif Meta.isexpr(line, :(=))
+            output = _box(line.args[1]) # args[1] is a SlotNumber
+            funcall = line.args[2]
+            if Meta.isexpr(funcall, :call)
+                args = map(_box, funcall.args)
+                # args[1] is the function (as a GlobalRef)
                 f = args[1]
                 ins = Instruction(f, args[2:end] |> Tuple,
-                                  _box(x), taped)
+                                  output, taped)
                 push!(tape, ins)
-            elseif Meta.isexpr(st.expr, :new)
-                args = map(_box, st.expr.args)
-                ins = Instruction(__new__, args |> Tuple, _box(x), taped)
+            else # a literal const?
+                ins = Instruction(identity, line.args[2:end] |> Tuple,
+                                  output, taped)
                 push!(tape, ins)
-            elseif isa(st.expr, GlobalRef)
-                ins = Instruction(val, (st.expr,), _box(x), taped)
-                push!(tape, ins)
-            else
-                @error "Unknown IR code: " st
+                # @error "Unknown IR code in assignment: " line
             end
-        end
-
-        # branches (including `return`)
-        for br in IRTools.branches(blk)
-            if br.condition === nothing && br.block == 0 # a return
-                ins = ReturnInstruction(_box(br.args[1]), taped)
-                push!(tape, ins)
-            else
-                cond = br.condition === nothing ? false : _box(br.condition)
-                isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
-                ins = BranchInstruction(
-                    cond, br.block, map(_box, br.args), taped)
-                push!(tape, ins)
-            end
+        elseif Meta.isexpr(line, :call)
+            args = map(_box, line.args)
+            # args[1] is the function
+            f = args[1]
+            ins = Instruction(f, args[2:end] |> Tuple,
+                              _box(Core.SSAValue(idx)), taped)
+            push!(tape, ins)
+        else
+            @error "Unknown IR code: " typeof(line) line
         end
     end
-    init_ins = Instruction(args_initializer(tape[1]), tuple(tape[1].args[2:end]...),
-                           Box{Any}(nothing), taped)
+
+    init_ins = Instruction(
+        args_initializer(taped),
+        tuple((box_any(nothing) for _ in 1:taped.arity)...),
+        box_any(nothing), taped)
     insert!(tape, 1, init_ins)
 end
-
 
 ## copy Box, RawTape, and TapedFunction
 
@@ -314,7 +327,7 @@ function copy_box(old_box::Box{T}, roster::Dict{UInt64, Any}) where T
     haskey(roster, oid) && (return roster[oid])
 
     # We don't know the type of box.val now, so we use Box{Any}
-    new_box = Box{T}(tape_copy(old_box.val))
+    new_box = Box{T}(old_box.id, tape_copy(old_box.val))
     roster[oid] = new_box
     return new_box
 end
@@ -330,20 +343,9 @@ function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{UInt64, Any})
     Instruction(func, input, output, on_tape)
 end
 
-function Base.copy(x::BlockInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
-    args = map(x.args) do ob
-        copy_box(ob, roster)
-    end
-    BlockInstruction(x.block_id, args, on_tape)
-end
-
-function Base.copy(x::BranchInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
+function Base.copy(x::GotoInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
     cond = copy_box(x.condition, roster)
-    args = map(x.args) do ob
-        copy_box(ob, roster)
-    end
-
-    BranchInstruction(cond, x.block_id, args, on_tape)
+    GotoInstruction(cond, x.dest, on_tape)
 end
 
 function Base.copy(x::ReturnInstruction, on_tape::Taped, roster::Dict{UInt64, Any})
@@ -358,8 +360,10 @@ function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{UInt64, Any})
         new_tape[i] = new_ins
     end
 
-    init_ins = Instruction(args_initializer(new_tape[2]), tuple(new_tape[2].args[2:end]...),
-                           Box{Any}(nothing), on_tape)
+    init_ins = Instruction(
+        args_initializer(on_tape),
+        tuple((box_any(nothing) for _ in 1:on_tape.arity)...),
+        box_any(nothing), on_tape)
     new_tape[1] = init_ins
     return new_tape
 end
@@ -367,8 +371,8 @@ end
 function Base.copy(tf::TapedFunction)
     # create a new uninitialized TapedFunction
     new_tf = TapedFunction(tf.func; cache=false, init=false)
-    new_tf.block_map = tf.block_map
     new_tf.ir = tf.ir
+    new_tf.arity = tf.arity
     roster = Dict{UInt64, Any}()
     new_tape = copy(tf.tape, new_tf, roster)
     new_tf.tape = new_tape
