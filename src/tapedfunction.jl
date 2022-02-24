@@ -186,8 +186,7 @@ end
 
 function (instr::GotoInstruction)()
     if instr.condition === nothing || !val(instr.condition) # unless
-        target = instr.dest
-        instr.tape.counter = target
+        instr.tape.counter = instr.dest
     else
         instr.tape.counter += 1
     end
@@ -258,12 +257,12 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
         elseif isa(line, Core.ReturnNode)
             ins = ReturnInstruction(_box(line.val), taped)
             push!(tape, ins)
+        elseif isa(line, GlobalRef)
+            ins = Instruction(val, (line,), _box(Core.SSAValue(idx)), taped)
+            push!(tape, ins)
         elseif Meta.isexpr(line, :new)
             args = map(_box, line.args)
             ins = Instruction(__new__, args |> Tuple, _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
-        elseif isa(line, GlobalRef)
-            ins = Instruction(val, (line,), _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
         elseif Meta.isexpr(line, :(=))
             output = _box(line.args[1]) # args[1] is a SlotNumber
