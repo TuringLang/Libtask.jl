@@ -354,6 +354,13 @@ function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{Symbol, Box{<
         new_ins = copy(x, on_tape, roster)
         new_tape[i] = new_ins
     end
+
+    init_ins = Instruction(
+        args_initializer(on_tape, roster),
+        tuple((Box{Any}(nothing) for _ in 1:on_tape.arity)...),
+        Box{Any}(nothing), on_tape)
+    new_tape[1] = init_ins
+
     return new_tape
 end
 
@@ -365,13 +372,6 @@ function Base.copy(tf::TapedFunction)
     roster = Dict{Symbol, Box{<:Any}}()
     new_tape = copy(tf.tape, new_tf, roster)
     new_tf.tape = new_tape
-
-    init_ins = Instruction(
-        args_initializer(new_tf, roster),
-        tuple((Box{Any}(nothing) for _ in 1:new_tf.arity)...),
-        Box{Any}(nothing), new_tf)
-    new_tf.tape[1] = init_ins
-
     new_tf.counter = tf.counter
     return new_tf
 end
