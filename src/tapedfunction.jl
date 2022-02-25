@@ -116,34 +116,34 @@ function Base.show(io::IO, tf::TapedFunction)
     print(io, String(take!(buf)))
 end
 
-function Base.show(io::IO, tp::RawTape)
+function Base.show(io::IO, rtape::RawTape)
     # we use an extra IOBuffer to collect all the data and then
     # output it once to avoid output interrupt during task context
     # switching
     buf = IOBuffer()
-    print(buf, "$(length(tp))-element RawTape")
-    isempty(tp) || println(buf, ":")
+    print(buf, "$(length(rtape))-element RawTape")
+    isempty(rtape) || println(buf, ":")
     i = 1
-    for instruction in tp
+    for instr in rtape
         print(buf, "\t$i => ")
-        show(buf, instruction)
+        show(buf, instr)
         i += 1
     end
     print(io, String(take!(buf)))
 end
 
 ## methods for Instruction
-Base.show(io::IO, instruction::AbstractInstruction) = println(io, "A ", typeof(instruction))
+Base.show(io::IO, instr::AbstractInstruction) = println(io, "A ", typeof(instr))
 
-function Base.show(io::IO, instruction::Instruction)
-    func = instruction.func
-    tape = instruction.tape
-    println(io, "Instruction($(instruction.output)=$(func)$(instruction.input), tape=$(objectid(tape)))")
+function Base.show(io::IO, instr::Instruction)
+    func = instr.func
+    tape = instr.tape
+    println(io, "Instruction($(instr.output)=$(func)$(instr.input), tape=$(objectid(tape)))")
 end
 
-function Base.show(io::IO, goto::GotoInstruction)
-    tape = goto.tape
-    println(io, "GotoInstruction($(goto.condition), dest=$(goto.dest), tape=$(objectid(tape)))")
+function Base.show(io::IO, instr::GotoInstruction)
+    tape = instr.tape
+    println(io, "GotoInstruction($(instr.condition), dest=$(instr.dest), tape=$(objectid(tape)))")
 end
 
 function (instr::Instruction{F})() where F
@@ -188,7 +188,7 @@ function (instr::Instruction{typeof(__new__)})()
 end
 
 function (instr::GotoInstruction)()
-    if instr.condition === nothing || !val(instr.condition) # unless
+    if !val(instr.condition) # unless
         instr.tape.counter = instr.dest
     else
         instr.tape.counter += 1
@@ -205,6 +205,8 @@ end
 _accurate_typeof(v) = typeof(v)
 _accurate_typeof(v::Type) = Type{v}
 
+
+## Translation: CodeInfo -> Tape
 arg_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = var
 arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{<:Any}}) = arg_boxer(Symbol(var.id), boxes)
 arg_boxer(var::Core.TypedSlot, boxes::Dict{Symbol, Box{<:Any}}) =
@@ -278,11 +280,11 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
             if Meta.isexpr(rh, :call)
                 args = map(_box, rh.args)
                 # args[1] is the function (as a GlobalRef)
-                f = args[1]
-                if Meta.isexpr(f, :static_parameter)
-                    f = mi.sparam_vals[f.args[1]]
+                func = args[1]
+                if Meta.isexpr(func, :static_parameter) # func is a type parameter
+                    func = mi.sparam_vals[func.args[1]]
                 end
-                ins = Instruction(f, args[2:end] |> Tuple, output, taped)
+                ins = Instruction(func, args[2:end] |> Tuple, output, taped)
                 push!(tape, ins)
             else # rh is a single value
                 ins = Instruction(identity, (_box(rh),), output, taped)
@@ -291,11 +293,11 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
         elseif Meta.isexpr(line, :call)
             args = map(_box, line.args)
             # args[1] is the function
-            f = args[1]
-            if Meta.isexpr(f, :static_parameter)
-                f = mi.sparam_vals[f.args[1]]
+            func = args[1]
+            if Meta.isexpr(func, :static_parameter) # func is a type parameter
+                func = mi.sparam_vals[func.args[1]]
             end
-            ins = Instruction(f, args[2:end] |> Tuple, _box(Core.SSAValue(idx)), taped)
+            ins = Instruction(func, args[2:end] |> Tuple, _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
         else
             @error "Unknown IR code: " typeof(line) line
