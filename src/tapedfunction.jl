@@ -219,78 +219,19 @@ function args_initializer(taped::Taped, all_boxes::Dict{Symbol, Box{<:Any}})
     end
 end
 
+kind(e) = Val(:nonexpr)
+kind(e::Expr) = Val(e.head)
+
 function translate!(taped::Taped, ir::Core.CodeInfo)
     tape = taped.tape
     boxes = Dict{Symbol, Box{<:Any}}()
     _box = (x) -> arg_boxer(x, boxes)
-    goto_offset = 1
-    mi = ir.parent
+
+    builder = InstructionBuilder(taped, ir, _box)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
-
-        if isa(line, Core.NewvarNode)
-            ins = GotoInstruction(Box{Any}(true), 0, taped) # a noop
-            push!(tape, ins)
-        elseif isa(line, GlobalRef)
-            ins = Instruction(val, (line,), _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
-        elseif isa(line, Core.SlotNumber)
-            ins = Instruction(identity, (_box(line),),
-                              _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
-        elseif isa(line, Core.TypedSlot)
-            ins = Instruction(identity, (_box(Core.SlotNumber(line.id)),),
-                              _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
-        elseif isa(line, Core.GotoIfNot)
-            cond = _box(line.cond)
-            isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
-            ins = GotoInstruction(cond, line.dest + goto_offset, taped)
-            push!(tape, ins)
-        elseif isa(line, Core.GotoNode)
-            cond = Box{Any}(false) # unify the condiftion type
-            ins = GotoInstruction(cond, line.label + goto_offset, taped)
-            push!(tape, ins)
-        elseif isa(line, Core.ReturnNode)
-            ins = ReturnInstruction(_box(line.val), taped)
-            push!(tape, ins)
-        elseif Meta.isexpr(line, :new)
-            args = map(_box, line.args)
-            ins = Instruction(__new__, args |> Tuple, _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
-        elseif Meta.isexpr(line, :call)
-            args = map(_box, line.args)
-            # args[1] is the function
-            func = args[1]
-            if Meta.isexpr(func, :static_parameter) # func is a type parameter
-                func = mi.sparam_vals[func.args[1]]
-            end
-            ins = Instruction(func, args[2:end] |> Tuple, _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
-        elseif Meta.isexpr(line, :(=))
-            output = _box(line.args[1]) # args[1] (the left hand) is a SlotNumber
-            rh = line.args[2] # the right hand
-            if Meta.isexpr(rh, :new)
-                args = map(_box, rh.args)
-                ins = Instruction(__new__, args |> Tuple, output, taped)
-                push!(tape, ins)
-            elseif Meta.isexpr(rh, :call)
-                args = map(_box, rh.args)
-                # args[1] is the function (as a GlobalRef)
-                func = args[1]
-                if Meta.isexpr(func, :static_parameter) # func is a type parameter
-                    func = mi.sparam_vals[func.args[1]]
-                end
-                ins = Instruction(func, args[2:end] |> Tuple, output, taped)
-                push!(tape, ins)
-            else # rh is a single value
-                ins = Instruction(identity, (_box(rh),), output, taped)
-                push!(tape, ins)
-            end
-        else
-            @error "Unknown IR code: " typeof(line) line
-        end
+        builder(Core.SSAValue(idx), line, kind(line))
     end
 
     init_ins = Instruction(
@@ -298,6 +239,94 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
         tuple((Box{Any}(nothing) for _ in 1:taped.arity)...),
         Box{Any}(nothing), taped)
     insert!(tape, 1, init_ins)
+end
+
+const IRVar = Union{Core.SSAValue, Core.SlotNumber}
+
+struct InstructionBuilder
+    taped::Taped
+    ir::Core.CodeInfo
+    _box
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Core.NewvarNode, ::Val)
+    (; taped, ir, _box) = builder
+    ins = GotoInstruction(Box{Any}(true), 0, taped) # a noop
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::GlobalRef, ::Val)
+    (; taped, ir, _box) = builder
+    ins = Instruction(val, (line,), _box(var), taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Core.SlotNumber, ::Val)
+    (; taped, ir, _box) = builder
+    ins = Instruction(identity, (_box(line),), _box(var), taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Core.TypedSlot, ::Val)
+    (; taped, ir, _box) = builder
+    ins = Instruction(identity, (_box(Core.SlotNumber(line.id)),), _box(var), taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot, ::Val)
+    (; taped, ir, _box) = builder
+    cond = _box(line.cond)
+    isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
+    ins = GotoInstruction(cond, line.dest + 1, taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoNode, ::Val)
+    (; taped, ir, _box) = builder
+    cond = Box{Any}(false) # unify the condiftion type
+    ins = GotoInstruction(cond, line.label + 1, taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode, ::Val)
+    (; taped, ir, _box) = builder
+    ins = ReturnInstruction(_box(line.val), taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:new})
+    (; taped, ir, _box) = builder
+    args = map(_box, line.args)
+    ins = Instruction(__new__, args |> Tuple, _box(var), taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:call})
+    (; taped, ir, _box) = builder
+    args = map(_box, line.args)
+    # args[1] is the function
+    func = args[1]
+    if Meta.isexpr(func, :static_parameter) # func is a type parameter
+        func = ir.parent.sparam_vals[func.args[1]]
+    end
+    ins = Instruction(func, args[2:end] |> Tuple, _box(var), taped)
+    push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:(=)})
+    (; taped, ir, _box) = builder
+    # args[1] (the left hand) is a SlotNumber, and it should be the output
+    rh = line.args[2] # the right hand, maybe a Expr, or a var, or ...
+    if Meta.isexpr(rh, [:new, :call])
+        builder(line.args[1], rh, kind(rh))
+    else # rh is a single value
+        ins = Instruction(identity, (_box(rh),), _box(line.args[1]), taped)
+        push!(taped, ins)
+    end
+end
+
+function (builder::InstructionBuilder)(var, line, ::Val)
+    @error "Unknown IR code: " typeof(var) var typeof(line) line
 end
 
 ## copy Box, RawTape, and TapedFunction
