@@ -40,7 +40,8 @@ mutable struct TapedFunction{F} <: Taped
     owner
 
     function TapedFunction(f::F, args...; cache=false, init=true) where {F}
-        cache_key = (f, typeof.(args)...)
+        args_type = _accurate_typeof.(args)
+        cache_key = (f, args_type...)
 
         if cache && haskey(TRCache, cache_key) # use cache
             cached_tf = TRCache[cache_key]::TapedFunction{F}
@@ -56,7 +57,7 @@ mutable struct TapedFunction{F} <: Taped
 
         if init # init
             tf.arity = length(args)
-            ir = code_inferred(tf.func, typeof(args))
+            ir = code_inferred(tf.func, args_type...)
             tf.ir = ir
             translate!(tf, ir)
             # set cache
@@ -76,7 +77,7 @@ val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
 Box(x) = Box(gensym(), x)
 Box{T}(x) where {T} = Box{T}(gensym(), x)
-Base.show(io::IO, box::Box) = print(io, "Box(", box.id, ", ", box.val, ")")
+Base.show(io::IO, box::Box) = print(io, "Box(", box.id, ")")
 
 ## methods for RawTape and Taped
 MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
@@ -140,9 +141,9 @@ function Base.show(io::IO, instruction::Instruction)
     println(io, "Instruction($(instruction.output)=$(func)$(instruction.input), tape=$(objectid(tape)))")
 end
 
-function Base.show(io::IO, instruction::GotoInstruction)
-    tape = instruction.tape
-    println(io, "GotoInstruction($(val(instruction.condition)), tape=$(objectid(tape)))")
+function Base.show(io::IO, goto::GotoInstruction)
+    tape = goto.tape
+    println(io, "GotoInstruction($(goto.condition), dest=$(goto.dest), tape=$(objectid(tape)))")
 end
 
 function (instr::Instruction{F})() where F
@@ -201,6 +202,9 @@ end
 
 ## internal functions
 
+_accurate_typeof(v) = typeof(v)
+_accurate_typeof(v::Type) = Type{v}
+
 arg_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = var
 arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{<:Any}}) = arg_boxer(Symbol(var.id), boxes)
 arg_boxer(var::Core.TypedSlot, boxes::Dict{Symbol, Box{<:Any}}) =
@@ -233,13 +237,14 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
     boxes = Dict{Symbol, Box{<:Any}}()
     _box = (x) -> arg_boxer(x, boxes)
     goto_offset = 1
+    mi = ir.parent
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
 
         if isa(line, Core.NewvarNode)
-            # _box(line.slot) # we should deal its type later
-            goto_offset -= 1
+            ins = GotoInstruction(Box{Any}(true), 0, taped) # a noop
+            push!(tape, ins)
         elseif isa(line, GlobalRef)
             ins = Instruction(val, (line,), _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
@@ -248,7 +253,6 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
                               _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
         elseif isa(line, Core.TypedSlot)
-            # TODO: type
             ins = Instruction(identity, (_box(Core.SlotNumber(line.id)),),
                               _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
@@ -275,6 +279,9 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
                 args = map(_box, rh.args)
                 # args[1] is the function (as a GlobalRef)
                 f = args[1]
+                if Meta.isexpr(f, :static_parameter)
+                    f = mi.sparam_vals[f.args[1]]
+                end
                 ins = Instruction(f, args[2:end] |> Tuple, output, taped)
                 push!(tape, ins)
             else # rh is a single value
@@ -285,6 +292,9 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
             args = map(_box, line.args)
             # args[1] is the function
             f = args[1]
+            if Meta.isexpr(f, :static_parameter)
+                f = mi.sparam_vals[f.args[1]]
+            end
             ins = Instruction(f, args[2:end] |> Tuple, _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
         else
