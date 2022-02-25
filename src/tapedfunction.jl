@@ -155,33 +155,7 @@ function (instr::Instruction{F})() where F
         instr.tape.counter += 1
     catch e
         println("counter=", instr.tape.counter)
-        println(e, catch_backtrace());
-        rethrow(e);
-    end
-end
-
-"""
-    __new__(T, args)
-
-Return a new instance of `T` with `args` even when there is no inner constructor for these args.
-Source: https://discourse.julialang.org/t/create-a-struct-with-uninitialized-fields/6967/5
-"""
-@generated function __new__(T, args)
-    return Expr(:splatnew, :T, :args)
-end
-
-function (instr::Instruction{typeof(__new__)})()
-    # catch run-time exceptions / errors.
-    try
-        input = map(val, instr.input)
-        T = input[1]
-        args = input[2:end]
-        output = __new__(T, args)
-
-        instr.output.val = output
-        instr.tape.counter += 1
-    catch e
-        println("counter=", instr.tape.counter)
+        println("tape=", instr.tape)
         println(e, catch_backtrace());
         rethrow(e);
     end
@@ -205,8 +179,19 @@ end
 _accurate_typeof(v) = typeof(v)
 _accurate_typeof(v::Type) = Type{v}
 
+"""
+    __new__(T, args...)
+
+Return a new instance of `T` with `args` even when there is no inner constructor for these args.
+Source: https://discourse.julialang.org/t/create-a-struct-with-uninitialized-fields/6967/5
+"""
+@generated function __new__(T, args...)
+    return Expr(:splatnew, :T, :args)
+end
+
 
 ## Translation: CodeInfo -> Tape
+
 arg_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = var
 arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{<:Any}}) = arg_boxer(Symbol(var.id), boxes)
 arg_boxer(var::Core.TypedSlot, boxes::Dict{Symbol, Box{<:Any}}) =
@@ -274,10 +259,23 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
             args = map(_box, line.args)
             ins = Instruction(__new__, args |> Tuple, _box(Core.SSAValue(idx)), taped)
             push!(tape, ins)
+        elseif Meta.isexpr(line, :call)
+            args = map(_box, line.args)
+            # args[1] is the function
+            func = args[1]
+            if Meta.isexpr(func, :static_parameter) # func is a type parameter
+                func = mi.sparam_vals[func.args[1]]
+            end
+            ins = Instruction(func, args[2:end] |> Tuple, _box(Core.SSAValue(idx)), taped)
+            push!(tape, ins)
         elseif Meta.isexpr(line, :(=))
             output = _box(line.args[1]) # args[1] (the left hand) is a SlotNumber
             rh = line.args[2] # the right hand
-            if Meta.isexpr(rh, :call)
+            if Meta.isexpr(rh, :new)
+                args = map(_box, rh.args)
+                ins = Instruction(__new__, args |> Tuple, output, taped)
+                push!(tape, ins)
+            elseif Meta.isexpr(rh, :call)
                 args = map(_box, rh.args)
                 # args[1] is the function (as a GlobalRef)
                 func = args[1]
@@ -290,15 +288,6 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
                 ins = Instruction(identity, (_box(rh),), output, taped)
                 push!(tape, ins)
             end
-        elseif Meta.isexpr(line, :call)
-            args = map(_box, line.args)
-            # args[1] is the function
-            func = args[1]
-            if Meta.isexpr(func, :static_parameter) # func is a type parameter
-                func = mi.sparam_vals[func.args[1]]
-            end
-            ins = Instruction(func, args[2:end] |> Tuple, _box(Core.SSAValue(idx)), taped)
-            push!(tape, ins)
         else
             @error "Unknown IR code: " typeof(line) line
         end
