@@ -3,6 +3,13 @@ mutable struct Box{T}
     val::T
 end
 
+## methods for Box
+Box(x) = Box(gensym(), x)
+Box{T}(x) where {T} = Box{T}(gensym(), x)
+Base.show(io::IO, box::Box) = print(io, "Box(", box.id, ")")
+
+## Instruction and Taped
+
 abstract type AbstractInstruction end
 abstract type Taped end
 const RawTape = Vector{AbstractInstruction}
@@ -69,20 +76,15 @@ end
 
 const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
 
-## methods for Box
+## methods for RawTape and Taped
+MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
+MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
+
 val(x) = x
 val(x::Box) = x.val
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
-Box(x) = Box(gensym(), x)
-Box{T}(x) where {T} = Box{T}(gensym(), x)
-Base.show(io::IO, box::Box) = print(io, "Box(", box.id, ")")
-
-## methods for RawTape and Taped
-MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
-MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
-
 result(t::TapedFunction) = t.retval
 
 function (tf::TapedFunction)(args...; callback=nothing)
@@ -121,11 +123,11 @@ function Base.show(io::IO, rtape::RawTape)
     # output it once to avoid output interrupt during task context
     # switching
     buf = IOBuffer()
-    print(buf, "$(length(rtape))-element RawTape")
+    print(buf, length(rtape), "-element RawTape")
     isempty(rtape) || println(buf, ":")
     i = 1
     for instr in rtape
-        print(buf, "\t$i => ")
+        print(buf, "\t", i, " => ")
         show(buf, instr)
         i += 1
     end
@@ -138,12 +140,12 @@ Base.show(io::IO, instr::AbstractInstruction) = println(io, "A ", typeof(instr))
 function Base.show(io::IO, instr::Instruction)
     func = instr.func
     tape = instr.tape
-    println(io, "Instruction($(instr.output)=$(func)$(instr.input), tape=$(objectid(tape)))")
+    println(io, "Instruction(", instr.output, "=", func, instr.input, ", tape=", objectid(tape))
 end
 
 function Base.show(io::IO, instr::GotoInstruction)
     tape = instr.tape
-    println(io, "GotoInstruction($(instr.condition), dest=$(instr.dest), tape=$(objectid(tape)))")
+    println(io, "GotoInstruction(", instr.condition, ", dest=", instr.dest, ", tape=", objectid(tape))
 end
 
 function (instr::Instruction{F})() where F
@@ -162,10 +164,10 @@ function (instr::Instruction{F})() where F
 end
 
 function (instr::GotoInstruction)()
-    if !val(instr.condition) # unless
-        instr.tape.counter = instr.dest
-    else
+    if val(instr.condition)
         instr.tape.counter += 1
+    else # goto dest unless cond
+        instr.tape.counter = instr.dest
     end
 end
 
@@ -177,7 +179,7 @@ end
 ## internal functions
 
 _accurate_typeof(v) = typeof(v)
-_accurate_typeof(v::Type) = Type{v}
+_accurate_typeof(::Type{V}) where V = Type{V}
 
 """
     __new__(T, args...)
@@ -195,16 +197,19 @@ end
 arg_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = var
 arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{<:Any}}) = arg_boxer(Symbol(var.id), boxes)
 arg_boxer(var::Core.TypedSlot, boxes::Dict{Symbol, Box{<:Any}}) =
-    arg_boxer(Symbol("_$(var.id)"), boxes)
+    arg_boxer(Symbol(:_, var.id), boxes)
 arg_boxer(var::Core.SlotNumber, boxes::Dict{Symbol, Box{<:Any}}) =
-    arg_boxer(Symbol("_$(var.id)"), boxes)
+    arg_boxer(Symbol(:_, var.id), boxes)
 arg_boxer(var::Symbol, boxes::Dict{Symbol, Box{<:Any}}) =
-    get!(boxes, var, Box{Any}(var, nothing))
+    get!(boxes, var) do
+        return Box{Any}(var, nothing)
+    end
 
 function _find_slot(all_boxes::Dict{Symbol, Box{<:Any}}, slot::Int)
-    box_id = Symbol("_$(slot)")
-    haskey(all_boxes, box_id) && return all_boxes[box_id]
-    return Box{Any}(nothing) # func or argument is not used
+    box_id = Symbol(:_, slot)
+    return get(all_boxes, box_id) do
+        return Box{Any}(nothing) # func or argument is not used
+    end
 end
 
 function args_initializer(taped::Taped, all_boxes::Dict{Symbol, Box{<:Any}})
@@ -236,7 +241,7 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
 
     init_ins = Instruction(
         args_initializer(taped, boxes),
-        tuple((Box{Any}(nothing) for _ in 1:taped.arity)...),
+        ntuple(_ -> Box{Any}(nothing), taped.arity),
         Box{Any}(nothing), taped)
     insert!(tape, 1, init_ins)
 end
@@ -387,7 +392,7 @@ function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{Symbol, Box{<
 
     init_ins = Instruction(
         args_initializer(on_tape, roster),
-        tuple((Box{Any}(nothing) for _ in 1:on_tape.arity)...),
+        ntuple(_ -> Box{Any}(nothing), on_tape.arity),
         Box{Any}(nothing), on_tape)
     new_tape[1] = init_ins
 
