@@ -224,9 +224,6 @@ function args_initializer(taped::Taped, all_boxes::Dict{Symbol, Box{<:Any}})
     end
 end
 
-kind(e) = Val(:nonexpr)
-kind(e::Expr) = Val(e.head)
-
 function translate!(taped::Taped, ir::Core.CodeInfo)
     tape = taped.tape
     boxes = Dict{Symbol, Box{<:Any}}()
@@ -236,7 +233,7 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
-        builder(Core.SSAValue(idx), line, kind(line))
+        builder(Core.SSAValue(idx), line)
     end
 
     init_ins = Instruction(
@@ -254,31 +251,31 @@ struct InstructionBuilder
     _box
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.NewvarNode, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::Core.NewvarNode)
     (; taped, ir, _box) = builder
     ins = GotoInstruction(Box{Any}(true), 0, taped) # a noop
     push!(taped, ins)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::GlobalRef, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::GlobalRef)
     (; taped, ir, _box) = builder
     ins = Instruction(val, (line,), _box(var), taped)
     push!(taped, ins)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.SlotNumber, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::Core.SlotNumber)
     (; taped, ir, _box) = builder
     ins = Instruction(identity, (_box(line),), _box(var), taped)
     push!(taped, ins)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.TypedSlot, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::Core.TypedSlot)
     (; taped, ir, _box) = builder
     ins = Instruction(identity, (_box(Core.SlotNumber(line.id)),), _box(var), taped)
     push!(taped, ins)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot)
     (; taped, ir, _box) = builder
     cond = _box(line.cond)
     isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
@@ -286,17 +283,21 @@ function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot, ::Val)
     push!(taped, ins)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoNode, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoNode)
     (; taped, ir, _box) = builder
     cond = Box{Any}(false) # unify the condiftion type
     ins = GotoInstruction(cond, line.label + 1, taped)
     push!(taped, ins)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode, ::Val)
+function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode)
     (; taped, ir, _box) = builder
     ins = ReturnInstruction(_box(line.val), taped)
     push!(taped, ins)
+end
+
+function (builder::InstructionBuilder)(var::IRVar, line::Expr)
+    builder(var, line, Val(line.head))
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:new})
@@ -323,14 +324,14 @@ function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:(=)})
     # args[1] (the left hand) is a SlotNumber, and it should be the output
     rh = line.args[2] # the right hand, maybe a Expr, or a var, or ...
     if Meta.isexpr(rh, [:new, :call])
-        builder(line.args[1], rh, kind(rh))
+        builder(line.args[1], rh, Val(rh.head))
     else # rh is a single value
         ins = Instruction(identity, (_box(rh),), _box(line.args[1]), taped)
         push!(taped, ins)
     end
 end
 
-function (builder::InstructionBuilder)(var, line, ::Val)
+function (builder::InstructionBuilder)(var, line)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
 end
 
