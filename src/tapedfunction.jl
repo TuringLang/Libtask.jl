@@ -64,7 +64,7 @@ mutable struct TapedFunction{F} <: Taped
 
         if init # init
             tf.arity = length(args)
-            ir = code_inferred(tf.func, args_type...)
+            ir = CodeInfoTools.code_inferred(tf.func, args_type...)
             tf.ir = ir
             translate!(tf, ir)
             # set cache
@@ -194,22 +194,22 @@ end
 
 ## Translation: CodeInfo -> Tape
 
-arg_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = var
-arg_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{<:Any}}) = arg_boxer(Symbol(var.id), boxes)
-arg_boxer(var::Core.TypedSlot, boxes::Dict{Symbol, Box{<:Any}}) =
-    arg_boxer(Symbol(:_, var.id), boxes)
-arg_boxer(var::Core.SlotNumber, boxes::Dict{Symbol, Box{<:Any}}) =
-    arg_boxer(Symbol(:_, var.id), boxes)
-arg_boxer(var::Symbol, boxes::Dict{Symbol, Box{<:Any}}) =
+var_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = var # for literal constants
+var_boxer(var::Core.SSAValue, boxes::Dict{Symbol, Box{<:Any}}) = var_boxer(Symbol(var.id), boxes)
+var_boxer(var::Core.TypedSlot, boxes::Dict{Symbol, Box{<:Any}}) =
+    var_boxer(Symbol(:_, var.id), boxes)
+var_boxer(var::Core.SlotNumber, boxes::Dict{Symbol, Box{<:Any}}) =
+    var_boxer(Symbol(:_, var.id), boxes)
+var_boxer(var::Symbol, boxes::Dict{Symbol, Box{<:Any}}) =
     get!(boxes, var) do
         return Box{Any}(var, nothing)
     end
 
+# find the boxes for the function arguments
 function _find_slot(all_boxes::Dict{Symbol, Box{<:Any}}, slot::Int)
     box_id = Symbol(:_, slot)
-    return get(all_boxes, box_id) do
-        return Box{Any}(nothing) # func or argument is not used
-    end
+    # if there's no box in all_boxes, it says that this func or argument is not used
+    return get(all_boxes, box_id, Box{Any}(nothing))
 end
 
 function args_initializer(taped::Taped, all_boxes::Dict{Symbol, Box{<:Any}})
@@ -227,9 +227,9 @@ end
 function translate!(taped::Taped, ir::Core.CodeInfo)
     tape = taped.tape
     boxes = Dict{Symbol, Box{<:Any}}()
-    _box = (x) -> arg_boxer(x, boxes)
+    _box_fn = (x) -> var_boxer(x, boxes)
 
-    builder = InstructionBuilder(taped, ir, _box)
+    builder = InstructionBuilder(taped, ir, _box_fn)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
@@ -248,51 +248,51 @@ const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 struct InstructionBuilder
     taped::Taped
     ir::Core.CodeInfo
-    _box
+    _box_fn
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.NewvarNode)
-    (; taped, ir, _box) = builder
+    (; taped, ir, _box_fn) = builder
     ins = GotoInstruction(Box{Any}(true), 0, taped) # a noop
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::GlobalRef)
-    (; taped, ir, _box) = builder
-    ins = Instruction(val, (line,), _box(var), taped)
+    (; taped, ir, _box_fn) = builder
+    ins = Instruction(val, (line,), _box_fn(var), taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.SlotNumber)
-    (; taped, ir, _box) = builder
-    ins = Instruction(identity, (_box(line),), _box(var), taped)
+    (; taped, ir, _box_fn) = builder
+    ins = Instruction(identity, (_box_fn(line),), _box_fn(var), taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.TypedSlot)
-    (; taped, ir, _box) = builder
-    ins = Instruction(identity, (_box(Core.SlotNumber(line.id)),), _box(var), taped)
+    (; taped, ir, _box_fn) = builder
+    ins = Instruction(identity, (_box_fn(Core.SlotNumber(line.id)),), _box_fn(var), taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot)
-    (; taped, ir, _box) = builder
-    cond = _box(line.cond)
+    (; taped, ir, _box_fn) = builder
+    cond = _box_fn(line.cond)
     isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
     ins = GotoInstruction(cond, line.dest + 1, taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoNode)
-    (; taped, ir, _box) = builder
+    (; taped, ir, _box_fn) = builder
     cond = Box{Any}(false) # unify the condiftion type
     ins = GotoInstruction(cond, line.label + 1, taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode)
-    (; taped, ir, _box) = builder
-    ins = ReturnInstruction(_box(line.val), taped)
+    (; taped, ir, _box_fn) = builder
+    ins = ReturnInstruction(_box_fn(line.val), taped)
     push!(taped, ins)
 end
 
@@ -301,32 +301,32 @@ function (builder::InstructionBuilder)(var::IRVar, line::Expr)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:new})
-    (; taped, ir, _box) = builder
-    args = map(_box, line.args)
-    ins = Instruction(__new__, args |> Tuple, _box(var), taped)
+    (; taped, ir, _box_fn) = builder
+    args = map(_box_fn, line.args)
+    ins = Instruction(__new__, args |> Tuple, _box_fn(var), taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:call})
-    (; taped, ir, _box) = builder
-    args = map(_box, line.args)
+    (; taped, ir, _box_fn) = builder
+    args = map(_box_fn, line.args)
     # args[1] is the function
     func = args[1]
     if Meta.isexpr(func, :static_parameter) # func is a type parameter
         func = ir.parent.sparam_vals[func.args[1]]
     end
-    ins = Instruction(func, args[2:end] |> Tuple, _box(var), taped)
+    ins = Instruction(func, args[2:end] |> Tuple, _box_fn(var), taped)
     push!(taped, ins)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:(=)})
-    (; taped, ir, _box) = builder
+    (; taped, ir, _box_fn) = builder
     # args[1] (the left hand) is a SlotNumber, and it should be the output
     rh = line.args[2] # the right hand, maybe a Expr, or a var, or ...
     if Meta.isexpr(rh, [:new, :call])
         builder(line.args[1], rh, Val(rh.head))
     else # rh is a single value
-        ins = Instruction(identity, (_box(rh),), _box(line.args[1]), taped)
+        ins = Instruction(identity, (_box_fn(rh),), _box_fn(line.args[1]), taped)
         push!(taped, ins)
     end
 end
