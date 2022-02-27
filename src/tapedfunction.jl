@@ -297,42 +297,40 @@ function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Expr)
-    builder(var, line, Val(line.head))
-end
-
-function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:new})
     (; taped, ir, _box_fn) = builder
-    args = map(_box_fn, line.args)
-    ins = Instruction(__new__, args |> Tuple, _box_fn(var), taped)
-    push!(taped, ins)
-end
-
-function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:call})
-    (; taped, ir, _box_fn) = builder
-    args = map(_box_fn, line.args)
-    # args[1] is the function
-    func = args[1]
-    if Meta.isexpr(func, :static_parameter) # func is a type parameter
-        func = ir.parent.sparam_vals[func.args[1]]
-    end
-    ins = Instruction(func, args[2:end] |> Tuple, _box_fn(var), taped)
-    push!(taped, ins)
-end
-
-function (builder::InstructionBuilder)(var::IRVar, line::Expr, ::Val{:(=)})
-    (; taped, ir, _box_fn) = builder
-    # args[1] (the left hand) is a SlotNumber, and it should be the output
-    rh = line.args[2] # the right hand, maybe a Expr, or a var, or ...
-    if Meta.isexpr(rh, [:new, :call])
-        builder(line.args[1], rh, Val(rh.head))
-    else # rh is a single value
-        ins = Instruction(identity, (_box_fn(rh),), _box_fn(line.args[1]), taped)
+    head = line.head
+    if head === :new
+        args = map(_box_fn, line.args)
+        ins = Instruction(__new__, args |> Tuple, _box_fn(var), taped)
         push!(taped, ins)
+    elseif head === :call
+        args = map(_box_fn, line.args)
+        # args[1] is the function
+        func = args[1]
+        if Meta.isexpr(func, :static_parameter) # func is a type parameter
+            func = ir.parent.sparam_vals[func.args[1]]
+        end
+        ins = Instruction(func, args[2:end] |> Tuple, _box_fn(var), taped)
+        push!(taped, ins)
+    elseif head === :(=)
+        # line.args[1] (the left hand side) is a SlotNumber, and it should be the output
+        lhs = line.args[1]
+        rhs = line.args[2] # the right hand side, maybe a Expr, or a var, or ...
+        if Meta.isexpr(rhs, (:new, :call))
+            builder(lhs, rhs)
+        else # rhs is a single value
+            ins = Instruction(identity, (_box_fn(rhs),), _box_fn(lhs), taped)
+            push!(taped, ins)
+        end
+    else
+        @error "Unknown Expression: " typeof(var) var typeof(line) line
+        throw(ErrorException("Unknown Expression"))
     end
 end
 
 function (builder::InstructionBuilder)(var, line)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
+    throw(ErrorException("Unknown IR code"))
 end
 
 ## copy Box, RawTape, and TapedFunction
