@@ -233,7 +233,8 @@ function translate!(taped::Taped, ir::Core.CodeInfo)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
-        builder(Core.SSAValue(idx), line)
+        ins = builder(Core.SSAValue(idx), line)
+        push!(tape, ins)
     end
 
     init_ins = Instruction(
@@ -253,47 +254,40 @@ end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.NewvarNode)
     (; taped, ir, _box_fn) = builder
-    ins = GotoInstruction(Box{Any}(true), 0, taped) # a noop
-    push!(taped, ins)
+    return GotoInstruction(Box{Any}(true), 0, taped) # a noop
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::GlobalRef)
     (; taped, ir, _box_fn) = builder
-    ins = Instruction(val, (line,), _box_fn(var), taped)
-    push!(taped, ins)
+    return Instruction(val, (line,), _box_fn(var), taped)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.SlotNumber)
     (; taped, ir, _box_fn) = builder
-    ins = Instruction(identity, (_box_fn(line),), _box_fn(var), taped)
-    push!(taped, ins)
+    return Instruction(identity, (_box_fn(line),), _box_fn(var), taped)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.TypedSlot)
     (; taped, ir, _box_fn) = builder
-    ins = Instruction(identity, (_box_fn(Core.SlotNumber(line.id)),), _box_fn(var), taped)
-    push!(taped, ins)
+    return Instruction(identity, (_box_fn(Core.SlotNumber(line.id)),), _box_fn(var), taped)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot)
     (; taped, ir, _box_fn) = builder
-    cond = _box_fn(line.cond)
-    isa(cond, Bool) && (cond = Box{Any}(cond)) # unify the condiftion type
-    ins = GotoInstruction(cond, line.dest + 1, taped)
-    push!(taped, ins)
+    _cond = _box_fn(line.cond)
+    cond = isa(_cond, Bool) ? Box{Any}(_cond) : _cond
+    return GotoInstruction(cond, line.dest + 1, taped)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoNode)
     (; taped, ir, _box_fn) = builder
     cond = Box{Any}(false) # unify the condiftion type
-    ins = GotoInstruction(cond, line.label + 1, taped)
-    push!(taped, ins)
+    return GotoInstruction(cond, line.label + 1, taped)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode)
     (; taped, ir, _box_fn) = builder
-    ins = ReturnInstruction(_box_fn(line.val), taped)
-    push!(taped, ins)
+    return ReturnInstruction(_box_fn(line.val), taped)
 end
 
 function (builder::InstructionBuilder)(var::IRVar, line::Expr)
@@ -301,8 +295,7 @@ function (builder::InstructionBuilder)(var::IRVar, line::Expr)
     head = line.head
     if head === :new
         args = map(_box_fn, line.args)
-        ins = Instruction(__new__, args |> Tuple, _box_fn(var), taped)
-        push!(taped, ins)
+        return Instruction(__new__, args |> Tuple, _box_fn(var), taped)
     elseif head === :call
         args = map(_box_fn, line.args)
         # args[1] is the function
@@ -310,17 +303,15 @@ function (builder::InstructionBuilder)(var::IRVar, line::Expr)
         if Meta.isexpr(func, :static_parameter) # func is a type parameter
             func = ir.parent.sparam_vals[func.args[1]]
         end
-        ins = Instruction(func, args[2:end] |> Tuple, _box_fn(var), taped)
-        push!(taped, ins)
+        return Instruction(func, args[2:end] |> Tuple, _box_fn(var), taped)
     elseif head === :(=)
         # line.args[1] (the left hand side) is a SlotNumber, and it should be the output
         lhs = line.args[1]
         rhs = line.args[2] # the right hand side, maybe a Expr, or a var, or ...
         if Meta.isexpr(rhs, (:new, :call))
-            builder(lhs, rhs)
+            return builder(lhs, rhs)
         else # rhs is a single value
-            ins = Instruction(identity, (_box_fn(rhs),), _box_fn(lhs), taped)
-            push!(taped, ins)
+            return Instruction(identity, (_box_fn(rhs),), _box_fn(lhs), taped)
         end
     else
         @error "Unknown Expression: " typeof(var) var typeof(line) line
