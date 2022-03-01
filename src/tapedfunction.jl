@@ -28,6 +28,9 @@ end
 
 mutable struct GotoInstruction{T<:Taped} <: AbstractInstruction
     condition::Box{Any}
+    # we enusre a 1-to-1 mapping between ir.code and instruction
+    # so here we can use the index directly (actually index+1, because
+    # we have an extra args_initializer instruction at the beginning of the tape).
     dest::Int
     tape::T
 end
@@ -227,11 +230,11 @@ end
 function translate!(taped::Taped, ir::Core.CodeInfo)
     tape = taped.tape
     boxes = Dict{Symbol, Box{<:Any}}()
-    builder = InstructionBuilder(taped, ir, boxes)
+    context = (;taped, ir, boxes)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
-        ins = builder(Core.SSAValue(idx), line)
+        ins = translate!!(Core.SSAValue(idx), line, context)
         push!(tape, ins)
     end
 
@@ -244,54 +247,50 @@ end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
-struct InstructionBuilder
-    taped::Taped
-    ir::Core.CodeInfo
-    boxes::Dict{Symbol, Box{<:Any}}
+function translate!!(var::IRVar, line::Core.NewvarNode, context)
+    (; taped, ir, boxes) = context
+    # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
+    # on tape. see GotoInstruction.dest.
+    return GotoInstruction(Box{Any}(true), 0, taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.NewvarNode)
-    (; taped, ir, boxes) = builder
-    return GotoInstruction(Box{Any}(true), 0, taped) # a noop
-end
-
-function (builder::InstructionBuilder)(var::IRVar, line::GlobalRef)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::GlobalRef, context)
+    (; taped, ir, boxes) = context
     return Instruction(val, (line,), var_boxer(var, boxes), taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.SlotNumber)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::Core.SlotNumber, context)
+    (; taped, ir, boxes) = context
     return Instruction(identity, (var_boxer(line, boxes),), var_boxer(var, boxes), taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.TypedSlot)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::Core.TypedSlot, context)
+    (; taped, ir, boxes) = context
     return Instruction(
         identity, (var_boxer(Core.SlotNumber(line.id), boxes),),
         var_boxer(var, boxes), taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoIfNot)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::Core.GotoIfNot, context)
+    (; taped, ir, boxes) = context
     _cond = var_boxer(line.cond, boxes)
     cond = isa(_cond, Bool) ? Box{Any}(_cond) : _cond
     return GotoInstruction(cond, line.dest + 1, taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.GotoNode)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::Core.GotoNode, context)
+    (; taped, ir, boxes) = context
     cond = Box{Any}(false) # unify the condiftion type
     return GotoInstruction(cond, line.label + 1, taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Core.ReturnNode)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::Core.ReturnNode, context)
+    (; taped, ir, boxes) = context
     return ReturnInstruction(var_boxer(line.val, boxes), taped)
 end
 
-function (builder::InstructionBuilder)(var::IRVar, line::Expr)
-    (; taped, ir, boxes) = builder
+function translate!!(var::IRVar, line::Expr, context)
+    (; taped, ir, boxes) = context
     head = line.head
     _box_fn = (x) -> var_boxer(x, boxes)
     if head === :new
@@ -310,7 +309,7 @@ function (builder::InstructionBuilder)(var::IRVar, line::Expr)
         lhs = line.args[1]
         rhs = line.args[2] # the right hand side, maybe a Expr, or a var, or ...
         if Meta.isexpr(rhs, (:new, :call))
-            return builder(lhs, rhs)
+            return translate!!(lhs, rhs, context)
         else # rhs is a single value
             return Instruction(identity, (_box_fn(rhs),), _box_fn(lhs), taped)
         end
@@ -320,7 +319,7 @@ function (builder::InstructionBuilder)(var::IRVar, line::Expr)
     end
 end
 
-function (builder::InstructionBuilder)(var, line)
+function translate!!(var, line, context)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
     throw(ErrorException("Unknown IR code"))
 end
