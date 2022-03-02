@@ -19,25 +19,22 @@ const RawTape = Vector{AbstractInstruction}
 
 An `Instruction` stands for a function call
 """
-mutable struct Instruction{F, TI<:Tuple, TO, T<:Taped} <: AbstractInstruction
+mutable struct Instruction{F, TI<:Tuple, TO} <: AbstractInstruction
     func::F
     input::TI
     output::Box{TO}
-    tape::T
 end
 
-mutable struct GotoInstruction{T<:Taped} <: AbstractInstruction
+mutable struct GotoInstruction <: AbstractInstruction
     condition::Box{Any}
     # we enusre a 1-to-1 mapping between ir.code and instruction
     # so here we can use the index directly (actually index+1, because
     # we have an extra args_initializer instruction at the beginning of the tape).
     dest::Int
-    tape::T
 end
 
-mutable struct ReturnInstruction{TA, T<:Taped} <: AbstractInstruction
+mutable struct ReturnInstruction{TA} <: AbstractInstruction
     arg::TA
-    tape::T
 end
 
 mutable struct TapedFunction{F} <: Taped
@@ -99,7 +96,7 @@ function (tf::TapedFunction)(args...; callback=nothing)
 
     while true
         ins = tf[tf.counter]
-        ins()
+        ins(tf)
         callback !== nothing && callback()
         isa(ins, ReturnInstruction) && break
     end
@@ -141,41 +138,38 @@ end
 Base.show(io::IO, instr::AbstractInstruction) = println(io, "A ", typeof(instr))
 
 function Base.show(io::IO, instr::Instruction)
-    func = instr.func
-    tape = instr.tape
-    println(io, "Instruction(", instr.output, "=", func, instr.input, ", tape=", objectid(tape))
+    println(io, "Instruction(", instr.output, "=", instr.func, instr.input)
 end
 
 function Base.show(io::IO, instr::GotoInstruction)
-    tape = instr.tape
-    println(io, "GotoInstruction(", instr.condition, ", dest=", instr.dest, ", tape=", objectid(tape))
+    println(io, "GotoInstruction(", instr.condition, ", dest=", instr.dest)
 end
 
-function (instr::Instruction{F})() where F
+function (instr::Instruction{F})(taped::Taped) where F
     # catch run-time exceptions / errors.
     try
         func = val(instr.func)
         output = func(map(val, instr.input)...)
         instr.output.val = output
-        instr.tape.counter += 1
+        taped.counter += 1
     catch e
-        println("counter=", instr.tape.counter)
-        println("tape=", instr.tape)
+        println("counter=", taped.counter)
+        println("tape=", taped)
         println(e, catch_backtrace());
         rethrow(e);
     end
 end
 
-function (instr::GotoInstruction)()
+function (instr::GotoInstruction)(taped::Taped)
     if val(instr.condition)
-        instr.tape.counter += 1
+        taped.counter += 1
     else # goto dest unless cond
-        instr.tape.counter = instr.dest
+        taped.counter = instr.dest
     end
 end
 
-function (instr::ReturnInstruction)()
-    instr.tape.retval = val(instr.arg)
+function (instr::ReturnInstruction)(taped::Taped)
+    taped.retval = val(instr.arg)
 end
 
 
@@ -230,72 +224,71 @@ end
 function translate!(taped::Taped, ir::Core.CodeInfo)
     tape = taped.tape
     boxes = Dict{Symbol, Box{<:Any}}()
-    context = (;taped, ir, boxes)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
-        ins = translate!!(Core.SSAValue(idx), line, context)
+        ins = translate!!(Core.SSAValue(idx), line, boxes, ir)
         push!(tape, ins)
     end
 
     init_ins = Instruction(
         args_initializer(taped, boxes),
         ntuple(_ -> Box{Any}(nothing), taped.arity),
-        Box{Any}(nothing), taped)
+        Box{Any}(nothing))
     insert!(tape, 1, init_ins)
 end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
-function translate!!(var::IRVar, line::Core.NewvarNode, context)
-    (; taped, ir, boxes) = context
+function translate!!(var::IRVar, line::Core.NewvarNode,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
     # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
     # on tape. see GotoInstruction.dest.
-    return GotoInstruction(Box{Any}(true), 0, taped)
+    return GotoInstruction(Box{Any}(true), 0)
 end
 
-function translate!!(var::IRVar, line::GlobalRef, context)
-    (; taped, ir, boxes) = context
-    return Instruction(val, (line,), var_boxer(var, boxes), taped)
+function translate!!(var::IRVar, line::GlobalRef,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
+    return Instruction(val, (line,), var_boxer(var, boxes))
 end
 
-function translate!!(var::IRVar, line::Core.SlotNumber, context)
-    (; taped, ir, boxes) = context
-    return Instruction(identity, (var_boxer(line, boxes),), var_boxer(var, boxes), taped)
+function translate!!(var::IRVar, line::Core.SlotNumber,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
+    return Instruction(identity, (var_boxer(line, boxes),), var_boxer(var, boxes))
 end
 
-function translate!!(var::IRVar, line::Core.TypedSlot, context)
-    (; taped, ir, boxes) = context
+function translate!!(var::IRVar, line::Core.TypedSlot,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
     return Instruction(
         identity, (var_boxer(Core.SlotNumber(line.id), boxes),),
-        var_boxer(var, boxes), taped)
+        var_boxer(var, boxes))
 end
 
-function translate!!(var::IRVar, line::Core.GotoIfNot, context)
-    (; taped, ir, boxes) = context
+function translate!!(var::IRVar, line::Core.GotoIfNot,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
     _cond = var_boxer(line.cond, boxes)
     cond = isa(_cond, Bool) ? Box{Any}(_cond) : _cond
-    return GotoInstruction(cond, line.dest + 1, taped)
+    return GotoInstruction(cond, line.dest + 1)
 end
 
-function translate!!(var::IRVar, line::Core.GotoNode, context)
-    (; taped, ir, boxes) = context
+function translate!!(var::IRVar, line::Core.GotoNode,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
     cond = Box{Any}(false) # unify the condiftion type
-    return GotoInstruction(cond, line.label + 1, taped)
+    return GotoInstruction(cond, line.label + 1)
 end
 
-function translate!!(var::IRVar, line::Core.ReturnNode, context)
-    (; taped, ir, boxes) = context
-    return ReturnInstruction(var_boxer(line.val, boxes), taped)
+function translate!!(var::IRVar, line::Core.ReturnNode,
+                     boxes::Dict{Symbol, Box{<:Any}}, @nospecialize(ir))
+    return ReturnInstruction(var_boxer(line.val, boxes))
 end
 
-function translate!!(var::IRVar, line::Expr, context)
-    (; taped, ir, boxes) = context
+function translate!!(var::IRVar, line::Expr,
+                     boxes::Dict{Symbol, Box{<:Any}}, ir::Core.CodeInfo)
     head = line.head
     _box_fn = (x) -> var_boxer(x, boxes)
     if head === :new
         args = map(_box_fn, line.args)
-        return Instruction(__new__, args |> Tuple, var_boxer(var, boxes), taped)
+        return Instruction(__new__, args |> Tuple, var_boxer(var, boxes))
     elseif head === :call
         args = map(_box_fn, line.args)
         # args[1] is the function
@@ -303,15 +296,15 @@ function translate!!(var::IRVar, line::Expr, context)
         if Meta.isexpr(func, :static_parameter) # func is a type parameter
             func = ir.parent.sparam_vals[func.args[1]]
         end
-        return Instruction(func, args[2:end] |> Tuple, var_boxer(var, boxes), taped)
+        return Instruction(func, args[2:end] |> Tuple, var_boxer(var, boxes))
     elseif head === :(=)
         # line.args[1] (the left hand side) is a SlotNumber, and it should be the output
         lhs = line.args[1]
         rhs = line.args[2] # the right hand side, maybe a Expr, or a var, or ...
         if Meta.isexpr(rhs, (:new, :call))
-            return translate!!(lhs, rhs, context)
+            return translate!!(lhs, rhs, boxes, ir)
         else # rhs is a single value
-            return Instruction(identity, (_box_fn(rhs),), _box_fn(lhs), taped)
+            return Instruction(identity, (_box_fn(rhs),), _box_fn(lhs))
         end
     else
         @error "Unknown Expression: " typeof(var) var typeof(line) line
@@ -319,7 +312,7 @@ function translate!!(var::IRVar, line::Expr, context)
     end
 end
 
-function translate!!(var, line, context)
+function translate!!(var, line, boxes, ir)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
     throw(ErrorException("Unknown IR code"))
 end
@@ -352,38 +345,38 @@ function copy_box(old_box::Box{T}, roster::Dict{Symbol, Box{<:Any}}) where T
 end
 copy_box(o, roster::Dict{Symbol, Box{<:Any}}) = o
 
-function Base.copy(x::Instruction, on_tape::Taped, roster::Dict{Symbol, Box{<:Any}})
+function Base.copy(x::Instruction, roster::Dict{Symbol, Box{<:Any}})
     # func may also be a boxed variable
     func = copy_box(x.func, roster)
     input = map(x.input) do ob
         copy_box(ob, roster)
     end
     output = copy_box(x.output, roster)
-    Instruction(func, input, output, on_tape)
+    Instruction(func, input, output)
 end
 
-function Base.copy(x::GotoInstruction, on_tape::Taped, roster::Dict{Symbol, Box{<:Any}})
+function Base.copy(x::GotoInstruction, roster::Dict{Symbol, Box{<:Any}})
     cond = copy_box(x.condition, roster)
-    GotoInstruction(cond, x.dest, on_tape)
+    GotoInstruction(cond, x.dest)
 end
 
-function Base.copy(x::ReturnInstruction, on_tape::Taped, roster::Dict{Symbol, Box{<:Any}})
+function Base.copy(x::ReturnInstruction, roster::Dict{Symbol, Box{<:Any}})
     arg = copy_box(x.arg, roster)
-    ReturnInstruction(arg, on_tape)
+    ReturnInstruction(arg)
 end
 
 function Base.copy(old_tape::RawTape, on_tape::Taped, roster::Dict{Symbol, Box{<:Any}})
     new_tape = RawTape(undef, length(old_tape))
     for (i, x) in enumerate(old_tape)
         i == 1 && continue
-        new_ins = copy(x, on_tape, roster)
+        new_ins = copy(x, roster)
         new_tape[i] = new_ins
     end
 
     init_ins = Instruction(
         args_initializer(on_tape, roster),
         ntuple(_ -> Box{Any}(nothing), on_tape.arity),
-        Box{Any}(nothing), on_tape)
+        Box{Any}(nothing))
     new_tape[1] = init_ins
 
     return new_tape
