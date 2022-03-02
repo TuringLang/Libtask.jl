@@ -1,6 +1,6 @@
 module Libtask
 
-using IRTools
+using CodeInfoTools
 using MacroTools
 
 using LRUCache
