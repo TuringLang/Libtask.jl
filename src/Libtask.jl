@@ -1,8 +1,6 @@
 module Libtask
 
 using CodeInfoTools
-using MacroTools
-
 using LRUCache
 
 export TapedTask, consume, produce

@@ -76,10 +76,6 @@ end
 
 const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
 
-## methods for RawTape and Taped
-MacroTools.@forward TapedFunction.tape Base.iterate, Base.length
-MacroTools.@forward TapedFunction.tape Base.push!, Base.getindex, Base.lastindex
-
 val(x) = x
 val(x::Box) = x.val
 val(x::GlobalRef) = getproperty(x.mod, x.name)
@@ -95,7 +91,7 @@ function (tf::TapedFunction)(args...; callback=nothing)
     end
 
     while true
-        ins = tf[tf.counter]
+        ins = tf.tape[tf.counter]
         ins(tf)
         callback !== nothing && callback()
         isa(ins, ReturnInstruction) && break
