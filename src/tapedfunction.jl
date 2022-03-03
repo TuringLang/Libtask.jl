@@ -42,10 +42,10 @@ mutable struct TapedFunction{F}
     tape::RawTape
     counter::Int
     bindings::Dict{Symbol, Box{<:Any}}
-    retval
+    retval::Symbol
     owner
 
-    function TapedFunction(f::F, args...; cache=false, init=true) where {F}
+    function TapedFunction(f::F, args...; cache=false) where {F}
         args_type = _accurate_typeof.(args)
         cache_key = (f, args_type...)
 
@@ -56,20 +56,23 @@ mutable struct TapedFunction{F}
             return tf
         end
 
+        ir = CodeInfoTools.code_inferred(f, args_type...)
         tf = new{F}() # leave some fields to be undef
         tf.func = f
+        tf.arity = length(args)
+        tf.ir = ir
         tf.tape = RawTape()
         tf.counter = 1
 
-        if init # init
-            tf.arity = length(args)
-            ir = CodeInfoTools.code_inferred(tf.func, args_type...)
-            tf.ir = ir
-            translate!(tf, ir)
-            # set cache
-            TRCache[cache_key] = tf
-        end
+        translate!(tf, ir)
+        # set cache
+        TRCache[cache_key] = tf
         return tf
+    end
+
+    function TapedFunction(tf::TapedFunction{F}) where {F}
+        new{F}(tf.func, tf.arity, tf.ir, tf.tape,
+               tf.counter, tf.bindings, :none, tf.owner)
     end
 end
 
@@ -82,7 +85,7 @@ val(x::Box{QuoteNode}) = val(x.val)
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
-result(t::TapedFunction) = t.retval
+result(t::TapedFunction) = val(t.bindings[t.retval])
 
 function (tf::TapedFunction)(args...; callback=nothing)
     # set args
@@ -184,8 +187,7 @@ function (instr::GotoInstruction)(tf::TapedFunction)
 end
 
 function (instr::ReturnInstruction)(tf::TapedFunction)
-    arg_box = _lookup(tf, instr.arg)
-    tf.retval = val(arg_box)
+    tf.retval = instr.arg
 end
 
 
@@ -347,11 +349,7 @@ end
 
 function Base.copy(tf::TapedFunction)
     # create a new uninitialized TapedFunction
-    new_tf = TapedFunction(tf.func; cache=false, init=false)
-    new_tf.ir = tf.ir
-    new_tf.arity = tf.arity
-    new_tf.tape = tf.tape
-    new_tf.counter = tf.counter
+    new_tf = TapedFunction(tf)
     new_tf.bindings = copy_bindings(tf.bindings)
     return new_tf
 end

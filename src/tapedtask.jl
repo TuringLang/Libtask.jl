@@ -65,7 +65,7 @@ end
 # NOTE: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
 function TapedTask(f, args...)
-    tf = TapedFunction(f, args...; cache=true, init=true)
+    tf = TapedFunction(f, args...; cache=true)
     TapedTask(tf, args...)
 end
 
