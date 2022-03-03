@@ -86,7 +86,7 @@ result(t::TapedFunction) = val(t.bindings[t.retval])
 
 function (tf::TapedFunction)(args...; callback=nothing)
     # set args
-    if(tf.counter <= 1)
+    if tf.counter <= 1
         haskey(tf.bindings, :_1) && (tf.bindings[:_1].val = tf.func)
         for i in 1:length(args)
             slot = Symbol("_", i + 1)
@@ -154,8 +154,8 @@ function (instr::Instruction{F})(tf::TapedFunction) where F
     # catch run-time exceptions / errors.
     try
         func = val(_lookup(tf, instr.func))
-        input_boxes = map(x -> _lookup(tf, x), instr.input)
-        output = func(map(val, input_boxes)...)
+        inputs = map(x -> val(_lookup(tf, x)), instr.input)
+        output = func(inputs...)
         output_box = _lookup(tf, instr.output)
         output_box.val = output
         tf.counter += 1
@@ -168,13 +168,9 @@ function (instr::Instruction{F})(tf::TapedFunction) where F
 end
 
 function (instr::GotoInstruction)(tf::TapedFunction)
-    cond = if instr.condition === :_true
-        true
-    elseif  instr.condition === :_false
-        false
-    else
+    cond = instr.condition === :_true ? true :
+        instr.condition === :_false ? false :
         val(_lookup(tf, instr.condition))
-    end
 
     if cond
         tf.counter += 1
@@ -206,7 +202,7 @@ end
 
 ## Translation: CodeInfo -> Tape
 
-var_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) = begin # for literal constants
+function var_boxer(var, boxes::Dict{Symbol, Box{<:Any}}) # for literal constants
     box = Box(var)
     boxes[box.id] = box
     return box.id
