@@ -58,15 +58,12 @@ mutable struct TapedFunction{F}
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
         tf = new{F}() # leave some fields to be undef
-        tf.func = f
-        tf.arity = length(args)
-        tf.ir = ir
+        tf.func, tf.arity, tf.ir = f, length(args), ir
         tf.tape = RawTape()
         tf.counter = 1
 
         translate!(tf, ir)
-        # set cache
-        TRCache[cache_key] = tf
+        TRCache[cache_key] = tf # set cache
         return tf
     end
 
