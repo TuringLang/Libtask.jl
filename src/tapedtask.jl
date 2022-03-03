@@ -58,7 +58,6 @@ function TapedTask(tf::TapedFunction, args...)
     t = TapedTask(task, tf, produce_ch, consume_ch)
     task.storage === nothing && (task.storage = IdDict())
     task.storage[:tapedtask] = t
-    tf.owner = t
     return t
 end
 

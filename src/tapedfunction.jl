@@ -43,7 +43,6 @@ mutable struct TapedFunction{F}
     counter::Int
     bindings::Dict{Symbol, Box{<:Any}}
     retval::Symbol
-    owner
 
     function TapedFunction(f::F, args...; cache=false) where {F}
         args_type = _accurate_typeof.(args)
@@ -69,7 +68,7 @@ mutable struct TapedFunction{F}
 
     function TapedFunction(tf::TapedFunction{F}) where {F}
         new{F}(tf.func, tf.arity, tf.ir, tf.tape,
-               tf.counter, tf.bindings, :none, tf.owner)
+               tf.counter, tf.bindings, :none)
     end
 end
 
