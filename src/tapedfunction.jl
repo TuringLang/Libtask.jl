@@ -18,20 +18,20 @@ const RawTape = Vector{AbstractInstruction}
 
 An `Instruction` stands for a function call
 """
-mutable struct Instruction{F, N} <: AbstractInstruction
+struct Instruction{F, N} <: AbstractInstruction
     func::F
     input::NTuple{N, Symbol}
     output::Symbol
 end
 
-mutable struct GotoInstruction <: AbstractInstruction
+struct GotoInstruction <: AbstractInstruction
     condition::Symbol
     # we enusre a 1-to-1 mapping between ir.code and instruction
     # so here we can use the index directly.
     dest::Int
 end
 
-mutable struct ReturnInstruction <: AbstractInstruction
+struct ReturnInstruction <: AbstractInstruction
     arg::Symbol
 end
 
