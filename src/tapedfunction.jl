@@ -4,6 +4,7 @@ mutable struct Box{T}
 
     Box(id::Symbol, v) = new{typeof(v)}(id, v)
     Box{T}(id::Symbol=gensym()) where T = new{T}(id) # leave val uninitialized
+    Box{T}(id::Symbol, v) where T = new{T}(id, v)
 end
 
 Box(v) = Box(gensym(), v)
@@ -36,13 +37,13 @@ struct ReturnInstruction <: AbstractInstruction
     arg::Symbol
 end
 
-mutable struct TapedFunction{F}
+mutable struct TapedFunction{F, V<:NamedTuple}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::Core.CodeInfo
     tape::RawTape
     counter::Int
-    bindings::Dict{Symbol, Box{<:Any}}
+    bindings::V
     retval::Symbol
 
     function TapedFunction(f::F, args...; cache=false) where {F}
@@ -57,19 +58,19 @@ mutable struct TapedFunction{F}
         end
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
-        tf = new{F}() # leave some fields to be undef
-        tf.func, tf.arity, tf.ir = f, length(args), ir
-        tf.tape = RawTape()
-        tf.counter = 1
+        tape = RawTape()
+        bindings = translate!(tape, ir)
 
-        translate!(tf, ir)
+        tf = new{F, typeof(bindings)}(
+            f, length(args), ir, tape, 1, bindings, :none)
         TRCache[cache_key] = tf # set cache
         return tf
     end
 
-    function TapedFunction(tf::TapedFunction{F}) where {F}
-        new{F}(tf.func, tf.arity, tf.ir, tf.tape,
-               tf.counter, tf.bindings, :none)
+    function TapedFunction(tf::TapedFunction{F, TV}) where {F, TV}
+        new{F, TV}(
+            tf.func, tf.arity, tf.ir, tf.tape,
+            tf.counter, tf.bindings, :none)
     end
 end
 
@@ -224,8 +225,7 @@ var_boxer(var::Symbol, boxes::Dict{Symbol, Box{<:Any}}, ::Type{T}) where {T} = b
     get!(boxes, var, Box{T}(var)).id
 end
 
-function translate!(tf::TapedFunction, ir::Core.CodeInfo)
-    tape = tf.tape
+function translate!(tape::RawTape, ir::Core.CodeInfo)
     boxes = Dict{Symbol, Box{<:Any}}()
 
     for (idx, line) in enumerate(ir.code)
@@ -233,8 +233,7 @@ function translate!(tf::TapedFunction, ir::Core.CodeInfo)
         ins = translate!!(Core.SSAValue(idx), line, boxes, ir)
         push!(tape, ins)
     end
-
-    tf.bindings = boxes
+    return NamedTuple(boxes)
 end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
@@ -341,19 +340,14 @@ tape_copy(x::Core.Box) = Core.Box(tape_copy(x.contents))
 
 function Base.copy(box::Box{T}) where {T}
     if isdefined(box, :val)
-        Box(box.id, tape_copy(box.val))
+        Box{T}(box.id, tape_copy(box.val))
     else
         Box{T}(box.id)
     end
 end
 
-function copy_bindings(old::Dict{Symbol, Box{<:Any}})
-    newb = Dict{Symbol, Box{<:Any}}()
-    for (k, v) in old
-        newb[k] = copy(v)
-    end
-    return newb
-end
+copy_bindings(old::NamedTuple) =
+    NamedTuple(zip(keys(old), copy.(values(old))))
 
 function Base.copy(tf::TapedFunction)
     # create a new uninitialized TapedFunction
