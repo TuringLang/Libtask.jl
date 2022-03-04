@@ -3,15 +3,10 @@ mutable struct Box{T}
     val::T
 
     Box(id::Symbol, v) = new{typeof(v)}(id, v)
-    function Box{T}(id::Symbol) where T
-        box = new{T}() # leave val uninitialized
-        box.id = id
-        return box
-    end
+    Box{T}(id::Symbol=gensym()) where T = new{T}(id) # leave val uninitialized
 end
 
 Box(v) = Box(gensym(), v)
-Box{T}() where T = Box{T}(gensym())
 Base.show(io::IO, box::Box{T}) where T= print(io, "Box{", T, "}(", box.id, ")")
 
 ## Instruction and TapedFunction
