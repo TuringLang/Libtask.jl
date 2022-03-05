@@ -11,7 +11,7 @@ using Libtask
         tf = Libtask.TapedFunction(S, 1, 2)
         s1 = tf(1, 2)
         @test s1.i == 3
-        # newins = findall(x -> isa(x, Libtask.Instruction{typeof(Libtask.__new__)}), tf.tape)
-        # @test length(newins) == 1
+        newins = findall(x -> isa(x, Libtask.Instruction{typeof(Libtask.__new__)}), tf.tape)
+        @test length(newins) == 1
     end
 end

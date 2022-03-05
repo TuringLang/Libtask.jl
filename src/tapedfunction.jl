@@ -29,7 +29,7 @@ struct ReturnInstruction{T} <: AbstractInstruction
     arg::TypedVar{T}
 end
 
-mutable struct TapedFunction{F}
+mutable struct TapedFunction{F, T}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::Core.CodeInfo
@@ -37,7 +37,7 @@ mutable struct TapedFunction{F}
     unified_tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
     counter::Int
     bindings::Dict{Symbol, Any}
-    retval::TypedVar
+    retval::TypedVar{T}
 
     function TapedFunction(f::F, args...; cache=false) where {F}
         args_type = _accurate_typeof.(args)
@@ -55,15 +55,17 @@ mutable struct TapedFunction{F}
         utape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
 
-        tf = new{F}(f, length(args), ir, tape, utape, 1, bindings, TypedVar{Any}(:none))
+        T = isa(ir.rettype, Core.Const) ? typeof(ir.rettype.val) : ir.rettype
+        tf = new{F, T}(f, length(args), ir, tape, utape, 1,
+                                bindings, TypedVar{T}(:none))
         TRCache[cache_key] = tf # set cache
         # unify!(tf)
         return tf
     end
 
-    function TapedFunction(tf::TapedFunction{F}) where {F}
-        new{F}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
-               tf.counter, tf.bindings, TypedVar{Any}(:none))
+    function TapedFunction(tf::TapedFunction{F, T}) where {F, T}
+        new{F, T}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
+                  tf.counter, tf.bindings, tf.retval)
     end
 end
 
@@ -119,6 +121,19 @@ function Base.show(io::IO, tf::TapedFunction)
     println(buf, "------------------")
     println(buf, tf.bindings)
     println(buf, "------------------")
+    print(io, String(take!(buf)))
+end
+
+function Base.show(io::IO, rtape::RawTape)
+    buf = IOBuffer()
+    print(buf, length(rtape), "-element RawTape")
+    isempty(rtape) || println(buf, ":")
+    i = 1
+    for instr in rtape
+        print(buf, "\t", i, " => ")
+        show(buf, instr)
+        i += 1
+    end
     print(io, String(take!(buf)))
 end
 
