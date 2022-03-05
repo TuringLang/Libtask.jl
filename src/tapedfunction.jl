@@ -1,7 +1,6 @@
 ## Instruction and TapedFunction
 
 abstract type AbstractInstruction end
-const RawTape = Vector{AbstractInstruction}
 
 """
     Instruction
@@ -29,7 +28,7 @@ mutable struct TapedFunction{F}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::Core.CodeInfo
-    tape::RawTape
+    tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
     counter::Int
     bindings::Dict{Symbol, Any}
     retval::Symbol
@@ -46,7 +45,7 @@ mutable struct TapedFunction{F}
         end
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
-        tape = RawTape()
+        tape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
 
         tf = new{F}(f, length(args), ir, tape, 1, bindings, :none)
@@ -83,12 +82,15 @@ function (tf::TapedFunction)(args...; callback=nothing)
         ins = tf.tape[tf.counter]
         ins(tf)
         callback !== nothing && callback()
-        isa(ins, ReturnInstruction) && break
+        tf.retval !== :none && break
     end
     return result(tf)
 end
 
 function Base.show(io::IO, tf::TapedFunction)
+    # we use an extra IOBuffer to collect all the data and then
+    # output it once to avoid output interrupt during task context
+    # switching
     buf = IOBuffer()
     println(buf, "TapedFunction:")
     println(buf, "* .func => $(tf.func)")
@@ -100,22 +102,6 @@ function Base.show(io::IO, tf::TapedFunction)
     println(buf, "------------------")
     println(buf, tf.tape)
     println(buf, "------------------")
-    print(io, String(take!(buf)))
-end
-
-function Base.show(io::IO, rtape::RawTape)
-    # we use an extra IOBuffer to collect all the data and then
-    # output it once to avoid output interrupt during task context
-    # switching
-    buf = IOBuffer()
-    print(buf, length(rtape), "-element RawTape")
-    isempty(rtape) || println(buf, ":")
-    i = 1
-    for instr in rtape
-        print(buf, "\t", i, " => ")
-        show(buf, instr)
-        i += 1
-    end
     print(io, String(take!(buf)))
 end
 
@@ -191,7 +177,8 @@ function bind_var!(var, bindings::Dict{Symbol, Any}) # for literal constants
     bindings[id] = var
     return id
 end
-bind_var!(var::Core.SSAValue, bindings::Dict{Symbol, Any}) = bind_var!(Symbol(var.id), bindings)
+bind_var!(var::Core.SSAValue, bindings::Dict{Symbol, Any}) =
+    bind_var!(Symbol(var.id), bindings)
 bind_var!(var::Core.TypedSlot, bindings::Dict{Symbol, Any}) =
     bind_var!(Symbol(:_, var.id), bindings)
 bind_var!(var::Core.SlotNumber, bindings::Dict{Symbol, Any}) =
@@ -201,13 +188,13 @@ function bind_var!(var::Symbol, bindings::Dict{Symbol, Any})
     return var
 end
 
-function translate!(tape::RawTape, ir::Core.CodeInfo)
+function translate!(tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}, ir::Core.CodeInfo)
     bindings = Dict{Symbol, Any}()
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
         ins = translate!!(Core.SSAValue(idx), line, bindings, ir)
-        push!(tape, ins)
+        push!(tape, FunctionWrapper{Nothing, Tuple{TapedFunction}}(ins))
     end
     return bindings
 end
