@@ -1,6 +1,7 @@
 ## Instruction and TapedFunction
 
 abstract type AbstractInstruction end
+const RawTape = Vector{AbstractInstruction}
 
 struct TypedVar{T}
     id::Symbol
@@ -32,7 +33,8 @@ mutable struct TapedFunction{F}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::Core.CodeInfo
-    tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
+    tape::RawTape
+    unified_tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
     counter::Int
     bindings::Dict{Symbol, Any}
     retval::TypedVar
@@ -49,17 +51,26 @@ mutable struct TapedFunction{F}
         end
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
-        tape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
+        tape = RawTape()
+        utape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
 
-        tf = new{F}(f, length(args), ir, tape, 1, bindings, TypedVar{Any}(:none))
+        tf = new{F}(f, length(args), ir, tape, utape, 1, bindings, TypedVar{Any}(:none))
         TRCache[cache_key] = tf # set cache
+        # unify!(tf)
         return tf
     end
 
     function TapedFunction(tf::TapedFunction{F}) where {F}
-        new{F}(tf.func, tf.arity, tf.ir, tf.tape,
+        new{F}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
                tf.counter, tf.bindings, TypedVar{Any}(:none))
+    end
+end
+
+function unify!(tf::TapedFunction)
+    length(tf.tape) == length(tf.unified_tape) && return
+    for ins in tf.tape
+        push!(tf.unified_tape, FunctionWrapper{Nothing, Tuple{TapedFunction}}(ins))
     end
 end
 
@@ -82,8 +93,10 @@ function (tf::TapedFunction)(args...; callback=nothing)
     end
 
     # run the raw tape
+    tape = length(tf.tape) == length(tf.unified_tape) ?
+        tf.unified_tape : tf.tape
     while true
-        ins = tf.tape[tf.counter]
+        ins = tape[tf.counter]
         ins(tf)
         callback !== nothing && callback()
         tf.retval.id !== :none && break
@@ -199,13 +212,13 @@ function bind_var!(var::Symbol, bindings::Dict{Symbol, Any}, ::Type{T}) where T
     TypedVar{T}(var)
 end
 
-function translate!(tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}, ir::Core.CodeInfo)
+function translate!(tape::RawTape, ir::Core.CodeInfo)
     bindings = Dict{Symbol, Any}()
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
         ins = translate!!(Core.SSAValue(idx), line, bindings, ir)
-        push!(tape, FunctionWrapper{Nothing, Tuple{TapedFunction}}(ins))
+        push!(tape, ins)
     end
     return bindings
 end
