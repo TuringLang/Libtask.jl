@@ -29,7 +29,7 @@ struct ReturnInstruction{T} <: AbstractInstruction
     arg::TypedVar{T}
 end
 
-mutable struct TapedFunction{F, T}
+mutable struct TapedFunction{F}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::Core.CodeInfo
@@ -37,7 +37,7 @@ mutable struct TapedFunction{F, T}
     unified_tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
     counter::Int
     bindings::Dict{Symbol, Any}
-    retval::TypedVar{T}
+    retval::TypedVar{<:Any}
 
     function TapedFunction(f::F, args...; cache=false) where {F}
         args_type = _accurate_typeof.(args)
@@ -55,17 +55,16 @@ mutable struct TapedFunction{F, T}
         utape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
 
-        T = isa(ir.rettype, Core.Const) ? typeof(ir.rettype.val) : ir.rettype
-        tf = new{F, T}(f, length(args), ir, tape, utape, 1,
-                                bindings, TypedVar{T}(:none))
+        tf = new{F}(f, length(args), ir, tape, utape, 1,
+                                bindings, TypedVar{Any}(:none))
         TRCache[cache_key] = tf # set cache
         # unify!(tf)
         return tf
     end
 
-    function TapedFunction(tf::TapedFunction{F, T}) where {F, T}
-        new{F, T}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
-                  tf.counter, tf.bindings, tf.retval)
+    function TapedFunction(tf::TapedFunction{F}) where {F}
+        new{F}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
+                  tf.counter, tf.bindings, TypedVar{Any}(:none))
     end
 end
 
