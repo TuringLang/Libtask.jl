@@ -37,12 +37,12 @@ mutable struct TapedFunction{F, V<:NamedTuple}
     bindings::V
     retval::Symbol
 
-    function TapedFunction(f::F, args...; cache=false) where {F}
+    function TapedFunction(f, args...; cache=false)
         args_type = _accurate_typeof.(args)
         cache_key = (f, args_type...)
 
         if cache && haskey(TRCache, cache_key) # use cache
-            cached_tf = TRCache[cache_key]::TapedFunction{F}
+            cached_tf = TRCache[cache_key]::TapedFunction
             tf = copy(cached_tf)
             tf.counter = 1
             return tf
@@ -52,7 +52,7 @@ mutable struct TapedFunction{F, V<:NamedTuple}
         tape = RawTape()
         bindings = translate!(tape, ir)
 
-        tf = new{F, typeof(bindings)}(
+        tf = new{typeof(f), typeof(bindings)}(
             f, length(args), ir, tape, 1, bindings, :none)
         TRCache[cache_key] = tf # set cache
         return tf
@@ -330,7 +330,7 @@ tape_copy(x::Core.Box) = Core.Box(tape_copy(x.contents))
 # tape_copy(x::Array) = deepcopy(x)
 # tape_copy(x::Dict) = deepcopy(x)
 
-function _copy(box::Box{T}) where {T}
+function box_copy(box::Box{T}) where {T}
     if isdefined(box, :x)
         ov = box[]
         Box{T}((;val=tape_copy(ov.val)))
@@ -339,11 +339,11 @@ function _copy(box::Box{T}) where {T}
     end
 end
 
-copy_bindings(old::NamedTuple) =
-    NamedTuple(zip(keys(old), _copy.(values(old))))
+bindings_copy(old::NamedTuple) =
+    NamedTuple(zip(keys(old), box_copy.(values(old))))
 
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf)
-    new_tf.bindings = copy_bindings(tf.bindings)
+    new_tf.bindings = bindings_copy(tf.bindings)
     return new_tf
 end
