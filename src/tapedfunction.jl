@@ -51,7 +51,6 @@ mutable struct TapedFunction{F}
         end
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
-        fix_ir(ir)
         tape = RawTape()
         utape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
@@ -188,13 +187,6 @@ end
 
 
 ## internal functions
-function fix_ir(ir::Core.CodeInfo)
-    if Base.JLOptions().code_coverage != 0 &&
-        length(ir.ssavaluetypes) > length(ir.code) &&
-        ir.ssavaluetypes[1] === Nothing
-        popfirst!(ir.ssavaluetypes)
-    end
-end
 
 _accurate_typeof(v) = typeof(v)
 _accurate_typeof(::Type{V}) where V = Type{V}
