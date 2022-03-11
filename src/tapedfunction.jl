@@ -340,7 +340,7 @@ function box_copy(box::Box{T}) where {T}
 end
 
 bindings_copy(old::NamedTuple) =
-    NamedTuple(zip(keys(old), box_copy.(values(old))))
+    NamedTuple(zip(keys(old), Tuple(box_copy(x) for x in (values(old)))))
 
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf)
