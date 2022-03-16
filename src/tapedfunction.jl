@@ -3,32 +3,6 @@
 abstract type AbstractInstruction end
 const RawTape = Vector{AbstractInstruction}
 
-struct TypedVar{T}
-    id::Symbol
-end
-
-"""
-    Instruction
-
-An `Instruction` stands for a function call
-"""
-struct Instruction{F, N, TO} <: AbstractInstruction
-    func::F
-    input::NTuple{N, TypedVar{<:Any}}
-    output::TypedVar{TO}
-end
-
-struct GotoInstruction{T} <: AbstractInstruction
-    condition::TypedVar{T}
-    # we enusre a 1-to-1 mapping between ir.code and instruction
-    # so here we can use the index directly.
-    dest::Int
-end
-
-struct ReturnInstruction{T} <: AbstractInstruction
-    arg::TypedVar{T}
-end
-
 mutable struct TapedFunction{F}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
@@ -37,7 +11,7 @@ mutable struct TapedFunction{F}
     unified_tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
     counter::Int
     bindings::Dict{Symbol, Any}
-    retval::TypedVar{<:Any}
+    retval::Symbol
 
     function TapedFunction(f::F, args...; cache=false) where {F}
         args_type = _accurate_typeof.(args)
@@ -55,8 +29,7 @@ mutable struct TapedFunction{F}
         utape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
 
-        tf = new{F}(f, length(args), ir, tape, utape, 1,
-                                bindings, TypedVar{Any}(:none))
+        tf = new{F}(f, length(args), ir, tape, utape, 1, bindings, :none)
         TRCache[cache_key] = tf # set cache
         # unify!(tf)
         return tf
@@ -64,9 +37,11 @@ mutable struct TapedFunction{F}
 
     function TapedFunction(tf::TapedFunction{F}) where {F}
         new{F}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
-                  tf.counter, tf.bindings, TypedVar{Any}(:none))
+               tf.counter, tf.bindings, :none)
     end
 end
+
+const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
 
 function unify!(tf::TapedFunction)
     length(tf.tape) == length(tf.unified_tape) && return
@@ -75,13 +50,54 @@ function unify!(tf::TapedFunction)
     end
 end
 
-const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
+struct Box{T}
+    id::Symbol
+    get # ::FunctionWrapper{T, Tuple{TapedFunction, Symbol}}
+    set # ::FunctionWrapper{Nothing, Tuple{TapedFunction, Symbol, T}}
+
+    function Box{T}(id::Symbol) where T
+        return new(id, _inner_getter, _inner_setter)
+        # return new(id,
+        # FunctionWrapper{T, Tuple{TapedFunction, Symbol}}(_inner_getter),
+        # FunctionWrapper{Nothing, Tuple{TapedFunction, Symbol, T}}(_inner_setter))
+    end
+end
+
+_inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
+_inner_setter(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
+_lookup(tf::TapedFunction, v) = v
+_lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
+_update_var!(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
+_update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = v.set(tf, v.id, c)
+
+"""
+    Instruction
+
+An `Instruction` stands for a function call
+"""
+struct Instruction{F, N, TO} <: AbstractInstruction
+    func::F
+    input::NTuple{N, Box{<:Any}}
+    output::Box{TO}
+end
+
+struct GotoInstruction{T} <: AbstractInstruction
+    condition::Box{T}
+    # we enusre a 1-to-1 mapping between ir.code and instruction
+    # so here we can use the index directly.
+    dest::Int
+end
+
+struct ReturnInstruction{T} <: AbstractInstruction
+    arg::Box{T}
+end
+
 
 val(x) = x
 val(x::GlobalRef) = getproperty(x.mod, x.name)
 val(x::QuoteNode) = eval(x)
 val(x::TapedFunction) = x.func
-result(t::TapedFunction) = _lookup(t, t.retval)
+result(t::TapedFunction) = t.bindings[t.retval]
 
 function (tf::TapedFunction)(args...; callback=nothing)
     # set args
@@ -100,7 +116,7 @@ function (tf::TapedFunction)(args...; callback=nothing)
         ins = tape[tf.counter]
         ins(tf)
         callback !== nothing && callback()
-        tf.retval.id !== :none && break
+        tf.retval !== :none && break
     end
     return result(tf)
 end
@@ -147,12 +163,6 @@ function Base.show(io::IO, instr::GotoInstruction)
     println(io, "GotoInstruction(", instr.condition, ", dest=", instr.dest, ")")
 end
 
-
-_lookup(tf::TapedFunction, v) = v
-_lookup(tf::TapedFunction, v::TypedVar{T}) where T = tf.bindings[v.id]::T
-_update_var!(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
-_update_var!(tf::TapedFunction, v::TypedVar{T}, c) where T = tf.bindings[v.id] = c
-
 function (instr::Instruction{F})(tf::TapedFunction) where F
     # catch run-time exceptions / errors.
     try
@@ -182,7 +192,7 @@ function (instr::GotoInstruction)(tf::TapedFunction)
 end
 
 function (instr::ReturnInstruction)(tf::TapedFunction)
-    tf.retval = instr.arg
+    tf.retval = instr.arg.id
 end
 
 
@@ -209,7 +219,7 @@ end
 function bind_var!(var, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) # for literal constants
     id = gensym()
     bindings[id] = var
-    return TypedVar{typeof(var)}(id)
+    Box{typeof(var)}(id)
 end
 bind_var!(var::Core.SSAValue, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) =
     bind_var!(Symbol(var.id), bindings, ir.ssavaluetypes[var.id])
@@ -223,7 +233,7 @@ bind_var!(var::Symbol, boxes::Dict{Symbol, Any}, c::Core.PartialStruct) =
     bind_var!(var, boxes, _loose_type(c.typ))
 function bind_var!(var::Symbol, bindings::Dict{Symbol, Any}, ::Type{T}) where T
     get!(bindings, var, nothing)
-    TypedVar{T}(var)
+    Box{T}(var)
 end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
@@ -243,7 +253,7 @@ function translate!!(var::IRVar, line::Core.NewvarNode,
                      bindings::Dict{Symbol, Any}, @nospecialize(ir))
     # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
     # on tape. see GotoInstruction.dest.
-    return GotoInstruction(TypedVar{Bool}(:_true), 0)
+    return GotoInstruction(Box{Bool}(:_true), 0)
 end
 
 function translate!!(var::IRVar, line::GlobalRef,
@@ -266,7 +276,7 @@ function translate!!(var::IRVar, line::Core.GotoIfNot,
                      bindings::Dict{Symbol, Any}, ir)
     _cond = bind_var!(line.cond, bindings, ir)
     cond = if isa(_cond, Bool)
-        TypedVar{Bool}(_cond ? :_true : :_false)
+        Box{Bool}(_cond ? :_true : :_false)
     else
         _cond
     end
@@ -275,7 +285,7 @@ end
 
 function translate!!(var::IRVar, line::Core.GotoNode,
                      bindings::Dict{Symbol, Any}, @nospecialize(ir))
-    return GotoInstruction(TypedVar{Bool}(:_false), line.label)
+    return GotoInstruction(Box{Bool}(:_false), line.label)
 end
 
 function translate!!(var::IRVar, line::Core.ReturnNode,
