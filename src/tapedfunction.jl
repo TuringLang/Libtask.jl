@@ -3,17 +3,17 @@
 abstract type AbstractInstruction end
 const RawTape = Vector{AbstractInstruction}
 
-mutable struct TapedFunction{F}
+mutable struct TapedFunction{F, TapeType}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
     ir::Core.CodeInfo
-    tape::RawTape
-    unified_tape::Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
+    tape::TapeType
     counter::Int
     bindings::Dict{Symbol, Any}
     retval::Symbol
 
-    function TapedFunction(f::F, args...; cache=false) where {F}
+    function TapedFunction(f, args...; cache=false)
+        F = typeof(f)
         args_type = _accurate_typeof.(args)
         cache_key = (f, args_type...)
 
@@ -26,39 +26,43 @@ mutable struct TapedFunction{F}
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
         tape = RawTape()
-        utape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}()
         bindings = translate!(tape, ir)
 
-        tf = new{F}(f, length(args), ir, tape, utape, 1, bindings, :none)
+        tf = new{F, RawTape}(f, length(args), ir, tape, 1, bindings, :none)
         TRCache[cache_key] = tf # set cache
-        # unify!(tf)
         return tf
     end
 
-    function TapedFunction(tf::TapedFunction{F}) where {F}
-        new{F}(tf.func, tf.arity, tf.ir, tf.tape, tf.unified_tape,
+    function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
+        new{F, T0}(tf.func, tf.arity, tf.ir, tf.tape,
                tf.counter, tf.bindings, :none)
     end
+
+    TapedFunction(tf::TapedFunction{F, T}) where {F, T} = TapedFunction{F, T}(tf)
 end
 
 const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
+const CompiledTape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
 
-function unify!(tf::TapedFunction)
-    length(tf.tape) == length(tf.unified_tape) && return
-    for ins in tf.tape
-        push!(tf.unified_tape, FunctionWrapper{Nothing, Tuple{TapedFunction}}(ins))
+function Base.convert(::Type{CompiledTape}, tape::RawTape)
+    ctape = CompiledTape(undef, length(tape))
+    for idx in 1:length(tape)
+        ctape[idx] = FunctionWrapper{Nothing, Tuple{TapedFunction}}(tape[idx])
     end
+    return ctape
 end
+
+compile(tf::TapedFunction{F, RawTape}) where {F} = TapedFunction{F, CompiledTape}(tf)
 
 # const TypedFunction = FunctionWrapper
 struct TypedFunction{OT, IT<:Tuple}
     func::Function
-    retval::Ref{OT}
+    retval::Base.RefValue{OT}
     TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f, Ref{OT}())
 end
 function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
     output = f.func(args...)
-    OT === Nothing ? (f.retval[] = nothing) : (f.retval[] = output)
+    f.retval[] = OT === Nothing ? nothing : output
     return f.retval[]
 end
 
@@ -121,10 +125,8 @@ function (tf::TapedFunction)(args...; callback=nothing)
     end
 
     # run the raw tape
-    tape = length(tf.tape) == length(tf.unified_tape) ?
-        tf.unified_tape : tf.tape
     while true
-        ins = tape[tf.counter]
+        ins = tf.tape[tf.counter]
         ins(tf)
         callback !== nothing && callback()
         tf.retval !== :none && break
