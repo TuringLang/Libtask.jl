@@ -51,15 +51,15 @@ function unify!(tf::TapedFunction)
 end
 
 # const TypedFunction = FunctionWrapper
-mutable struct TypedFunction{OT, IT<:Tuple}
+struct TypedFunction{OT, IT<:Tuple}
     func::Function
-    retval::OT
-    TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f)
+    retval::Ref{OT}
+    TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f, Ref{OT}())
 end
 function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
     output = f.func(args...)
-    OT === Nothing ? (f.retval = nothing) : (f.retval = output)
-    return f.retval
+    OT === Nothing ? (f.retval[] = nothing) : (f.retval[] = output)
+    return f.retval[]
 end
 
 struct Box{T}
@@ -74,12 +74,12 @@ struct Box{T}
     end
 end
 
-_inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
-_inner_setter(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
-_lookup(tf::TapedFunction, v) = v
-_lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
-_update_var!(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
-_update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = v.set(tf, v.id, c)
+@inline _inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
+@inline _inner_setter(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
+@inline _lookup(tf::TapedFunction, v) = v
+@inline _lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
+@inline _update_var!(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
+@inline _update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = v.set(tf, v.id, c)
 
 """
     Instruction
