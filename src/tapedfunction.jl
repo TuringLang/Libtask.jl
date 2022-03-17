@@ -12,26 +12,28 @@ mutable struct TapedFunction{F, TapeType}
     bindings::Dict{Symbol, Any}
     retval::Symbol
 
-    function TapedFunction(f, args...; cache=false)
-        F = typeof(f)
+    function TapedFunction{F, T}(f::F, args...; cache=false) where {F, T}
         args_type = _accurate_typeof.(args)
         cache_key = (f, args_type...)
 
         if cache && haskey(TRCache, cache_key) # use cache
-            cached_tf = TRCache[cache_key]::TapedFunction{F}
+            cached_tf = TRCache[cache_key]::TapedFunction{F, T}
             tf = copy(cached_tf)
             tf.counter = 1
             return tf
         end
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
-        tape = RawTape()
+        tape = T()
         bindings = translate!(tape, ir)
 
-        tf = new{F, RawTape}(f, length(args), ir, tape, 1, bindings, :none)
+        tf = new{F, T}(f, length(args), ir, tape, 1, bindings, :none)
         TRCache[cache_key] = tf # set cache
         return tf
     end
+
+    TapedFunction(f, args...; cache=false) =
+        TapedFunction{typeof(f), RawTape}(f, args...; cache=cache)
 
     function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
         new{F, T0}(tf.func, tf.arity, tf.ir, tf.tape,
