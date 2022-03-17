@@ -50,16 +50,27 @@ function unify!(tf::TapedFunction)
     end
 end
 
+# const TypedFunction = FunctionWrapper
+mutable struct TypedFunction{OT, IT<:Tuple}
+    func::Function
+    retval::OT
+    TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f)
+end
+function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
+    output = f.func(args...)
+    OT === Nothing ? (f.retval = nothing) : (f.retval = output)
+    return f.retval
+end
+
 struct Box{T}
     id::Symbol
-    get # ::FunctionWrapper{T, Tuple{TapedFunction, Symbol}}
-    set # ::FunctionWrapper{Nothing, Tuple{TapedFunction, Symbol, T}}
+    get::TypedFunction{T, Tuple{TapedFunction, Symbol}}
+    set::TypedFunction{Nothing, Tuple{TapedFunction, Symbol, T}}
 
     function Box{T}(id::Symbol) where T
-        return new(id, _inner_getter, _inner_setter)
-        # return new(id,
-        # FunctionWrapper{T, Tuple{TapedFunction, Symbol}}(_inner_getter),
-        # FunctionWrapper{Nothing, Tuple{TapedFunction, Symbol, T}}(_inner_setter))
+        return new(id,
+                   TypedFunction{T, Tuple{TapedFunction, Symbol}}(_inner_getter),
+                   TypedFunction{Nothing, Tuple{TapedFunction, Symbol, T}}(_inner_setter))
     end
 end
 
