@@ -14,4 +14,21 @@ using Libtask
         newins = findall(x -> isa(x, Libtask.Instruction{typeof(Libtask.__new__)}), tf.tape)
         @test length(newins) == 1
     end
+
+    @testset "Compiled Tape" begin
+        function g(x, y)
+            if x>y
+                r= string(sin(x))
+            else
+                r= sin(x) * cos(y)
+            end
+            return r
+        end
+
+        tf = Libtask.TapedFunction(g, 1., 2.)
+        ctf = Libtask.compile(tf)
+        r = ctf(1., 2.)
+
+        @test typeof(r) === Float64
+    end
 end

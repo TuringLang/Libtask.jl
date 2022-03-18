@@ -1,6 +1,7 @@
 module Libtask
 
 using CodeInfoTools
+using FunctionWrappers: FunctionWrapper
 using LRUCache
 
 export TapedTask, consume, produce
