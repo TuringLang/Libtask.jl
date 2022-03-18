@@ -24,8 +24,7 @@ mutable struct TapedFunction{F, TapeType}
         end
 
         ir = CodeInfoTools.code_inferred(f, args_type...)
-        tape = T()
-        bindings = translate!(tape, ir)
+        bindings, tape = translate!(RawTape(), ir)
 
         tf = new{F, T}(f, length(args), ir, tape, 1, bindings, :none)
         TRCache[cache_key] = tf # set cache
@@ -62,6 +61,7 @@ struct TypedFunction{OT, IT<:Tuple}
     retval::Base.RefValue{OT}
     TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f, Ref{OT}())
 end
+
 function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
     output = f.func(args...)
     f.retval[] = OT === Nothing ? nothing : output
@@ -110,11 +110,11 @@ struct ReturnInstruction{T} <: AbstractInstruction
 end
 
 
-val(x) = x
-val(x::GlobalRef) = getproperty(x.mod, x.name)
-val(x::QuoteNode) = eval(x)
-val(x::TapedFunction) = x.func
-result(t::TapedFunction) = t.bindings[t.retval]
+@inline val(x) = x
+@inline val(x::GlobalRef) = getproperty(x.mod, x.name)
+@inline val(x::QuoteNode) = eval(x)
+@inline val(x::TapedFunction) = x.func
+@inline result(t::TapedFunction) = t.bindings[t.retval]
 
 function (tf::TapedFunction)(args...; callback=nothing)
     # set args
@@ -146,10 +146,6 @@ function Base.show(io::IO, tf::TapedFunction)
     println(buf, "* .ir   =>")
     println(buf, "------------------")
     println(buf, tf.ir)
-    println(buf, "------------------")
-    println(buf, "* .bindings =>")
-    println(buf, "------------------")
-    println(buf, tf.bindings)
     println(buf, "------------------")
     print(io, String(take!(buf)))
 end
@@ -259,7 +255,7 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
         ins = translate!!(Core.SSAValue(idx), line, bindings, ir)
         push!(tape, ins)
     end
-    return bindings
+    return (bindings, tape)
 end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
