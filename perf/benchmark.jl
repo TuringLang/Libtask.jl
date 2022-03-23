@@ -4,8 +4,8 @@ using BenchmarkTools
 
 ####################################################################
 
-function benchmark_driver!(f, x...)
-    println("benchmarking $(f)...")
+function benchmark_driver!(f, x...; f_displayname=string(f))
+    println("benchmarking $(f_displayname)...")
     tf = Libtask.TapedFunction(f, x)
 
     print("  Run Original Function:")
@@ -65,7 +65,7 @@ end
 n = 100
 matrix_test = generate_matrix_test(n)
 x = collect(1.0:(2n^2 + n))
-benchmark_driver!(matrix_test, x)
+benchmark_driver!(matrix_test, x; f_displayname="matrix_test")
 
 ####################################################################
 relu(x) = log.(1.0 .+ exp.(x))
