@@ -13,33 +13,26 @@ end
 
 
 # Case 1: Sample from the prior.
-
 m = Turing.Core.TracedModel(gdemo(1.5, 2.), SampleFromPrior(), VarInfo())
-
 f = m.evaluator[1];
-
 args = m.evaluator[2:end];
 
-@show "Directly call..."
+println("Directly call...")
 @btime f(args...)
 # (2.0, VarInfo (2 variables (μ, σ), dimension 2; logp: -6.162))
-
-@show "TapedTask construction..."
+println("TapedTask construction...")
 t = @btime TapedTask(f, args...)
-# schedule(t.task) # work fine!
-# @show Libtask.result(t.tf)
-@show "Run a tape..."
+println("Run a tape...")
 @btime t.tf(args...)
 
 # Case 2: SMC sampler
-
 m = Turing.Core.TracedModel(gdemo(1.5, 2.), Sampler(SMC(50)), VarInfo());
-@show "Directly call..."
-@btime m.evaluator[1](m.evaluator[2:end]...)
+f = m.evaluator[1];
+args = m.evaluator[2:end];
 
-@show "TapedTask construction..."
-t = @btime TapedTask(m.evaluator[1], m.evaluator[2:end]...);
-# schedule(t.task)
-# @show Libtask.result(t.tf.tape)
-@show "Run a tape..."
-@btime t.tf(m.evaluator[2:end]...)
+println("Directly call...")
+@btime f(args...)
+println("TapedTask construction...")
+t = @btime TapedTask(f, args...)
+println("Run a tape...")
+@btime t.tf(args...)
