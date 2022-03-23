@@ -53,10 +53,9 @@ x = rand(100000)
 benchmark_driver!(ackley, x)
 
 ####################################################################
-#=
 function generate_matrix_test(n)
     return x -> begin
-        @assert length(x) == 2n^2 + n
+        # @assert length(x) == 2n^2 + n
         a = reshape(x[1:n^2], n, n)
         b = reshape(x[n^2 + 1:2n^2], n, n)
         return log.((a * b) + a - b)
@@ -67,9 +66,8 @@ n = 100
 matrix_test = generate_matrix_test(n)
 x = collect(1.0:(2n^2 + n))
 benchmark_driver!(matrix_test, x)
-=#
-####################################################################
 
+####################################################################
 relu(x) = log.(1.0 .+ exp.(x))
 sigmoid(n) = 1. / (1. + exp(-n))
 
