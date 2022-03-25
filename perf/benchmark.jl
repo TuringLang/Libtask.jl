@@ -23,7 +23,7 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     GC.gc()
 
     print("  Run TapedTask:")
-    x = (x[1:end-1]..., produce)
+    x = (x[1:end-1]..., produce);
     tf = Libtask.TapedFunction(f, x...);
     @btime begin tt = TapedTask($tf, $x...); while consume(tt)!==nothing end; end
     # show the number of produce calls inside `f`
@@ -40,7 +40,7 @@ function rosenbrock(x, callback=nothing)
     i = x[2:end]
     j = x[1:end-1]
     ret = sum((1 .- j).^2 + 100*(i - j.^2).^2)
-    callback === nothing || callback(ret);
+    if callback !== nothing; callback(ret); end
     return ret
 end
 
@@ -57,7 +57,7 @@ function ackley(x::AbstractVector, callback=nothing)
     for i in x
         sum_cos += cos(c*i)
         sum_sqrs += i^2
-        callback === nothing || callback(sum_sqrs);
+        if callback !== nothing; produce(sum_sqrs); end
     end
     return (-a * exp(b * sqrt(len_recip*sum_sqrs)) -
             exp(len_recip*sum_cos) + a + MathConstants.e)
@@ -73,7 +73,7 @@ function generate_matrix_test(n)
         a = reshape(x[1:n^2], n, n)
         b = reshape(x[n^2 + 1:2n^2], n, n)
         ret = log.((a * b) + a - b)
-        callback === nothing || callback(ret);
+        if callback !== nothing;  callback(ret); end
         return ret
     end
 end
@@ -91,7 +91,7 @@ function neural_net(w1, w2, w3, x1, callback=nothing)
     x2 = relu(w1 * x1)
     x3 = relu(w2 * x2)
     ret = sigmoid(LinearAlgebra.dot(w3, x3))
-    callback === nothing || callback(ret);
+    if callback !== nothing; callback(ret); end
     return ret
 end
 
