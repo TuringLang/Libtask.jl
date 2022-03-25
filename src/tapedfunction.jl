@@ -116,10 +116,11 @@ end
 @inline val(x::TapedFunction) = x.func
 @inline result(t::TapedFunction) = t.bindings[t.retval]
 
-function (tf::TapedFunction)(args...; callback=nothing)
-    # reset counter and retval
-    tf.counter = 1;
-    tf.retval = :none;
+function (tf::TapedFunction)(args...; callback=nothing, startover=true)
+    if startover # reset counter and retval to run from the start
+        tf.counter = 1;
+        tf.retval = :none;
+    end
 
     # set args
     if tf.counter <= 1
