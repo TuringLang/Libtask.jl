@@ -6,6 +6,7 @@ using BenchmarkTools
 
 function benchmark_driver!(f, x...; f_displayname=string(f))
     x = (x..., nothing)
+
     println("benchmarking $(f_displayname)...")
     tf = Libtask.TapedFunction(f, x...);
 
@@ -22,14 +23,20 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     @btime $ctf($(x)...)
     GC.gc()
 
-    print("  Run TapedTask:")
+    print("  Run TapedTask: ")
     x = (x[1:end-1]..., produce);
-    tf = Libtask.TapedFunction(f, x...);
-    @btime begin tt = TapedTask($tf, $x...); while consume(tt)!==nothing end; end
     # show the number of produce calls inside `f`
+    tf = Libtask.TapedFunction(f, x...);
     tt = TapedTask(tf, x...); 
     c = 0; while consume(tt)!==nothing c+=1 end;
-    println(f_displayname, ": #produce=", c);
+    print("#produce=", c);
+    f_task = (tf, x) -> begin 
+        # tf = Libtask.TapedFunction(f, x...);
+        tt = TapedTask(tf, x...); 
+        while consume(tt)!==nothing
+        end; 
+    end
+    @btime $f_task($f, $x)
     GC.gc()
 end
 
