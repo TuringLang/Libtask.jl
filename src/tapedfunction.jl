@@ -117,6 +117,10 @@ end
 @inline result(t::TapedFunction) = t.bindings[t.retval]
 
 function (tf::TapedFunction)(args...; callback=nothing)
+    # reset counter and retval
+    tf.counter = 1;
+    tf.retval = :none;
+
     # set args
     if tf.counter <= 1
         haskey(tf.bindings, :_1) && _update_var!(tf, :_1, tf.func)
