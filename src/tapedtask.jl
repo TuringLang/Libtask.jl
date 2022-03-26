@@ -32,7 +32,7 @@ end
 
 function wrap_task(tf, produce_ch, consume_ch, args...)
     try
-        tf(args...; callback=producer, continue=true)
+        tf(args...; callback=producer, continuation=true)
     catch e
         bt = catch_backtrace()
         put!(produce_ch, TapedTaskException(e, bt))

@@ -116,8 +116,8 @@ end
 @inline val(x::TapedFunction) = x.func
 @inline result(t::TapedFunction) = t.bindings[t.retval]
 
-function (tf::TapedFunction)(args...; callback=nothing, continue=false)
-    if !continue # reset counter and retval to run from the start
+function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
+    if !continuation # reset counter and retval to run from the start
         tf.counter = 1;
         tf.retval = :none;
     end
