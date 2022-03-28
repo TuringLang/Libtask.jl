@@ -34,7 +34,7 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
         end
         verbose && print("#produce=", c, "; "); 
     end
-    f_task(f, x; verbose=true) # print #ßproduce calls.
+    f_task(tf, x; verbose=true) # print #produce calls.
     @btime $f_task($f, $x)
     GC.gc()
 end
