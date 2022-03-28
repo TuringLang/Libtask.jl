@@ -68,45 +68,30 @@ function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
     return f.retval[]
 end
 
-struct Box{T}
-    id::Symbol
-    get::TypedFunction{T, Tuple{TapedFunction, Symbol}}
-    set::TypedFunction{Nothing, Tuple{TapedFunction, Symbol, T}}
-
-    function Box{T}(id::Symbol) where T
-        return new(id,
-                   TypedFunction{T, Tuple{TapedFunction, Symbol}}(_inner_getter),
-                   TypedFunction{Nothing, Tuple{TapedFunction, Symbol, T}}(_inner_setter))
-    end
-end
-
-@inline _inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
-@inline _inner_setter(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
 @inline _lookup(tf::TapedFunction, v) = v
-@inline _lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
+@inline _lookup(tf::TapedFunction, v::Symbol) = tf.bindings[v]
 @inline _update_var!(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
-@inline _update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = v.set(tf, v.id, c)
 
 """
     Instruction
 
 An `Instruction` stands for a function call
 """
-struct Instruction{F, N, TO} <: AbstractInstruction
+struct Instruction{F, N} <: AbstractInstruction
     func::F
-    input::NTuple{N, Box{<:Any}}
-    output::Box{TO}
+    input::NTuple{N, Symbol}
+    output::Symbol
 end
 
-struct GotoInstruction{T} <: AbstractInstruction
-    condition::Box{T}
+struct GotoInstruction <: AbstractInstruction
+    condition::Symbol
     # we enusre a 1-to-1 mapping between ir.code and instruction
     # so here we can use the index directly.
     dest::Int
 end
 
-struct ReturnInstruction{T} <: AbstractInstruction
-    arg::Box{T}
+struct ReturnInstruction <: AbstractInstruction
+    arg::Symbol
 end
 
 
@@ -196,8 +181,8 @@ function (instr::Instruction{F})(tf::TapedFunction) where F
 end
 
 function (instr::GotoInstruction)(tf::TapedFunction)
-    cond = instr.condition.id === :_true ? true :
-        instr.condition.id === :_false ? false :
+    cond = instr.condition === :_true ? true :
+        instr.condition === :_false ? false :
         val(_lookup(tf, instr.condition))
 
     if cond
@@ -208,7 +193,7 @@ function (instr::GotoInstruction)(tf::TapedFunction)
 end
 
 function (instr::ReturnInstruction)(tf::TapedFunction)
-    tf.retval = instr.arg.id
+    tf.retval = instr.arg
 end
 
 
@@ -235,7 +220,7 @@ end
 function bind_var!(var, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) # for literal constants
     id = gensym()
     bindings[id] = var
-    Box{typeof(var)}(id)
+    return id
 end
 bind_var!(var::Core.SSAValue, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) =
     bind_var!(Symbol(var.id), bindings, ir.ssavaluetypes[var.id])
@@ -249,7 +234,7 @@ bind_var!(var::Symbol, boxes::Dict{Symbol, Any}, c::Core.PartialStruct) =
     bind_var!(var, boxes, _loose_type(c.typ))
 function bind_var!(var::Symbol, bindings::Dict{Symbol, Any}, ::Type{T}) where T
     get!(bindings, var, nothing)
-    Box{T}(var)
+    return var
 end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
@@ -269,7 +254,7 @@ function translate!!(var::IRVar, line::Core.NewvarNode,
                      bindings::Dict{Symbol, Any}, @nospecialize(ir))
     # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
     # on tape. see GotoInstruction.dest.
-    return GotoInstruction(Box{Bool}(:_true), 0)
+    return GotoInstruction(:_true, 0)
 end
 
 function translate!!(var::IRVar, line::GlobalRef,
@@ -284,15 +269,15 @@ end
 
 function translate!!(var::IRVar, line::Core.TypedSlot,
                      bindings::Dict{Symbol, Any}, ir)
-    input_box = bind_var!(Core.SlotNumber(line.id), bindings, ir)
-    return Instruction(identity, (input_box,), bind_var!(var, bindings, ir))
+    input = bind_var!(Core.SlotNumber(line.id), bindings, ir)
+    return Instruction(identity, (input,), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.GotoIfNot,
                      bindings::Dict{Symbol, Any}, ir)
     _cond = bind_var!(line.cond, bindings, ir)
     cond = if isa(_cond, Bool)
-        Box{Bool}(_cond ? :_true : :_false)
+        _cond ? :_true : :_false
     else
         _cond
     end
@@ -301,7 +286,7 @@ end
 
 function translate!!(var::IRVar, line::Core.GotoNode,
                      bindings::Dict{Symbol, Any}, @nospecialize(ir))
-    return GotoInstruction(Box{Bool}(:_false), line.label)
+    return GotoInstruction(:_false, line.label)
 end
 
 function translate!!(var::IRVar, line::Core.ReturnNode,
