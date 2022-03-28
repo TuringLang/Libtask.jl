@@ -26,19 +26,15 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     print("  Run TapedTask: ")
     x = (x[1:end-1]..., produce);
     # show the number of produce calls inside `f`
-    tf = Libtask.TapedFunction(f, x...);
-    tt = TapedTask(tf, x...); 
-    c = 0
-    while consume(tt) !== nothing
-        c += 1
-    end
-    print("#produce=", c);
-    f_task = (tf, x) -> begin 
-        # tf = Libtask.TapedFunction(f, x...);
+    f_task = (tf, x; verbose=false) -> begin 
         tt = TapedTask(tf, x...); 
+        c = 0
         while consume(tt)!==nothing
-        end; 
+            c+=1
+        end
+        verbose && print("#produce=", c, "; "); 
     end
+    f_task(f, x; verbose=true) # print #ßproduce calls.
     @btime $f_task($f, $x)
     GC.gc()
 end
@@ -67,7 +63,7 @@ function ackley(x::AbstractVector, callback=nothing)
     for i in x
         sum_cos += cos(c*i)
         sum_sqrs += i^2
-        callback !== nothing && produce(sum_sqrs)
+        callback !== nothing && callback(sum_sqrs)
     end
     return (-a * exp(b * sqrt(len_recip*sum_sqrs)) -
             exp(len_recip*sum_cos) + a + MathConstants.e)
