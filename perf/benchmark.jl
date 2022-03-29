@@ -25,6 +25,7 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
 
     print("  Run TapedTask: ")
     x = (x[1:end-1]..., produce);
+    tf = Libtask.TapedFunction(f, x...);
     # show the number of produce calls inside `f`
     f_task = (tf, x; verbose=false) -> begin 
         tt = TapedTask(tf, x...); 
