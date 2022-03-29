@@ -35,7 +35,8 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
         verbose && print("#produce=", c, "; "); 
     end
     # Note that we need to pass `f` instead of `tf` to avoid 
-    #  default continuation in `TapedTask` constructor
+    #  default continuation in `TapedTask` constructor, see, e.g. 
+    #  https://github.com/TuringLang/Libtask.jl/pull/135
     f_task(f, x; verbose=true) # print #produce calls
     @btime $f_task($f, $x)
     GC.gc()
