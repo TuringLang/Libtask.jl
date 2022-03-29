@@ -25,18 +25,19 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
 
     print("  Run TapedTask: ")
     x = (x[1:end-1]..., produce);
-    tf = Libtask.TapedFunction(f, x...);
     # show the number of produce calls inside `f`
-    f_task = (tf, x; verbose=false) -> begin 
-        tt = TapedTask(tf, x...); 
+    f_task = (f, x; verbose=false) -> begin 
+        tt = TapedTask(f, x...); 
         c = 0
         while consume(tt)!==nothing
             c+=1
         end
         verbose && print("#produce=", c, "; "); 
     end
-    f_task(tf, x; verbose=true) # print #produce calls.
-    @btime $f_task($tf, $x)
+    # Note that we need to pass `f` instead of `tf` to avoid 
+    #  default continuation in `TapedTask` constructor
+    f_task(f, x; verbose=true) # print #produce calls
+    @btime $f_task($f, $x)
     GC.gc()
 end
 
