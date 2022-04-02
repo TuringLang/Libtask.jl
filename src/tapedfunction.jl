@@ -179,20 +179,29 @@ function Base.show(io::IO, instr::GotoInstruction)
     println(io, "GotoInstruction(", instr.condition, ", dest=", instr.dest, ")")
 end
 
-function (instr::Instruction{F})(tf::TapedFunction) where F
-    # catch run-time exceptions / errors.
-    try
-        func = val(_lookup(tf, instr.func))
-        inputs = map(x -> val(_lookup(tf, x)), instr.input)
-        output = func(inputs...)
-        _update_var!(tf, instr.output, output)
-        tf.counter += 1
-    catch e
-        println("counter=", tf.counter)
-        println("tf=", tf)
-        println(e, catch_backtrace());
-        rethrow(e);
+@generated function (instr::Instruction{F, N})(tf::TapedFunction) where {F, N}
+    arity = instr.parameters[2]
+    body = quote
+        try
+            func = val(_lookup(tf, instr.func))
+            output = func() # will inject arguments later
+            _update_var!(tf, instr.output, output)
+            tf.counter += 1
+        catch e
+            # catch run-time exceptions / errors.
+            println("counter=", tf.counter)
+            println("tf=", tf)
+            println(e, catch_backtrace());
+            rethrow(e);
+        end
     end
+    body = MacroTools.striplines(body)
+    # inject arguments
+    call_args = body.args[1].args[1].args[2].args[2].args
+    for i in 1:arity
+        push!(call_args, :(val(_lookup(tf, instr.input[$i]))))
+    end
+    body
 end
 
 function (instr::GotoInstruction)(tf::TapedFunction)
