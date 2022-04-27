@@ -62,7 +62,7 @@ struct TypedFunction{OT, IT<:Tuple}
     TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f, Ref{OT}())
 end
 
-function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
+@inline function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
     output = f.func(args...)
     f.retval[] = OT === Nothing ? nothing : output
     return f.retval[]
@@ -116,6 +116,8 @@ end
 @inline val(x::TapedFunction) = x.func
 @inline result(t::TapedFunction) = t.bindings[t.retval]
 
+const SLOTS = [Symbol("_", i) for i in 1:100]
+
 function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     if !continuation # reset counter and retval to run from the start
         tf.counter = 1;
@@ -126,7 +128,7 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     if tf.counter <= 1
         haskey(tf.bindings, :_1) && _update_var!(tf, :_1, tf.func)
         for i in 1:length(args)
-            slot = Symbol("_", i + 1)
+            slot = SLOTS[i + 1]
             haskey(tf.bindings, slot) && _update_var!(tf, slot, args[i])
         end
     end
