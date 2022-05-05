@@ -71,21 +71,17 @@ end
 struct Box{T}
     id::Symbol
     get::TypedFunction{T, Tuple{TapedFunction, Symbol}}
-    set::TypedFunction{Nothing, Tuple{TapedFunction, Symbol, T}}
 
     function Box{T}(id::Symbol) where T
-        return new(id,
-                   TypedFunction{T, Tuple{TapedFunction, Symbol}}(_inner_getter),
-                   TypedFunction{Nothing, Tuple{TapedFunction, Symbol, T}}(_inner_setter))
+        return new(id, TypedFunction{T, Tuple{TapedFunction, Symbol}}(_inner_getter))
     end
 end
 
 @inline _inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
-@inline _inner_setter(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
 @inline _lookup(tf::TapedFunction, v) = v
 @inline _lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
-@inline _update_var!(tf::TapedFunction, v::Symbol, c) = tf.bindings[v] = c
-@inline _update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = v.set(tf, v.id, c)
+@inline _update_var!(tf::TapedFunction, v::Symbol, c) = (tf.bindings[v] = c; nothing)
+@inline _update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = (tf.bindings[v.id] = c; nothing)
 
 """
     Instruction
@@ -128,7 +124,7 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     if tf.counter <= 1
         haskey(tf.bindings, :_1) && _update_var!(tf, :_1, tf.func)
         for i in 1:length(args)
-            slot = SLOTS[i + 1]
+            slot = i < length(SLOTS) ? SLOTS[i + 1] : Symbol("_", i + 1)
             haskey(tf.bindings, slot) && _update_var!(tf, slot, args[i])
         end
     end
@@ -377,7 +373,7 @@ tape_copy(x::Core.Box) = Core.Box(tape_copy(x.contents))
 # tape_copy(x::Dict) = deepcopy(x)
 
 function copy_bindings(old::Dict{Symbol, Any})
-    newb = Dict{Symbol, Any}()
+    newb = copy(old)
     for (k, v) in old
         newb[k] = tape_copy(v)
     end
