@@ -373,9 +373,16 @@ function copy_bindings(old::Dict{Symbol, Any})
     return newb
 end
 
-function Base.copy(tf::TapedFunction)
+function Base.copy(tf::TapedFunction, args...)
     # create a new uninitialized TapedFunction
     new_tf = TapedFunction(tf)
     new_tf.bindings = copy_bindings(tf.bindings)
+    if !isempty(args)
+        length(args) > tf.arity && throw("Number of updates for `args` is greater than generated function arity $(tf.arity)")
+        for (i, arg) in enumerate(args)
+            slot = Symbol("_", i + 1)
+            haskey(tf.bindings, slot) && _update_var!(tf, slot, arg)
+       end
+    end
     return new_tf
 end
