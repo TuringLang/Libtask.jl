@@ -163,7 +163,12 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 function Base.copy(t::TapedTask; args=())
     tf = copy(t.tf)
-    real_args = typeof(args) == typeof(t.args) ? args : tape_copy.(t.args)
+    real_args = if length(args) > 0
+        typeof(args) == typeof(t.args) || error("bad arguments")
+        args
+    else
+        tape_copy.(t.args)
+    end
     new_t = TapedTask(tf, real_args...)
     storage = t.task.storage::IdDict{Any,Any}
     new_t.task.storage = copy(storage)
