@@ -3,9 +3,10 @@ struct TapedTaskException
     backtrace::Vector{Any}
 end
 
-struct TapedTask{F}
+struct TapedTask{F, AT<:Tuple}
     task::Task
     tf::TapedFunction{F}
+    args::AT
     produce_ch::Channel{Any}
     consume_ch::Channel{Int}
     produced_val::Vector{Any}
@@ -13,10 +14,11 @@ struct TapedTask{F}
     function TapedTask(
         t::Task,
         tf::TapedFunction{F},
+        args::AT,
         produce_ch::Channel{Any},
         consume_ch::Channel{Int}
-    ) where {F}
-        new{F}(t, tf, produce_ch, consume_ch, Any[])
+    ) where {F, AT<:Tuple}
+        new{F, AT}(t, tf, args, produce_ch, consume_ch, Any[])
     end
 end
 
@@ -55,7 +57,7 @@ function TapedTask(tf::TapedFunction, args...)
     produce_ch = Channel()
     consume_ch = Channel{Int}()
     task = @task wrap_task(tf, produce_ch, consume_ch, args...)
-    t = TapedTask(task, tf, produce_ch, consume_ch)
+    t = TapedTask(task, tf, args, produce_ch, consume_ch)
     task.storage === nothing && (task.storage = IdDict())
     task.storage[:tapedtask] = t
     return t
@@ -159,9 +161,15 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 # copy the task
 
-function Base.copy(t::TapedTask)
+function Base.copy(t::TapedTask; args=())
     tf = copy(t.tf)
-    new_t = TapedTask(tf)
+    task_args = if length(args) > 0
+        typeof(args) == typeof(t.args) || error("bad arguments")
+        args
+    else
+        tape_copy.(t.args)
+    end
+    new_t = TapedTask(tf, task_args...)
     storage = t.task.storage::IdDict{Any,Any}
     new_t.task.storage = copy(storage)
     new_t.task.storage[:tapedtask] = new_t

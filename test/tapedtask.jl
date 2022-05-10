@@ -184,4 +184,20 @@
             end
         end
     end
+
+    @testset "Issues" begin
+        @testset "Issue-140, copy unstarted task" begin
+            function f(x)
+                for i in 1:3
+                    produce(i + x)
+                end
+            end
+
+            ttask = TapedTask(f, 3)
+            ttask2 = copy(ttask)
+            @test consume(ttask2) == 4
+            ttask3 = copy(ttask; args=(4,))
+            @test consume(ttask3) == 5
+        end
+    end
 end
