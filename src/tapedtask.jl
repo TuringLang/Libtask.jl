@@ -169,7 +169,7 @@ function Base.copy(t::TapedTask; args=())
     else
         tape_copy.(t.args)
     end
-    new_t = TapedTask(tf, real_args...)
+    new_t = TapedTask(tf, task_args...)
     storage = t.task.storage::IdDict{Any,Any}
     new_t.task.storage = copy(storage)
     new_t.task.storage[:tapedtask] = new_t
