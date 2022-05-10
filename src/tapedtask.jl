@@ -159,9 +159,9 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 # copy the task
 
-function Base.copy(t::TapedTask, args...)
-    tf = copy(t.tf, args...)
-    new_t = TapedTask(tf, args...)
+function Base.copy(t::TapedTask)
+    tf = copy(t.tf)
+    new_t = TapedTask(tf)
     storage = t.task.storage::IdDict{Any,Any}
     new_t.task.storage = copy(storage)
     new_t.task.storage[:tapedtask] = new_t
