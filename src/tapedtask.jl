@@ -163,7 +163,7 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 function Base.copy(t::TapedTask; args=())
     tf = copy(t.tf)
-    real_args = if length(args) > 0
+    task_args = if length(args) > 0
         typeof(args) == typeof(t.args) || error("bad arguments")
         args
     else
