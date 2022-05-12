@@ -334,6 +334,7 @@ function translate!!(var::IRVar, line::Core.ReturnNode,
     return ReturnInstruction(bind_var!(line.val, bindings, ir))
 end
 
+_canbeoptimized(v) = isa(v, DataType) || isprimitivetype(typeof(v))
 function translate!!(var::IRVar, line::Expr,
                      bindings::Dict{Symbol, Any}, isconst::Bool, ir::Core.CodeInfo)
     head = line.head
@@ -342,14 +343,13 @@ function translate!!(var::IRVar, line::Expr,
         args = map(_bind_fn, line.args)
         return Instruction(__new__, args |> Tuple, _bind_fn(var))
     elseif head === :call
-        #=
-        # Some function calls can't be optimized even their results are
-        # inffered as const: the optimization tries to do the call at compile-time
+        # Only some of function calls can be optimized even many of their results are
+        # inferred as constants: the optimization tries to do the call at compile-time,
+        # so we only optimize primitive adn datatype constants for now.
         if isconst
             v = ir.ssavaluetypes[var.id].val
-            return _const_instruction(var, v, bindings, ir)
+            _canbeoptimized(v) && return _const_instruction(var, v, bindings, ir)
         end
-        =#
         args = map(_bind_fn, line.args)
         # args[1] is the function
         func = line.args[1]
