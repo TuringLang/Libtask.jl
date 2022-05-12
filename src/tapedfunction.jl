@@ -109,7 +109,6 @@ end
 @inline val(x) = x
 @inline val(x::GlobalRef) = getproperty(x.mod, x.name)
 @inline val(x::QuoteNode) = eval(x)
-@inline val(x::TapedFunction) = x.func
 @inline result(t::TapedFunction) = t.bindings[t.retval]
 
 const SLOTS = [Symbol("_", i) for i in 1:100]
@@ -264,7 +263,8 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
-        ins = translate!!(Core.SSAValue(idx), line, bindings, ir)
+        isconst = isa(ir.ssavaluetypes[idx], Core.Const)
+        ins = translate!!(Core.SSAValue(idx), line, bindings, isconst, ir)
         push!(tape, ins)
     end
     return (bindings, tape)
@@ -272,31 +272,48 @@ end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
+function _const_instruction(var::IRVar, v, bindings::Dict{Symbol, Any}, ir)
+    if isa(var, Core.SSAValue)
+        box = bind_var!(var, bindings, ir)
+        bindings[box.id] = v
+        return GotoInstruction(Box{Bool}(:_true), 0) # NOOP
+    end
+    return Instruction(identity, (bind_var!(v, bindings, ir),), bind_var!(var, bindings, ir))
+end
+
 function translate!!(var::IRVar, line::Core.NewvarNode,
-                     bindings::Dict{Symbol, Any}, @nospecialize(ir))
+                     bindings::Dict{Symbol, Any}, isconst::Bool, @nospecialize(ir))
     # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
     # on tape. see GotoInstruction.dest.
     return GotoInstruction(Box{Bool}(:_true), 0)
 end
 
 function translate!!(var::IRVar, line::GlobalRef,
-                     bindings::Dict{Symbol, Any}, ir)
+                     bindings::Dict{Symbol, Any}, isconst::Bool, ir)
+    if isconst
+        v = ir.ssavaluetypes[var.id].val
+        return _const_instruction(var, v, bindings, ir)
+    end
     return Instruction(() -> val(line), (), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.SlotNumber,
-                     bindings::Dict{Symbol, Any}, ir)
+                     bindings::Dict{Symbol, Any}, isconst::Bool, ir)
+    if isconst
+        v = ir.ssavaluetypes[var.id].val
+        return _const_instruction(var, v, bindings, ir)
+    end
     return Instruction(identity, (bind_var!(line, bindings, ir),), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.TypedSlot,
-                     bindings::Dict{Symbol, Any}, ir)
+                     bindings::Dict{Symbol, Any}, isconst::Bool, ir)
     input_box = bind_var!(Core.SlotNumber(line.id), bindings, ir)
     return Instruction(identity, (input_box,), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.GotoIfNot,
-                     bindings::Dict{Symbol, Any}, ir)
+                     bindings::Dict{Symbol, Any}, isconst::Bool, ir)
     _cond = bind_var!(line.cond, bindings, ir)
     cond = if isa(_cond, Bool)
         Box{Bool}(_cond ? :_true : :_false)
@@ -307,29 +324,35 @@ function translate!!(var::IRVar, line::Core.GotoIfNot,
 end
 
 function translate!!(var::IRVar, line::Core.GotoNode,
-                     bindings::Dict{Symbol, Any}, @nospecialize(ir))
+                     bindings::Dict{Symbol, Any}, isconst::Bool, @nospecialize(ir))
     return GotoInstruction(Box{Bool}(:_false), line.label)
 end
 
 function translate!!(var::IRVar, line::Core.ReturnNode,
-                     bindings::Dict{Symbol, Any}, ir)
+                     bindings::Dict{Symbol, Any}, isconst::Bool, ir)
     return ReturnInstruction(bind_var!(line.val, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Expr,
-                     bindings::Dict{Symbol, Any}, ir::Core.CodeInfo)
+                     bindings::Dict{Symbol, Any}, isconst::Bool, ir::Core.CodeInfo)
     head = line.head
     _bind_fn = (x) -> bind_var!(x, bindings, ir)
     if head === :new
         args = map(_bind_fn, line.args)
         return Instruction(__new__, args |> Tuple, _bind_fn(var))
     elseif head === :call
+        if isconst
+            v = ir.ssavaluetypes[var.id].val
+            return _const_instruction(var, v, bindings, ir)
+        end
         args = map(_bind_fn, line.args)
         # args[1] is the function
         func = line.args[1]
         if Meta.isexpr(func, :static_parameter) # func is a type parameter
             func = ir.parent.sparam_vals[func.args[1]]
-        else # isa(func, GlobalRef) or a var?
+        elseif isa(func, GlobalRef)
+            func = val(func)
+        else # a var?
             func = args[1] # a var(box)
         end
         return Instruction(func, args[2:end] |> Tuple, _bind_fn(var))
@@ -338,8 +361,12 @@ function translate!!(var::IRVar, line::Expr,
         lhs = line.args[1]
         rhs = line.args[2] # the right hand side, maybe a Expr, or a var, or ...
         if Meta.isexpr(rhs, (:new, :call))
-            return translate!!(lhs, rhs, bindings, ir)
+            return translate!!(lhs, rhs, bindings, false, ir)
         else # rhs is a single value
+            if isconst
+                v = ir.ssavaluetypes[var.id].val
+                return Instruction(identity, (_bind_fn(v),), _bind_fn(lhs))
+            end
             return Instruction(identity, (_bind_fn(rhs),), _bind_fn(lhs))
         end
     else
