@@ -76,6 +76,7 @@ struct Box{T}
         return new(id, TypedFunction{T, Tuple{TapedFunction, Symbol}}(_inner_getter))
     end
 end
+Base.show(io::IO, box::Box{T}) where {T} = print(io, "Box{$T}($(box.id))")
 
 @inline _inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
 @inline _lookup(tf::TapedFunction, v) = v
@@ -341,10 +342,14 @@ function translate!!(var::IRVar, line::Expr,
         args = map(_bind_fn, line.args)
         return Instruction(__new__, args |> Tuple, _bind_fn(var))
     elseif head === :call
+        #=
+        # Some function calls can't be optimized even their results are
+        # inffered as const: the optimization tries to do the call at compile-time
         if isconst
             v = ir.ssavaluetypes[var.id].val
             return _const_instruction(var, v, bindings, ir)
         end
+        =#
         args = map(_bind_fn, line.args)
         # args[1] is the function
         func = line.args[1]
