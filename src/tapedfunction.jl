@@ -106,10 +106,6 @@ struct ReturnInstruction{T} <: AbstractInstruction
     arg::Box{T}
 end
 
-
-@inline val(x) = x
-@inline val(x::GlobalRef) = getproperty(x.mod, x.name)
-@inline val(x::QuoteNode) = eval(x)
 @inline result(t::TapedFunction) = t.bindings[t.retval]
 
 const SLOTS = [Symbol("_", i) for i in 1:100]
@@ -181,7 +177,7 @@ end
     arity = instr.parameters[2]
     body = quote
         try
-            func = val(_lookup(tf, instr.func))
+            func = _lookup(tf, instr.func)
             output = func() # will inject arguments later
             _update_var!(tf, instr.output, output)
             tf.counter += 1
@@ -197,7 +193,7 @@ end
     # inject arguments
     call_args = body.args[1].args[1].args[2].args[2].args
     for i in 1:arity
-        push!(call_args, :(val(_lookup(tf, instr.input[$i]))))
+        push!(call_args, :(_lookup(tf, instr.input[$i])))
     end
     body
 end
@@ -205,7 +201,7 @@ end
 function (instr::GotoInstruction)(tf::TapedFunction)
     cond = instr.condition.id === :_true ? true :
         instr.condition.id === :_false ? false :
-        val(_lookup(tf, instr.condition))
+        _lookup(tf, instr.condition)
 
     if cond
         tf.counter += 1
@@ -244,6 +240,10 @@ function bind_var!(var, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) # for li
     bindings[id] = var
     Box{typeof(var)}(id)
 end
+bind_var!(var::GlobalRef, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) =
+    bind_var!(getproperty(var.mod, var.name), bindings, ir)
+bind_var!(var::QuoteNode, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) =
+    bind_var!(eval(var), bindings, ir)
 bind_var!(var::Core.SSAValue, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) =
     bind_var!(Symbol(var.id), bindings, ir.ssavaluetypes[var.id])
 bind_var!(var::Core.TypedSlot, bindings::Dict{Symbol, Any}, ir::Core.CodeInfo) =
@@ -295,7 +295,7 @@ function translate!!(var::IRVar, line::GlobalRef,
         v = ir.ssavaluetypes[var.id].val
         return _const_instruction(var, v, bindings, ir)
     end
-    return Instruction(() -> val(line), (), bind_var!(var, bindings, ir))
+    return Instruction(() -> getproperty(line.mod, line.name), (), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.SlotNumber,
@@ -356,7 +356,7 @@ function translate!!(var::IRVar, line::Expr,
         if Meta.isexpr(func, :static_parameter) # func is a type parameter
             func = ir.parent.sparam_vals[func.args[1]]
         elseif isa(func, GlobalRef)
-            func = val(func)
+            func = getproperty(func.mod, func.name)
         else # a var?
             func = args[1] # a var(box)
         end
