@@ -192,7 +192,7 @@ end
             rethrow(e);
         end
     end
-    body = MacroTools.striplines(body)
+    Base.remove_linenums!(body)
     # inject arguments
     call_args = body.args[1].args[1].args[2].args[2].args
     for i in 1:arity
