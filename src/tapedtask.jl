@@ -162,6 +162,8 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 # copy the task
 
 function Base.copy(t::TapedTask; args=())
+    length(args) > 0 && t.tf.counter >1 &&
+        error("can't copy started task with new arguments")
     tf = copy(t.tf)
     task_args = if length(args) > 0
         typeof(args) == typeof(t.args) || error("bad arguments")
