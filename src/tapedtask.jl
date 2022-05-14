@@ -170,10 +170,15 @@ function Base.copy(t::TapedTask; args=())
         typeof(args) == typeof(t.args) || error("bad arguments")
         args
     else
-        # the task is running, we just need a args placeholder
-        # it would be better (but not necessary?) to find the
-        # real args from the copied bindings
-        t.args
+        if t.tf.counter > 1
+            # the task is running, we find the
+            # real args from the copied bindings
+            map(i -> tf.bindings[Symbol("_", i + 1)],
+                1:length(t.args))
+        else
+            # the task is not started yet, but no args is given
+            tape_copy.(t.args)
+        end
     end
     new_t = TapedTask(tf, task_args...)
     storage = t.task.storage::IdDict{Any,Any}
