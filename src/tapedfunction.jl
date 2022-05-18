@@ -79,7 +79,6 @@ end
 Base.show(io::IO, box::Box{T}) where {T} = print(io, "Box{$T}($(box.id))")
 
 @inline _inner_getter(tf::TapedFunction, v::Symbol) = tf.bindings[v]
-@inline _lookup(tf::TapedFunction, v) = v
 @inline _lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
 @inline _update_var!(tf::TapedFunction, v::Symbol, c) = (tf.bindings[v] = c; nothing)
 @inline _update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = (tf.bindings[v.id] = c; nothing)
@@ -177,7 +176,7 @@ end
     arity = instr.parameters[2]
     body = quote
         try
-            func = _lookup(tf, instr.func)
+            func = F <: Box ? _lookup(tf, instr.func) : instr.func
             output = func() # will inject arguments later
             _update_var!(tf, instr.output, output)
             tf.counter += 1
