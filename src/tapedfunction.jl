@@ -5,9 +5,9 @@ const RawTape = Vector{AbstractInstruction}
 
 function _infer(f, args_type)
     ir0 = code_typed(f, Tuple{args_type...}, optimize=false)[1][1]
-    ir1 = CodeInfoTools.code_inferred(f, args_type...)
-    ir1.ssavaluetypes = ir0.ssavaluetypes
-    return ir1
+    # ir1 = CodeInfoTools.code_inferred(f, args_type...)
+    # ir1.ssavaluetypes = ir0.ssavaluetypes
+    return ir0
 end
 
 mutable struct TapedFunction{F, TapeType}
