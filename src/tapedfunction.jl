@@ -4,6 +4,7 @@ abstract type AbstractInstruction end
 const RawTape = Vector{AbstractInstruction}
 
 function _infer(f, args_type)
+    # `code_typed` returns a vector: [Pair{Core.CodeInfo, DataType}]
     ir0 = code_typed(f, Tuple{args_type...}, optimize=false)[1][1]
     # ir1 = CodeInfoTools.code_inferred(f, args_type...)
     # ir1.ssavaluetypes = ir0.ssavaluetypes
