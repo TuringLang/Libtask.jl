@@ -3,6 +3,13 @@
 abstract type AbstractInstruction end
 const RawTape = Vector{AbstractInstruction}
 
+function _infer(f, args_type)
+    ir0 = code_typed(f, Tuple{args_type...}, optimize=false)[1][1]
+    ir1 = CodeInfoTools.code_inferred(f, args_type...)
+    ir1.ssavaluetypes = ir0.ssavaluetypes
+    return ir1
+end
+
 mutable struct TapedFunction{F, TapeType}
     func::F # maybe a function, a constructor, or a callable object
     arity::Int
@@ -22,8 +29,7 @@ mutable struct TapedFunction{F, TapeType}
             tf.counter = 1
             return tf
         end
-
-        ir = CodeInfoTools.code_inferred(f, args_type...)
+        ir = _infer(f, args_type)
         bindings, tape = translate!(RawTape(), ir)
 
         tf = new{F, T}(f, length(args), ir, tape, 1, bindings, :none)
