@@ -162,12 +162,24 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 # copy the task
 
 function Base.copy(t::TapedTask; args=())
+    length(args) > 0 && t.tf.counter >1 &&
+        error("can't copy started task with new arguments")
     tf = copy(t.tf)
     task_args = if length(args) > 0
+        # this cond implies t.tf.counter == 0, i.e., the task is not started yet
         typeof(args) == typeof(t.args) || error("bad arguments")
         args
     else
-        tape_copy.(t.args)
+        if t.tf.counter > 1
+            # the task is running, we find the
+            # real args from the copied bindings
+            map(1:length(t.args)) do i
+                get(tf.bindings, Symbol("_", i + 1), t.args[i])
+            end
+        else
+            # the task is not started yet, but no args is given
+            tape_copy.(t.args)
+        end
     end
     new_t = TapedTask(tf, task_args...)
     storage = t.task.storage::IdDict{Any,Any}
