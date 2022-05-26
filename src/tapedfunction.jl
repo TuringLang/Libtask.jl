@@ -65,55 +65,30 @@ end
 
 compile(tf::TapedFunction{F, RawTape}) where {F} = TapedFunction{F, CompiledTape}(tf)
 
-# const TypedFunction = FunctionWrapper
-struct TypedFunction{OT, IT<:Tuple}
-    func::Function
-    retval::Base.RefValue{OT}
-    TypedFunction{OT, IT}(f::Function) where {OT, IT<:Tuple} = new{OT, IT}(f, Ref{OT}())
-end
-
-@inline function (f::TypedFunction{OT, IT})(args...) where {OT, IT<:Tuple}
-    output = f.func(args...)
-    f.retval[] = OT === Nothing ? nothing : output
-    return f.retval[]
-end
-
-struct Box{T}
-    id::Int
-    # get::TypedFunction{T, Tuple{TapedFunction, Int}}
-
-    function Box{T}(id::Int) where T
-        return new(id)
-        # return new(id, TypedFunction{T, Tuple{TapedFunction, Int}}(_inner_getter))
-    end
-end
-Base.show(io::IO, box::Box{T}) where {T} = print(io, "Box{$T}($(box.id))")
-
 @inline _inner_getter(tf::TapedFunction, v::Int) = @inbounds tf.bindings[v]
-@inline _lookup(tf::TapedFunction, v::Box{T}) where T = @inbounds tf.bindings[v.id]
-# @inline _lookup(tf::TapedFunction, v::Box{T}) where T = v.get(tf, v.id)
-@inline _update_var!(tf::TapedFunction, v::Box{T}, c::T) where T = (@inbounds tf.bindings[v.id] = c; nothing)
+@inline _lookup(tf::TapedFunction, v::Int) = @inbounds tf.bindings[v]
+@inline _update_var!(tf::TapedFunction, v::Int, c::T) where T = @inbounds tf.bindings[v] = c
 
 """
     Instruction
 
 An `Instruction` stands for a function call
 """
-struct Instruction{F, N, TO} <: AbstractInstruction
+struct Instruction{F, N} <: AbstractInstruction
     func::F
-    input::NTuple{N, Box{<:Any}}
-    output::Box{TO}
+    input::NTuple{N, Int}
+    output::Int
 end
 
-struct GotoInstruction{T} <: AbstractInstruction
-    condition::Box{T}
+struct GotoInstruction <: AbstractInstruction
+    condition::Int
     # we enusre a 1-to-1 mapping between ir.code and instruction
     # so here we can use the index directly.
     dest::Int
 end
 
-struct ReturnInstruction{T} <: AbstractInstruction
-    arg::Box{T}
+struct ReturnInstruction <: AbstractInstruction
+    arg::Int
 end
 
 @inline result(t::TapedFunction) = t.bindings[t.retval]
@@ -126,11 +101,12 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
 
     # set args
     if tf.counter <= 1
-        _update_var!(tf, Box{typeof(tf.func)}(1), tf.func)
+        # _update_var!(tf, 1, tf.func)
+        @inbounds tf.bindings[1] = tf.func
         for i in 1:length(args)
             slot = i + 1
-            b = Box{typeof(args[i])}(slot)
-            _update_var!(tf, b, args[i])
+            # _update_var!(tf, slot, args[i])
+            @inbounds tf.bindings[slot] = args[i]
         end
     end
 
@@ -181,14 +157,17 @@ end
 function Base.show(io::IO, instr::GotoInstruction)
     println(io, "GotoInstruction(", instr.condition, ", dest=", instr.dest, ")")
 end
-
+#=
 @generated function (instr::Instruction{F, N})(tf::TapedFunction) where {F, N}
+    ftype = instr.parameters[1]
     arity = instr.parameters[2]
+    _func = ftype == Int ? :(_lookup(tf, instr.func)) : :(instr.func)
     body = quote
         try
-            func = F <: Box ? _lookup(tf, instr.func) : instr.func
+            func = $(_func)
             output = func() # will inject arguments later
-            _update_var!(tf, instr.output, output)
+            # _update_var!(tf, instr.output, output)
+            @inbounds tf.bindings[instr.output] = output
             tf.counter += 1
         catch e
             # catch run-time exceptions / errors.
@@ -206,10 +185,28 @@ end
     end
     body
 end
+=#
+
+function (instr::Instruction{F})(tf::TapedFunction) where F
+    # catch run-time exceptions / errors.
+    try
+        func = F == Int ? _lookup(tf, instr.func) : instr.func
+        inputs = map(x -> _lookup(tf, x), instr.input)
+        output = func(inputs...)
+        # _update_var!(tf, instr.output, output)
+        tf.bindings[instr.output] = output
+        tf.counter += 1
+    catch e
+        println("counter=", tf.counter)
+        println("tf=", tf)
+        println(e, catch_backtrace());
+        rethrow(e);
+    end
+end
 
 function (instr::GotoInstruction)(tf::TapedFunction)
-    cond = instr.condition.id === -1 ? true :
-        instr.condition.id === 0 ? false :
+    cond = instr.condition == -1 ? true :
+        instr.condition == 0 ? false :
         _lookup(tf, instr.condition)
 
     if cond
@@ -220,7 +217,7 @@ function (instr::GotoInstruction)(tf::TapedFunction)
 end
 
 function (instr::ReturnInstruction)(tf::TapedFunction)
-    tf.retval = instr.arg.id
+    tf.retval = instr.arg
 end
 
 ## internal functions
@@ -251,7 +248,7 @@ function bind_var!(var, bindings::Bindings, ir::Core.CodeInfo) # for literal con
     @assert idx < OFFSET_VAR
     bindings[CNT_SLOT] = idx
     bindings[idx] = var
-    Box{typeof(var)}(idx)
+    idx
 end
 bind_var!(var::GlobalRef, bindings::Bindings, ir::Core.CodeInfo) =
     bind_var!(getproperty(var.mod, var.name), bindings, ir)
@@ -269,7 +266,7 @@ bind_var!(var::Int, boxes::Bindings, c::Core.PartialStruct) =
     bind_var!(var, boxes, _loose_type(c.typ))
 function bind_var!(var::Int, bindings::Bindings, ::Type{T}) where T
     var > length(bindings) && resize!(bindings, var + 10)
-    Box{T}(var)
+    var
 end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
@@ -291,8 +288,8 @@ const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 function _const_instruction(var::IRVar, v, bindings::Bindings, ir)
     if isa(var, Core.SSAValue)
         box = bind_var!(var, bindings, ir)
-        bindings[box.id] = v
-        return GotoInstruction(Box{Bool}(-1), 0) # NOOP
+        bindings[box] = v
+        return GotoInstruction(-1, 0) # NOOP
     end
     return Instruction(identity, (bind_var!(v, bindings, ir),), bind_var!(var, bindings, ir))
 end
@@ -301,7 +298,7 @@ function translate!!(var::IRVar, line::Core.NewvarNode,
                      bindings::Bindings, isconst::Bool, @nospecialize(ir))
     # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
     # on tape. see GotoInstruction.dest.
-    return GotoInstruction(Box{Bool}(-1), 0)
+    return GotoInstruction(-1, 0)
 end
 
 function translate!!(var::IRVar, line::GlobalRef,
@@ -332,7 +329,7 @@ function translate!!(var::IRVar, line::Core.GotoIfNot,
                      bindings::Bindings, isconst::Bool, ir)
     _cond = bind_var!(line.cond, bindings, ir)
     cond = if isa(_cond, Bool)
-        Box{Bool}(_cond ? -1 : 0)
+        _cond ? -1 : 0
     else
         _cond
     end
@@ -341,7 +338,7 @@ end
 
 function translate!!(var::IRVar, line::Core.GotoNode,
                      bindings::Bindings, isconst::Bool, @nospecialize(ir))
-    return GotoInstruction(Box{Bool}(0), line.label)
+    return GotoInstruction(0, line.label)
 end
 
 function translate!!(var::IRVar, line::Core.ReturnNode,

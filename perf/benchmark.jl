@@ -121,6 +121,6 @@ b = ins.input[1]
 @btime map(x -> Libtask._lookup(tf, x), ins.input)
 @btime Libtask._lookup(tf, b)
 # @btime b.get(tf, b.id)
-@btime tf.bindings[b.id]
+@btime tf.bindings[b]
 
 println("done")
