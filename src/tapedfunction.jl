@@ -275,7 +275,7 @@ end
 
 function translate!!(var::IRVar, line::Core.NewvarNode,
                      bindings::Bindings, isconst::Bool, @nospecialize(ir))
-    # use a noop to ensure the 1-to-1 mapping from ir.code to instructions on tape.
+    # use a no-op to ensure the 1-to-1 mapping from ir.code to instructions on tape.
     return NOOPInstruction()
 end
 
