@@ -6,12 +6,9 @@ const RawTape = Vector{AbstractInstruction}
 function _infer(f, args_type)
     # `code_typed` returns a vector: [Pair{Core.CodeInfo, DataType}]
     ir0 = code_typed(f, Tuple{args_type...}, optimize=false)[1][1]
-    # ir1 = CodeInfoTools.code_inferred(f, args_type...)
-    # ir1.ssavaluetypes = ir0.ssavaluetypes
     return ir0
 end
 
-# const Bindings = Dict{Symbol, Any}
 const Bindings = Vector{Any}
 
 mutable struct TapedFunction{F, TapeType}
@@ -165,35 +162,6 @@ function Base.show(io::IO, instr::CondGotoInstruction)
     println(io, "CondGotoInstruction(", instr.condition, ", dest=", instr.dest, ")")
 end
 
-#=
-@generated function (instr::Instruction{F, N})(tf::TapedFunction) where {F, N}
-    ftype = instr.parameters[1]
-    arity = instr.parameters[2]
-    _func = ftype == Int ? :(_lookup(tf, instr.func)) : :(instr.func)
-    body = quote
-        try
-            func = $(_func)
-            output = func() # will inject arguments later
-            _update_var!(tf, instr.output, output)
-            tf.counter += 1
-        catch e
-            # catch run-time exceptions / errors.
-            println("counter=", tf.counter)
-            println("tf=", tf)
-            println(e, catch_backtrace());
-            rethrow(e);
-        end
-    end
-    Base.remove_linenums!(body)
-    # inject arguments
-    call_args = body.args[1].args[1].args[2].args[2].args
-    for i in 1:arity
-        push!(call_args, :(_lookup(tf, instr.input[$i])))
-    end
-    body
-end
-=#
-
 function (instr::Instruction{F})(tf::TapedFunction) where F
     # catch run-time exceptions / errors.
     try
@@ -216,7 +184,6 @@ end
 
 function (instr::CondGotoInstruction)(tf::TapedFunction)
     cond = _lookup(tf, instr.condition)
-
     if cond
         tf.counter += 1
     else # goto dest unless cond
@@ -260,25 +227,25 @@ function bind_var!(var, bindings::Bindings, ir::Core.CodeInfo) # for literal con
     @assert idx < OFFSET_VAR
     bindings[CNT_SLOT] = idx
     bindings[idx] = var
-    idx
+    return idx
 end
 bind_var!(var::GlobalRef, bindings::Bindings, ir::Core.CodeInfo) =
     bind_var!(getproperty(var.mod, var.name), bindings, ir)
 bind_var!(var::QuoteNode, bindings::Bindings, ir::Core.CodeInfo) =
     bind_var!(eval(var), bindings, ir)
-bind_var!(var::Core.SSAValue, bindings::Bindings, ir::Core.CodeInfo) =
-    bind_var!(var.id + OFFSET_VAR, bindings, ir.ssavaluetypes[var.id])
 bind_var!(var::Core.TypedSlot, bindings::Bindings, ir::Core.CodeInfo) =
     (@assert var.id < CNT_SLOT; bind_var!(var.id, bindings, ir.slottypes[var.id]))
 bind_var!(var::Core.SlotNumber, bindings::Bindings, ir::Core.CodeInfo) =
     (@assert var.id < CNT_SLOT; bind_var!(var.id, bindings, ir.slottypes[var.id]))
+bind_var!(var::Core.SSAValue, bindings::Bindings, ir::Core.CodeInfo) =
+    bind_var!(var.id + OFFSET_VAR, bindings, ir.ssavaluetypes[var.id])
 bind_var!(var::Int, boxes::Bindings, c::Core.Const) =
     bind_var!(var, boxes, _loose_type(Type{c.val}))
 bind_var!(var::Int, boxes::Bindings, c::Core.PartialStruct) =
     bind_var!(var, boxes, _loose_type(c.typ))
 function bind_var!(var::Int, bindings::Bindings, ::Type{T}) where T
     var > length(bindings) && resize!(bindings, var + 10)
-    var
+    return var
 end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
@@ -308,8 +275,7 @@ end
 
 function translate!!(var::IRVar, line::Core.NewvarNode,
                      bindings::Bindings, isconst::Bool, @nospecialize(ir))
-    # use a noop to ensure the 1-to-1 mapping from ir.code to instructions
-    # on tape.
+    # use a noop to ensure the 1-to-1 mapping from ir.code to instructions on tape.
     return NOOPInstruction()
 end
 
