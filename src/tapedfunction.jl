@@ -18,7 +18,7 @@ mutable struct TapedFunction{F, TapeType}
     tape::TapeType
     counter::Int
     bindings::Bindings
-    retval::Int
+    retval::Int # 0 indicates the function has not returned
 
     function TapedFunction{F, T}(f::F, args...; cache=false) where {F, T}
         args_type = _accurate_typeof.(args)
@@ -103,8 +103,9 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
 
     # set args
     if tf.counter <= 1
+        # The first slot in `bindings` is assumed to be `tf.func`.
         _update_var!(tf, 1, tf.func)
-        for i in 1:length(args)
+        for i in 1:length(args) # the subsequent slots are arguments
             slot = i + 1
             _update_var!(tf, slot, args[i])
         end
@@ -217,6 +218,16 @@ end
 
 
 ## Translation: CodeInfo -> Tape
+#=
+Now, we use a Vector{Any} as the bindings to store all the
+variables used in a taped function. These variables are categorized
+into 3 kinds: 1. slot values, 2. literal data, 3. ssa values.
+
+- bindings[1:CNT_SLOT-1] is for slot values
+- bindings[CNT_SLOT] holds the current used maximum literal index
+- bindings[CNT_SLOT+1:CNT_SLOT+CNT_LITE] is for literal data
+- bindings[CNT_SLOT+CNT_LITE+1:end] is for ssa values
+=#
 const CNT_SLOT = 200
 const CNT_LITE = 1000
 const OFFSET_VAR = CNT_SLOT + CNT_LITE
