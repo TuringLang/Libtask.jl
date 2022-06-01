@@ -232,18 +232,18 @@ const CNT_SLOT = 200
 const CNT_LITE = 1000
 const OFFSET_VAR = CNT_SLOT + CNT_LITE
 
-function bind_var!(var, bindings::Bindings, ir::Core.CodeInfo) # for literal constants
+function bind_var!(var_literal, bindings::Bindings, ir::Core.CodeInfo) # for literal constants
     last_idx = bindings[CNT_SLOT]
     idx = last_idx + 1
     @assert idx < OFFSET_VAR
     bindings[CNT_SLOT] = idx
-    bindings[idx] = var
+    bindings[idx] = var_literal
     return idx
 end
 bind_var!(var::GlobalRef, bindings::Bindings, ir::Core.CodeInfo) =
     bind_var!(getproperty(var.mod, var.name), bindings, ir)
 bind_var!(var::QuoteNode, bindings::Bindings, ir::Core.CodeInfo) =
-    bind_var!(eval(var), bindings, ir)
+    bind_var!(eval(var), bindings, ir) # staging out value of `var::QuoteNode`
 bind_var!(var::Core.TypedSlot, bindings::Bindings, ir::Core.CodeInfo) =
     (@assert var.id < CNT_SLOT; bind_var!(var.id, bindings, ir.slottypes[var.id]))
 bind_var!(var::Core.SlotNumber, bindings::Bindings, ir::Core.CodeInfo) =
@@ -339,9 +339,9 @@ function translate!!(var::IRVar, line::Expr,
         args = map(_bind_fn, line.args)
         return Instruction(__new__, args |> Tuple, _bind_fn(var))
     elseif head === :call
-        # Only some of function calls can be optimized even many of their results are
-        # inferred as constants: the optimization tries to do the call at compile-time,
-        # so we only optimize primitive adn datatype constants for now.
+        # Only some of the function calls can be optimized even though many of their results are
+        # inferred as constants: we only optimize primitive and datatype constants for now. For
+        # optimised function calls, we will evaluate the function at compile-time and cache results.
         if isconst
             v = ir.ssavaluetypes[var.id].val
             _canbeoptimized(v) && return _const_instruction(var, v, bindings, ir)
@@ -352,7 +352,7 @@ function translate!!(var::IRVar, line::Expr,
         if Meta.isexpr(func, :static_parameter) # func is a type parameter
             func = ir.parent.sparam_vals[func.args[1]]
         elseif isa(func, GlobalRef)
-            func = getproperty(func.mod, func.name)
+            func = getproperty(func.mod, func.name)  # Staging out global reference variable (constants).
         else # a var?
             func = args[1] # a var(box)
         end
