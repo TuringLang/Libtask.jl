@@ -296,7 +296,8 @@ function translate!!(var::IRVar, line::GlobalRef,
         v = ir.ssavaluetypes[var.id].val
         return _const_instruction(var, v, bindings, ir)
     end
-    return Instruction(() -> getproperty(line.mod, line.name), (), bind_var!(var, bindings, ir))
+    func = () -> getproperty(line.mod, line.name)
+    return Instruction(func, (), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.SlotNumber,
@@ -305,7 +306,10 @@ function translate!!(var::IRVar, line::Core.SlotNumber,
         v = ir.ssavaluetypes[var.id].val
         return _const_instruction(var, v, bindings, ir)
     end
-    return Instruction(identity, (bind_var!(line, bindings, ir),), bind_var!(var, bindings, ir))
+    func = identity
+    input = (bind_var!(line, bindings, ir),)
+    output =  bind_var!(var, bindings, ir)
+    return Instruction(func, input, output)
 end
 
 function translate!!(var::IRVar, line::Core.TypedSlot,

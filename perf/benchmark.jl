@@ -26,7 +26,7 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     print("  Run TapedTask: ")
     x = (x[1:end-1]..., produce)
     # show the number of produce calls inside `f`
-    f_task = (f, x; verbose=false) -> begin
+    function f_task(f, x; verbose=false)
         tt = TapedTask(f, x...)
         c = 0
         while consume(tt)!==nothing
