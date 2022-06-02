@@ -166,7 +166,7 @@ end
 function (instr::Instruction{F})(tf::TapedFunction) where F
     # catch run-time exceptions / errors.
     try
-        func = F == Int ? _lookup(tf, instr.func) : instr.func
+        func = F === Int ? _lookup(tf, instr.func) : instr.func
         inputs = map(x -> _lookup(tf, x), instr.input)
         output = func(inputs...)
         _update_var!(tf, instr.output, output)
@@ -255,6 +255,7 @@ bind_var!(var::Int, boxes::Bindings, c::Core.Const) =
 bind_var!(var::Int, boxes::Bindings, c::Core.PartialStruct) =
     bind_var!(var, boxes, _loose_type(c.typ))
 function bind_var!(var::Int, bindings::Bindings, ::Type{T}) where T
+    # here var is the unified index
     var > length(bindings) && resize!(bindings, var + 10)
     return var
 end
@@ -296,7 +297,7 @@ function translate!!(var::IRVar, line::GlobalRef,
         v = ir.ssavaluetypes[var.id].val
         return _const_instruction(var, v, bindings, ir)
     end
-    func = () -> getproperty(line.mod, line.name)
+    func() = getproperty(line.mod, line.name)
     return Instruction(func, (), bind_var!(var, bindings, ir))
 end
 
