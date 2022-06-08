@@ -267,9 +267,11 @@ end
 
 ## Translation: CodeInfo -> Tape
 
+const IRVar = Union{Core.SSAValue, Core.SlotNumber}
+
 struct TempBindings
     data::Bindings
-    book::Dict{Any, Int}
+    book::Dict{IRVar, Int}
 end
 
 function bind_var!(var_literal, tbind::TempBindings, ir::Core.CodeInfo)
@@ -311,7 +313,7 @@ end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
     bindings = Bindings()
-    bcache = Dict{Any, Int}()
+    bcache = Dict{IRVar, Int}()
     tbind = TempBindings(bindings, bcache)
     slots = Dict{Int, Int}()
 
@@ -326,8 +328,6 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
     end
     return (bindings, slots, tape)
 end
-
-const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
 function _const_instruction(var::IRVar, v, tbind::TempBindings, ir)
     if isa(var, Core.SSAValue)
