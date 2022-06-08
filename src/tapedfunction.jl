@@ -313,6 +313,7 @@ end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
     bindings = Bindings()
+    sizehint!(bindings, 128)
     bcache = Dict{IRVar, Int}()
     tbind = TempBindings(bindings, bcache)
     slots = Dict{Int, Int}()
