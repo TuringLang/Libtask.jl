@@ -247,7 +247,8 @@ function bind_var!(var::QuoteNode, tbind::TempBindings, ir::Core.CodeInfo)
     bind_var!(eval(var), tbind, ir)
 end
 function bind_var!(var::Core.TypedSlot, tbind::TempBindings, ir::Core.CodeInfo)
-    get!(tbind.book, var, allocate_binding!(var, tbind, ir.slottypes[var.id]))
+    # turn TypedSlot to SlotNumber
+    bind_var!(Core.SlotNumber(var.id), tbind, ir)
 end
 function bind_var!(var::Core.SlotNumber, tbind::TempBindings, ir::Core.CodeInfo)
     get!(tbind.book, var, allocate_binding!(var, tbind, ir.slottypes[var.id]))
@@ -280,7 +281,7 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
         push!(tape, ins)
     end
     for (k, v) in bcache
-        isa(k, Union{Core.TypedSlot, Core.SlotNumber}) && (slots[k.id] = v)
+        isa(k, Core.SlotNumber) && (slots[k.id] = v)
     end
     return (bindings, slots, tape)
 end
