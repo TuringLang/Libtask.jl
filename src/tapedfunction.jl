@@ -1,11 +1,52 @@
+#=
+
+In this file, we convert a Julia function to a tape hence we can have
+some power on controlling how to run the function, like caching data,
+stopping or do some checks between expressions, etc.
+
+To do so, we firstly use the Julia builtin compiler to get the IR code
+of the function. Here we use the unoptimized typed code, which is in a
+non-strict SSA form. Then we convert each IR instruction to a Julia
+representation (an object of a subtype of AbstractInstruction). All
+the operands (i.e., the varibales) these instructions use are stored
+in a Vector{Any} called bindings. We called this conversion process
+compile-time or to distinguish it from Julia's compile time,
+tape-recording time.
+
+There many kinds of instructions on tape:
+- Instruction stands for an ordinary function call
+- GotoInstruction and CondGotoInstruction are for control-flow, with these
+  instructions, we can jump from an instruction to another one on the same
+  tape.
+- ReturnInstruction, as its name indicates, let us return from a function.
+
+Once the tape is recorded, we can run the tape to gain the same effect
+as calling the original function. We first fill the arguments into to
+the bindings, then go through each instruction on the tape, stop after
+we encounter a ReturnInstruction.
+
+We provide a chance to add a callback after each time we execute an
+instruction, with this facility we implemented the produce/consume
+machanism in TapedTask. And based on the feautres of being copiable
+and execution controlling, we made the fork machanism of TapedTask.
+
+However, this implementation currently has some caveates:
+1. GlobalRef is evaluated at tape-recording time (compile time), you will
+   see an info log on each GloabalRef evaluation. At most time, we don't
+   change the value/object which is associated to a GlobalRef at runtime,
+   so this works well. But, if you do somthing like
+   `module A v=1 end; make tapedfunction; A.eval(:(v=2)); run tf;`, The
+   assignment won't work.
+2. QuoteNode is also evaluated at tape-recording time (compile time) with
+   an info log. Mostly the result of evaluating a QuoteNode is a Symbol, so
+   this works well at most time.
+3. There's one allocation in each Instruction execution, so write a function
+   in a manner which has the less instruction executions will be more
+   performant, for example, use broadcast instead of a loop.
+
+=#
+
 ## Instruction and TapedFunction
-
-# TODO add an introduction of the impl, caveats
-# caveates:
-# 1. global references are cached out (info msg)
-# 2. QuoteNode is evaluated at tape-recording time (compile time) (info msg)
-# 3. One allocation in each Instruction
-
 abstract type AbstractInstruction end
 const RawTape = Vector{AbstractInstruction}
 
