@@ -467,7 +467,6 @@ function copy_bindings(old::Bindings)
 end
 
 function Base.copy(tf::TapedFunction)
-    # create a new uninitialized TapedFunction
     new_tf = TapedFunction(tf)
     new_tf.bindings = copy_bindings(tf.bindings)
     return new_tf
