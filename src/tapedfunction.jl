@@ -446,10 +446,9 @@ end
     tape_copy(x)
 
 Function `tape_copy` is used to copy data while copying a TapedTask, the
-default behavior is: 1. for `Array` and `Dict`, we do `deepcopy`; 2. for
-other data types, we do not copy and share the data between tasks, i.e.,
-`tape_copy(x) = x`. If one wants some kinds of data to be copied, or
-deeply copied, one can add a method to this function.
+default behavior is: for all data types, we do not copy but share the data
+between tasks, i.e., `tape_copy(x) = x`. If one wants some kinds of data'
+to be copied, or deeply copied, one can add a method to this function.
 """
 function tape_copy end
 tape_copy(x) = x
