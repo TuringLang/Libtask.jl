@@ -1,19 +1,20 @@
 #=
 
-In this file, we convert a Julia function to a tape hence we can have
-some power on controlling how to run the function, like caching data,
-stopping or do some checks between expressions, etc.
+`TapedFunction` converts a Julia function to a tape that we have some
+control on how the function is run, like continuations, variable
+caching, injecting additional control flows (i.e. produce/consume)
+between instructions, etc.
 
-To do so, we firstly use the Julia builtin compiler to get the IR code
-of the function. Here we use the unoptimized typed code, which is in a
-non-strict SSA form. Then we convert each IR instruction to a Julia
-representation (an object of a subtype of AbstractInstruction). All
-the operands (i.e., the varibales) these instructions use are stored
-in a Vector{Any} called bindings. We called this conversion process
-compile-time or to distinguish it from Julia's compile time,
-tape-recording time.
+For this purpose, we firstly use Julia's compiler API to get the IR
+code of the function. Here we use the unoptimized typed code, which is
+in a non-strict SSA form. Then we convert each IR instruction to a
+Julia representation (an object of a subtype of
+AbstractInstruction). All the operands (i.e., the varibales) these
+instructions use are stored in a data structure called
+`bindings`. This conversion/binding process is performed at
+compile-time / tape-recording time.
 
-There many kinds of instructions on tape:
+There are mainly three kinds of instructions on a tape:
 - Instruction stands for an ordinary function call
 - GotoInstruction and CondGotoInstruction are for control-flow, with these
   instructions, we can jump from an instruction to another one on the same
@@ -21,14 +22,14 @@ There many kinds of instructions on tape:
 - ReturnInstruction, as its name indicates, let us return from a function.
 
 Once the tape is recorded, we can run the tape to gain the same effect
-as calling the original function. We first fill the arguments into to
+as calling the original function. We first fill the arguments into
 the bindings, then go through each instruction on the tape, stop after
 we encounter a ReturnInstruction.
 
-We provide a chance to add a callback after each time we execute an
-instruction, with this facility we implemented the produce/consume
-machanism in TapedTask. And based on the feautres of being copiable
-and execution controlling, we made the fork machanism of TapedTask.
+We provide a mechanism to add a callback after each instruction, with
+this facility we implemented the produce/consume machanism in
+TapedTask. And based on the feautres of being copiable and execution
+controlling, we made the fork machanism of TapedTask.
 
 However, this implementation currently has some caveates:
 1. GlobalRef is evaluated at tape-recording time (compile time), you will
@@ -42,7 +43,7 @@ However, this implementation currently has some caveates:
    this works well at most time.
 3. There's one allocation in each Instruction execution, so write a function
    in a manner which has the less instruction executions will be more
-   performant, for example, use broadcast instead of a loop.
+   performant, for example, using broadcasting instead of a loop.
 
 =#
 
@@ -65,7 +66,7 @@ mutable struct TapedFunction{F, TapeType}
     tape::TapeType
     counter::Int
     bindings::Bindings
-    slots::Dict{Int, Int} # slots indices in bindings
+    slots::Dict{Int, Int} # slot indices in bindings
     retval::Int # 0 indicates the function has not returned
 
     function TapedFunction{F, T}(f::F, args...; cache=false) where {F, T}
@@ -324,7 +325,7 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
         ins = translate!!(Core.SSAValue(idx), line, tbind, isconst, ir)
         push!(tape, ins)
     end
-    for (k, v) in bcache
+    for (k, v) in tbind.book
         isa(k, Core.SlotNumber) && (slots[k.id] = v)
     end
     return (bindings, slots, tape)
@@ -445,10 +446,11 @@ end
 """
     tape_copy(x)
 
-Function `tape_copy` is used to copy data while copying a TapedTask, the
-default behavior is: for all data types, we do not copy but share the data
-between tasks, i.e., `tape_copy(x) = x`. If one wants some kinds of data'
-to be copied, or deeply copied, one can add a method to this function.
+Function `tape_copy` is used to copy data while copying a TapedTask,
+the default behaviour is: we perform share the data default behavior
+is: for all data types, we do not copy but share the data between
+tasks, i.e., `tape_copy(x) = x`. If one wants some kinds of data' to
+be copied, or deeply copied, one can overload this function.
 """
 function tape_copy end
 tape_copy(x) = x
