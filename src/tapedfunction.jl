@@ -47,6 +47,8 @@ However, this implementation currently has some caveates:
 
 =#
 
+const LOGGING = Ref(false)
+
 ## Instruction and TapedFunction
 abstract type AbstractInstruction end
 const RawTape = Vector{AbstractInstruction}
@@ -283,11 +285,11 @@ function bind_var!(var_literal, tbind::TempBindings, ir::Core.CodeInfo)
 end
 function bind_var!(var::GlobalRef, tbind::TempBindings, ir::Core.CodeInfo)
     in(var.mod, (Base, Core)) ||
-        @info "evaluating GlobalRef $var at compile time"
+        LOGGING[] && @info "evaluating GlobalRef $var at compile time"
     bind_var!(getproperty(var.mod, var.name), tbind, ir)
 end
 function bind_var!(var::QuoteNode, tbind::TempBindings, ir::Core.CodeInfo)
-    @info "evaluating QuoteNode $var at compile time"
+    LOGGING[] && @info "evaluating QuoteNode $var at compile time"
     bind_var!(eval(var), tbind, ir)
 end
 function bind_var!(var::Core.TypedSlot, tbind::TempBindings, ir::Core.CodeInfo)
