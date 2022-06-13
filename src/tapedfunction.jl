@@ -68,7 +68,7 @@ mutable struct TapedFunction{F, TapeType}
     tape::TapeType
     counter::Int
     bindings::Bindings
-    slots::Dict{Int, Int} # slot indices in bindings
+    arg_indices::Vector{Int} # arg indices in bindings
     retval::Int # 0 indicates the function has not returned
 
     function TapedFunction{F, T}(f::F, args...; cache=false) where {F, T}
@@ -94,7 +94,7 @@ mutable struct TapedFunction{F, TapeType}
 
     function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
         new{F, T0}(tf.func, tf.arity, tf.ir, tf.tape,
-                   tf.counter, tf.bindings, tf.slots, 0)
+                   tf.counter, tf.bindings, tf.arg_indices, 0)
     end
 
     TapedFunction(tf::TapedFunction{F, T}) where {F, T} = TapedFunction{F, T}(tf)
@@ -155,10 +155,10 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     # set args
     if tf.counter <= 1
         # The first slot in `bindings` is assumed to be `tf.func`.
-        haskey(tf.slots, 1) && _update_var!(tf, tf.slots[1], tf.func)
-        for i in 1:length(args) # the subsequent slots are arguments
+        tf.arg_indices[1] > 0 && _update_var!(tf, tf.arg_indices[1], tf.func)
+        for i in 1:length(args) # the subsequent arg_indices are arguments
             slot = i + 1
-            haskey(tf.slots, slot) && _update_var!(tf, tf.slots[slot], args[i])
+            tf.arg_indices[slot] > 0 && _update_var!(tf, tf.arg_indices[slot], args[i])
         end
     end
 
@@ -330,7 +330,11 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
     for (k, v) in tbind.book
         isa(k, Core.SlotNumber) && (slots[k.id] = v)
     end
-    return (bindings, slots, tape)
+    arg_indices = fill(0, maximum(keys(slots)))
+    for (k, v) in slots
+        arg_indices[k] = v
+    end
+    return (bindings, arg_indices, tape)
 end
 
 function _const_instruction(var::IRVar, v, tbind::TempBindings, ir)
