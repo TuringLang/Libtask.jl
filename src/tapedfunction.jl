@@ -272,45 +272,40 @@ end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
-struct TempBindings
-    data::Bindings
-    book::Dict{IRVar, Int}
-end
-
-function bind_var!(var_literal, tbind::TempBindings, ir::Core.CodeInfo)
+function bind_var!(var_literal, bindings::Bindings, ir::Core.CodeInfo)
     # for literal constants
-    push!(tbind.data, var_literal)
-    idx = length(tbind.data)
+    push!(bindings, var_literal)
+    idx = length(bindings)
     return idx
 end
-function bind_var!(var::GlobalRef, tbind::TempBindings, ir::Core.CodeInfo)
+function bind_var!(var::GlobalRef, bindings::Bindings, ir::Core.CodeInfo)
     in(var.mod, (Base, Core)) ||
         LOGGING[] && @info "evaluating GlobalRef $var at compile time"
-    bind_var!(getproperty(var.mod, var.name), tbind, ir)
+    bind_var!(getproperty(var.mod, var.name), bindings, ir)
 end
-function bind_var!(var::QuoteNode, tbind::TempBindings, ir::Core.CodeInfo)
+function bind_var!(var::QuoteNode, bindings::Bindings, ir::Core.CodeInfo)
     LOGGING[] && @info "evaluating QuoteNode $var at compile time"
-    bind_var!(eval(var), tbind, ir)
+    bind_var!(eval(var), bindings, ir)
 end
-function bind_var!(var::Core.TypedSlot, tbind::TempBindings, ir::Core.CodeInfo)
+function bind_var!(var::Core.TypedSlot, bindings::Bindings, ir::Core.CodeInfo)
     # turn TypedSlot to SlotNumber
-    bind_var!(Core.SlotNumber(var.id), tbind, ir)
+    bind_var!(Core.SlotNumber(var.id), bindings, ir)
 end
-function bind_var!(var::Core.SlotNumber, tbind::TempBindings, ir::Core.CodeInfo)
-    get!(tbind.book, var, allocate_binding!(var, tbind, ir.slottypes[var.id]))
+function bind_var!(var::Core.SlotNumber, bindings::Bindings, ir::Core.CodeInfo)
+    get!(bindings[1], var, allocate_binding!(var, bindings, ir.slottypes[var.id]))
 end
-function bind_var!(var::Core.SSAValue, tbind::TempBindings, ir::Core.CodeInfo)
-    get!(tbind.book, var, allocate_binding!(var, tbind, ir.ssavaluetypes[var.id]))
+function bind_var!(var::Core.SSAValue, bindings::Bindings, ir::Core.CodeInfo)
+    get!(bindings[1], var, allocate_binding!(var, bindings, ir.ssavaluetypes[var.id]))
 end
 
-allocate_binding!(var, tbind::TempBindings, c::Core.Const) =
-    allocate_binding!(var, tbind, _loose_type(Type{c.val}))
-allocate_binding!(var, tbind::TempBindings, c::Core.PartialStruct) =
-    allocate_binding!(var, tbind, _loose_type(c.typ))
-function allocate_binding!(var, tbind::TempBindings, ::Type{T}) where T
+allocate_binding!(var, bindings::Bindings, c::Core.Const) =
+    allocate_binding!(var, bindings, _loose_type(Type{c.val}))
+allocate_binding!(var, bindings::Bindings, c::Core.PartialStruct) =
+    allocate_binding!(var, bindings, _loose_type(c.typ))
+function allocate_binding!(var, bindings::Bindings, ::Type{T}) where T
     # we may use the type info (T) here
-    push!(tbind.data, nothing)
-    idx = length(tbind.data)
+    push!(bindings, nothing)
+    idx = length(bindings)
     return idx
 end
 
@@ -318,89 +313,91 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
     binding_values = Bindings()
     sizehint!(binding_values, 128)
     bcache = Dict{IRVar, Int}()
-    tbind = TempBindings(binding_values, bcache)
+    # the first slot of binding_values is used to store a cache at compile time
+    push!(binding_values, bcache)
     slots = Dict{Int, Int}()
 
     for (idx, line) in enumerate(ir.code)
         isa(line, Core.Const) && (line = line.val) # unbox Core.Const
         isconst = isa(ir.ssavaluetypes[idx], Core.Const)
-        ins = translate!!(Core.SSAValue(idx), line, tbind, isconst, ir)
+        ins = translate!!(Core.SSAValue(idx), line, binding_values, isconst, ir)
         push!(tape, ins)
     end
-    for (k, v) in tbind.book
+    for (k, v) in bcache
         isa(k, Core.SlotNumber) && (slots[k.id] = v)
     end
     arg_binding_slots = fill(0, maximum(keys(slots)))
     for (k, v) in slots
         arg_binding_slots[k] = v
     end
+    binding_values[1] = 0 # drop bcache
     return (binding_values, arg_binding_slots, tape)
 end
 
-function _const_instruction(var::IRVar, v, tbind::TempBindings, ir)
+function _const_instruction(var::IRVar, v, bindings::Bindings, ir)
     if isa(var, Core.SSAValue)
-        box = bind_var!(var, tbind, ir)
-        tbind.data[box] = v
+        box = bind_var!(var, bindings, ir)
+        bindings[box] = v
         return NOOPInstruction()
     end
-    return Instruction(identity, (bind_var!(v, tbind, ir),), bind_var!(var, tbind, ir))
+    return Instruction(identity, (bind_var!(v, bindings, ir),), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.NewvarNode,
-                     tbind::TempBindings, isconst::Bool, @nospecialize(ir))
+                     bindings::Bindings, isconst::Bool, @nospecialize(ir))
     # use a no-op to ensure the 1-to-1 mapping from ir.code to instructions on tape.
     return NOOPInstruction()
 end
 
 function translate!!(var::IRVar, line::GlobalRef,
-                     tbind::TempBindings, isconst::Bool, ir)
+                     bindings::Bindings, isconst::Bool, ir)
     if isconst
         v = ir.ssavaluetypes[var.id].val
-        return _const_instruction(var, v, tbind, ir)
+        return _const_instruction(var, v, bindings, ir)
     end
     func() = getproperty(line.mod, line.name)
-    return Instruction(func, (), bind_var!(var, tbind, ir))
+    return Instruction(func, (), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.SlotNumber,
-                     tbind::TempBindings, isconst::Bool, ir)
+                     bindings::Bindings, isconst::Bool, ir)
     if isconst
         v = ir.ssavaluetypes[var.id].val
-        return _const_instruction(var, v, tbind, ir)
+        return _const_instruction(var, v, bindings, ir)
     end
     func = identity
-    input = (bind_var!(line, tbind, ir),)
-    output =  bind_var!(var, tbind, ir)
+    input = (bind_var!(line, bindings, ir),)
+    output =  bind_var!(var, bindings, ir)
     return Instruction(func, input, output)
 end
 
 function translate!!(var::IRVar, line::Core.TypedSlot,
-                     tbind::TempBindings, isconst::Bool, ir)
-    input_box = bind_var!(Core.SlotNumber(line.id), tbind, ir)
-    return Instruction(identity, (input_box,), bind_var!(var, tbind, ir))
+                     bindings::Bindings, isconst::Bool, ir)
+    input_box = bind_var!(Core.SlotNumber(line.id), bindings, ir)
+    return Instruction(identity, (input_box,), bind_var!(var, bindings, ir))
 end
 
 function translate!!(var::IRVar, line::Core.GotoIfNot,
-                     tbind::TempBindings, isconst::Bool, ir)
-    cond = bind_var!(line.cond, tbind, ir)
+                     bindings::Bindings, isconst::Bool, ir)
+    cond = bind_var!(line.cond, bindings, ir)
     return CondGotoInstruction(cond, line.dest)
 end
 
 function translate!!(var::IRVar, line::Core.GotoNode,
-                     tbind::TempBindings, isconst::Bool, @nospecialize(ir))
+                     bindings::Bindings, isconst::Bool, @nospecialize(ir))
     return GotoInstruction(line.label)
 end
 
 function translate!!(var::IRVar, line::Core.ReturnNode,
-                     tbind::TempBindings, isconst::Bool, ir)
-    return ReturnInstruction(bind_var!(line.val, tbind, ir))
+                     bindings::Bindings, isconst::Bool, ir)
+    return ReturnInstruction(bind_var!(line.val, bindings, ir))
 end
 
 _canbeoptimized(v) = isa(v, DataType) || isprimitivetype(typeof(v))
 function translate!!(var::IRVar, line::Expr,
-                     tbind::TempBindings, isconst::Bool, ir::Core.CodeInfo)
+                     bindings::Bindings, isconst::Bool, ir::Core.CodeInfo)
     head = line.head
-    _bind_fn = (x) -> bind_var!(x, tbind, ir)
+    _bind_fn = (x) -> bind_var!(x, bindings, ir)
     if head === :new
         args = map(_bind_fn, line.args)
         return Instruction(__new__, args |> Tuple, _bind_fn(var))
@@ -410,7 +407,7 @@ function translate!!(var::IRVar, line::Expr,
         # optimised function calls, we will evaluate the function at compile-time and cache results.
         if isconst
             v = ir.ssavaluetypes[var.id].val
-            _canbeoptimized(v) && return _const_instruction(var, v, tbind, ir)
+            _canbeoptimized(v) && return _const_instruction(var, v, bindings, ir)
         end
         args = map(_bind_fn, line.args)
         # args[1] is the function
@@ -428,7 +425,7 @@ function translate!!(var::IRVar, line::Expr,
         lhs = line.args[1]
         rhs = line.args[2] # the right hand side, maybe a Expr, or a var, or ...
         if Meta.isexpr(rhs, (:new, :call))
-            return translate!!(lhs, rhs, tbind, false, ir)
+            return translate!!(lhs, rhs, bindings, false, ir)
         else # rhs is a single value
             if isconst
                 v = ir.ssavaluetypes[var.id].val
@@ -442,7 +439,7 @@ function translate!!(var::IRVar, line::Expr,
     end
 end
 
-function translate!!(var, line, tbind, ir)
+function translate!!(var, line, bindings, ir)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
     throw(ErrorException("Unknown IR code"))
 end
