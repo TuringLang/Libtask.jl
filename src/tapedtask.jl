@@ -171,10 +171,10 @@ function Base.copy(t::TapedTask; args=())
         args
     else
         if t.tf.counter > 1
-            # the task is running, we find the
-            # real args from the copied bindings
+            # the task is running, we find the real args from the copied binding_values
             map(1:length(t.args)) do i
-                get(tf.bindings, Symbol("_", i + 1), t.args[i])
+                s = i + 1
+                tf.arg_binding_slots[s] > 0 ? tf.binding_values[tf.arg_binding_slots[s]] : t.args[i]
             end
         else
             # the task is not started yet, but no args is given

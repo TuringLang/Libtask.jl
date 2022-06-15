@@ -8,7 +8,7 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     x = (x..., nothing)
 
     println("benchmarking $(f_displayname)...")
-    tf = Libtask.TapedFunction(f, x...);
+    tf = Libtask.TapedFunction(f, x...)
 
     print("  Run Original Function:")
     @btime $f($(x)...)
@@ -24,18 +24,18 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     GC.gc()
 
     print("  Run TapedTask: ")
-    x = (x[1:end-1]..., produce);
+    x = (x[1:end-1]..., produce)
     # show the number of produce calls inside `f`
-    f_task = (f, x; verbose=false) -> begin 
-        tt = TapedTask(f, x...); 
+    function f_task(f, x; verbose=false)
+        tt = TapedTask(f, x...)
         c = 0
         while consume(tt)!==nothing
             c+=1
         end
-        verbose && print("#produce=", c, "; "); 
+        verbose && print("#produce=", c, "; ")
     end
-    # Note that we need to pass `f` instead of `tf` to avoid 
-    #  default continuation in `TapedTask` constructor, see, e.g. 
+    # Note that we need to pass `f` instead of `tf` to avoid
+    #  default continuation in `TapedTask` constructor, see, e.g.
     #  https://github.com/TuringLang/Libtask.jl/pull/135
     f_task(f, x; verbose=true) # print #produce calls
     @btime $f_task($f, $x)
@@ -108,5 +108,18 @@ xs = (randn(10,10), randn(10,10), randn(10), rand(10))
 benchmark_driver!(neural_net, xs...)
 
 ####################################################################
+
+println("======= breakdown benchmark =======")
+
+x = rand(100000)
+tf = Libtask.TapedFunction(ackley, x, nothing)
+tf(x, nothing);
+ins = tf.tape[45]
+b = ins.input[1]
+
+@show ins.input |> length
+@btime map(x -> Libtask._lookup(tf, x), ins.input)
+@btime Libtask._lookup(tf, b)
+@btime tf.binding_values[b]
 
 println("done")
