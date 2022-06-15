@@ -11,7 +11,7 @@ in a non-strict SSA form. Then we convert each IR instruction to a
 Julia representation (an object of a subtype of
 AbstractInstruction). All the operands (i.e., the varibales) these
 instructions use are stored in a data structure called
-`bindings`. This conversion/binding process is performed at
+`Bindings`. This conversion/binding process is performed at
 compile-time / tape-recording time.
 
 There are mainly three kinds of instructions on a tape:
@@ -23,7 +23,7 @@ There are mainly three kinds of instructions on a tape:
 
 Once the tape is recorded, we can run the tape to gain the same effect
 as calling the original function. We first fill the arguments into
-the bindings, then go through each instruction on the tape, stop after
+the Bindings, then go through each instruction on the tape, stop after
 we encounter a ReturnInstruction.
 
 We provide a mechanism to add a callback after each instruction, with
@@ -67,9 +67,9 @@ mutable struct TapedFunction{F, TapeType}
     ir::Core.CodeInfo
     tape::TapeType
     counter::Int
-    bindings::Bindings
-    arg_indices::Vector{Int} # arg indices in bindings
-    retval::Int # 0 indicates the function has not returned
+    binding_values::Bindings
+    arg_binding_slots::Vector{Int} # arg indices in binding_values
+    retval_binding_slot::Int # 0 indicates the function has not returned
 
     function TapedFunction{F, T}(f::F, args...; cache=false) where {F, T}
         args_type = _accurate_typeof.(args)
@@ -82,9 +82,9 @@ mutable struct TapedFunction{F, TapeType}
             return tf
         end
         ir = _infer(f, args_type)
-        bindings, slots, tape = translate!(RawTape(), ir)
+        binding_values, slots, tape = translate!(RawTape(), ir)
 
-        tf = new{F, T}(f, length(args), ir, tape, 1, bindings, slots, 0)
+        tf = new{F, T}(f, length(args), ir, tape, 1, binding_values, slots, 0)
         TRCache[cache_key] = tf # set cache
         return tf
     end
@@ -94,7 +94,7 @@ mutable struct TapedFunction{F, TapeType}
 
     function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
         new{F, T0}(tf.func, tf.arity, tf.ir, tf.tape,
-                   tf.counter, tf.bindings, tf.arg_indices, 0)
+                   tf.counter, tf.binding_values, tf.arg_binding_slots, 0)
     end
 
     TapedFunction(tf::TapedFunction{F, T}) where {F, T} = TapedFunction{F, T}(tf)
@@ -113,8 +113,8 @@ end
 
 compile(tf::TapedFunction{F, RawTape}) where {F} = TapedFunction{F, CompiledTape}(tf)
 
-@inline _lookup(tf::TapedFunction, v::Int) = @inbounds tf.bindings[v]
-@inline _update_var!(tf::TapedFunction, v::Int, c) = @inbounds tf.bindings[v] = c
+@inline _lookup(tf::TapedFunction, v::Int) = @inbounds tf.binding_values[v]
+@inline _update_var!(tf::TapedFunction, v::Int, c) = @inbounds tf.binding_values[v] = c
 
 """
     Instruction
@@ -144,21 +144,21 @@ end
 
 struct NOOPInstruction <: AbstractInstruction end
 
-@inline result(t::TapedFunction) = t.bindings[t.retval]
+@inline result(t::TapedFunction) = t.binding_values[t.retval_binding_slot]
 
 function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
-    if !continuation # reset counter and retval to run from the start
+    if !continuation # reset counter and retval_binding_slot to run from the start
         tf.counter = 1
-        tf.retval = 0
+        tf.retval_binding_slot = 0
     end
 
     # set args
     if tf.counter <= 1
-        # The first slot in `bindings` is assumed to be `tf.func`.
-        tf.arg_indices[1] > 0 && _update_var!(tf, tf.arg_indices[1], tf.func)
-        for i in 1:length(args) # the subsequent arg_indices are arguments
+        # The first slot in `binding_values` is assumed to be `tf.func`.
+        tf.arg_binding_slots[1] > 0 && _update_var!(tf, tf.arg_binding_slots[1], tf.func)
+        for i in 1:length(args) # the subsequent arg_binding_slots are arguments
             slot = i + 1
-            tf.arg_indices[slot] > 0 && _update_var!(tf, tf.arg_indices[slot], args[i])
+            tf.arg_binding_slots[slot] > 0 && _update_var!(tf, tf.arg_binding_slots[slot], args[i])
         end
     end
 
@@ -167,7 +167,7 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
         ins = tf.tape[tf.counter]
         ins(tf)
         callback !== nothing && callback()
-        tf.retval != 0 && break
+        tf.retval_binding_slot != 0 && break
     end
     return result(tf)
 end
@@ -244,7 +244,7 @@ function (instr::CondGotoInstruction)(tf::TapedFunction)
 end
 
 function (instr::ReturnInstruction)(tf::TapedFunction)
-    tf.retval = instr.arg
+    tf.retval_binding_slot = instr.arg
 end
 
 function (instr::NOOPInstruction)(tf::TapedFunction)
@@ -315,10 +315,10 @@ function allocate_binding!(var, tbind::TempBindings, ::Type{T}) where T
 end
 
 function translate!(tape::RawTape, ir::Core.CodeInfo)
-    bindings = Bindings()
-    sizehint!(bindings, 128)
+    binding_values = Bindings()
+    sizehint!(binding_values, 128)
     bcache = Dict{IRVar, Int}()
-    tbind = TempBindings(bindings, bcache)
+    tbind = TempBindings(binding_values, bcache)
     slots = Dict{Int, Int}()
 
     for (idx, line) in enumerate(ir.code)
@@ -330,11 +330,11 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
     for (k, v) in tbind.book
         isa(k, Core.SlotNumber) && (slots[k.id] = v)
     end
-    arg_indices = fill(0, maximum(keys(slots)))
+    arg_binding_slots = fill(0, maximum(keys(slots)))
     for (k, v) in slots
-        arg_indices[k] = v
+        arg_binding_slots[k] = v
     end
-    return (bindings, arg_indices, tape)
+    return (binding_values, arg_binding_slots, tape)
 end
 
 function _const_instruction(var::IRVar, v, tbind::TempBindings, ir)
@@ -475,6 +475,6 @@ end
 
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf)
-    new_tf.bindings = copy_bindings(tf.bindings)
+    new_tf.binding_values = copy_bindings(tf.binding_values)
     return new_tf
 end
