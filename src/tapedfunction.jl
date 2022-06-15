@@ -1,50 +1,38 @@
 #=
 
-`TapedFunction` converts a Julia function to a tape that we have some
-control on how the function is run, like continuations, variable
-caching, injecting additional control flows (i.e. produce/consume)
-between instructions, etc.
+`TapedFunction` converts a Julia function to a friendly tape for user-specified interpreters. 
+With this tape-like abstraction for functions, we gain some control over how the function is 
+executed, like capturing continuations,  caching variables, injecting additional control flows 
+(i.e. produce/consume) between instructions on the tape, etc. 
 
-For this purpose, we firstly use Julia's compiler API to get the IR
-code of the function. Here we use the unoptimized typed code, which is
-in a non-strict SSA form. Then we convert each IR instruction to a
-Julia representation (an object of a subtype of
-AbstractInstruction). All the operands (i.e., the varibales) these
-instructions use are stored in a data structure called
-`Bindings`. This conversion/binding process is performed at
-compile-time / tape-recording time.
+Under the hood, we firstly used Julia's compiler API to get the IR code of the original function. 
+We use the unoptimised typed code in a non-strict SSA form. Then we convert each IR instruction 
+to a Julia data structure (an object of a subtype of AbstractInstruction). All the operands 
+(i.e., the variables) these instructions use are stored in a data structure called `Bindings`. 
+This conversion/binding process is performed at compile-time / tape-recording time and is only 
+done once for each function. 
+	
+In a nutshell, there are two types of instructions (or primitives) on a tape:
+  - Ordinary function call
+  - Control-flow instruction: GotoInstruction and CondGotoInstruction, ReturnInstruction
+	
+Once the tape is recorded, we can run the tape just like calling the original function. 
+We first plugin the arguments, run each instruction on the tape, and stop after encountering
+a ReturnInstruction. We also provide a mechanism to add a callback after each instruction. 
+This API allowed us to implement the `produce/consume` machanism in TapedTask. And exploiting 
+these features, we implemented a fork mechanism for TapedTask.
+	
+Some potentially sharp edges of this implementation:
 
-There are mainly three kinds of instructions on a tape:
-- Instruction stands for an ordinary function call
-- GotoInstruction and CondGotoInstruction are for control-flow, with these
-  instructions, we can jump from an instruction to another one on the same
-  tape.
-- ReturnInstruction, as its name indicates, let us return from a function.
-
-Once the tape is recorded, we can run the tape to gain the same effect
-as calling the original function. We first fill the arguments into
-the Bindings, then go through each instruction on the tape, stop after
-we encounter a ReturnInstruction.
-
-We provide a mechanism to add a callback after each instruction, with
-this facility we implemented the produce/consume machanism in
-TapedTask. And based on the feautres of being copiable and execution
-controlling, we made the fork machanism of TapedTask.
-
-However, this implementation currently has some caveates:
-1. GlobalRef is evaluated at tape-recording time (compile time), you will
-   see an info log on each GloabalRef evaluation. At most time, we don't
-   change the value/object which is associated to a GlobalRef at runtime,
-   so this works well. But, if you do somthing like
-   `module A v=1 end; make tapedfunction; A.eval(:(v=2)); run tf;`, The
-   assignment won't work.
-2. QuoteNode is also evaluated at tape-recording time (compile time) with
-   an info log. Mostly the result of evaluating a QuoteNode is a Symbol, so
-   this works well at most time.
-3. There's one allocation in each Instruction execution, so write a function
-   in a manner which has the less instruction executions will be more
-   performant, for example, using broadcasting instead of a loop.
-
+  1. GlobalRef is evaluated at the tape-recording time (compile-time). Most times, 
+     the value/object associated with a GlobalRef does not change at run time. 
+     So this works well. But, if you do something like `module A v=1 end; make tapedfunction; A.eval(:(v=2)); run tf;`, 
+     The assignment won't work.
+  2. QuoteNode is also evaluated at the tape-recording time (compile-time). Primarily 
+     the result of evaluating a QuoteNode is a Symbol, which works well most of the time.
+  3. Each Instruction execution contains one unnecessary allocation at the moment. 
+     So writing a function with vectorised computation will be more performant, 
+     for example, using broadcasting instead of a loop.
 =#
 
 const LOGGING = Ref(false)
