@@ -174,7 +174,7 @@ function Base.copy(t::TapedTask; args=())
             # the task is running, we find the real args from the copied binding_values
             map(1:length(t.args)) do i
                 s = i + 1
-                tf.arg_binding_slots[s] > 0 ? tf.binding_values[tf.arg_binding_slots[s]] : t.args[i]
+                _arg(tf, s; default=t.args[i])
             end
         else
             # the task is not started yet, but no args is given

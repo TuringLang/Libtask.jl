@@ -133,6 +133,15 @@ end
 struct NOOPInstruction <: AbstractInstruction end
 
 @inline result(t::TapedFunction) = t.binding_values[t.retval_binding_slot]
+@inline function _arg(tf::TapedFunction, i::Int; default=nothing)
+    length(tf.arg_binding_slots) < i && return default
+    tf.arg_binding_slots[i] > 0 && return tf.binding_values[tf.arg_binding_slots[i]]
+    return default
+end
+@inline function _arg!(tf::TapedFunction, i::Int, v)
+    length(tf.arg_binding_slots) >= i &&
+        tf.arg_binding_slots[i] > 0 && _update_var!(tf, tf.arg_binding_slots[i], v)
+end
 
 function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     if !continuation # reset counter and retval_binding_slot to run from the start
@@ -143,10 +152,10 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     # set args
     if tf.counter <= 1
         # The first slot in `binding_values` is assumed to be `tf.func`.
-        tf.arg_binding_slots[1] > 0 && _update_var!(tf, tf.arg_binding_slots[1], tf.func)
+        _arg!(tf, 1, tf.func)
         for i in 1:length(args) # the subsequent arg_binding_slots are arguments
             slot = i + 1
-            tf.arg_binding_slots[slot] > 0 && _update_var!(tf, tf.arg_binding_slots[slot], args[i])
+            _arg!(tf, slot, args[i])
         end
     end
 
@@ -314,7 +323,7 @@ function translate!(tape::RawTape, ir::Core.CodeInfo)
     for (k, v) in bcache
         isa(k, Core.SlotNumber) && (slots[k.id] = v)
     end
-    arg_binding_slots = fill(0, maximum(keys(slots)))
+    arg_binding_slots = fill(0, maximum(keys(slots); init=0))
     for (k, v) in slots
         arg_binding_slots[k] = v
     end
