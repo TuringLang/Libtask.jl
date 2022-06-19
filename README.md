@@ -87,16 +87,15 @@ a = copy(ttask)
 @show consume(ttask) # 3
 ```
 
-Note: The [Turing](https://github.com/TuringLang/Turing.jl)
-probabilistic programming language uses this task copying feature in
+Notes: 
+
+- The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming 
+language uses this task copying feature in
 an efficient implementation of the [particle
 filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling
 algorithm for arbitary order [Markov
 processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
 
-## Disclaimer
-
-- This feature is still experimental and should only be used with caution.
 - From v0.6.0, Libtask is implemented by recording all the computing
   to a tape and copying that tape. Before that version, it is based on
   a tricky hack on the Julia internals. You can check the commit
