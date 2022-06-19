@@ -199,5 +199,14 @@
             ttask3 = copy(ttask; args=(4,))
             @test consume(ttask3) == 5
         end
+
+        @testset "Issue-148, unused argument" begin
+            function f(x)
+                produce(1)
+            end
+
+            ttask = TapedTask(f, 2)
+            @test consume(ttask) == 1
+        end
     end
 end
