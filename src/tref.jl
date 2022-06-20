@@ -36,6 +36,11 @@ d["A"] = 10
 """
 mutable struct TRef{T}
     val::T
+
+    function TRef(val::T) where {T}
+        Base.depwarn("`TRef` is deprecated, please overload `tape_copy` for `Ref` and use `Ref` instead.", :TRef)
+        new{T}(val)
+    end
 end
 
 Base.get(r::TRef) = r.val

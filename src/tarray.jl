@@ -27,6 +27,11 @@ Array(ta)                   # convert to 4-element Array{Int64,1}: [1, 2, 3, 4]
 """
 mutable struct TArray{T, N, A <: AbstractArray{T, N}} <: AbstractArray{T, N}
     data::A
+
+    function TArray(data::A) where {T, N, A <: AbstractArray{T, N}}
+        Base.depwarn("`TArray` is deprecated, please overload `tape_copy` for `Array` and use `Array` instead.", :TArray)
+        new{T, N, A}(data)
+    end
 end
 
 TArray{T}(d::Integer...) where T = TArray(T, d)
