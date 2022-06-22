@@ -86,10 +86,12 @@ a = copy(ttask)
 
 Notes:
 
-- The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic 
-programming language uses this task copying feature in an efficient 
-implementation of the [particle filtering](https://en.wikipedia.org/wiki/Particle_filter) 
-sampling algorithm for arbitrary order [Markov processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
+- The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic
+  programming language uses this task copying feature in an efficient
+  implementation of the [particle
+  filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling
+  algorithm for arbitrary order [Markov
+  processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
 
 - From v0.6.0, Libtask is implemented by recording all the computing
   to a tape and copying that tape. Before that version, it is based on
