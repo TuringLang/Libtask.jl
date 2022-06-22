@@ -1,37 +1,37 @@
 #=
 
-`TapedFunction` converts a Julia function to a friendly tape for user-specified interpreters. 
-With this tape-like abstraction for functions, we gain some control over how the function is 
-executed, like capturing continuations,  caching variables, injecting additional control flows 
-(i.e. produce/consume) between instructions on the tape, etc. 
+`TapedFunction` converts a Julia function to a friendly tape for user-specified interpreters.
+With this tape-like abstraction for functions, we gain some control over how the function is
+executed, like capturing continuations,  caching variables, injecting additional control flows
+(i.e. produce/consume) between instructions on the tape, etc.
 
-Under the hood, we firstly used Julia's compiler API to get the IR code of the original function. 
-We use the unoptimised typed code in a non-strict SSA form. Then we convert each IR instruction 
-to a Julia data structure (an object of a subtype of AbstractInstruction). All the operands 
-(i.e., the variables) these instructions use are stored in a data structure called `Bindings`. 
-This conversion/binding process is performed at compile-time / tape-recording time and is only 
-done once for each function. 
-	
+Under the hood, we firstly used Julia's compiler API to get the IR code of the original function.
+We use the unoptimised typed code in a non-strict SSA form. Then we convert each IR instruction
+to a Julia data structure (an object of a subtype of AbstractInstruction). All the operands
+(i.e., the variables) these instructions use are stored in a data structure called `Bindings`.
+This conversion/binding process is performed at compile-time / tape-recording time and is only
+done once for each function.
+
 In a nutshell, there are two types of instructions (or primitives) on a tape:
   - Ordinary function call
   - Control-flow instruction: GotoInstruction and CondGotoInstruction, ReturnInstruction
-	
-Once the tape is recorded, we can run the tape just like calling the original function. 
+
+Once the tape is recorded, we can run the tape just like calling the original function.
 We first plugin the arguments, run each instruction on the tape, and stop after encountering
-a ReturnInstruction. We also provide a mechanism to add a callback after each instruction. 
-This API allowed us to implement the `produce/consume` machanism in TapedTask. And exploiting 
+a ReturnInstruction. We also provide a mechanism to add a callback after each instruction.
+This API allowed us to implement the `produce/consume` machanism in TapedTask. And exploiting
 these features, we implemented a fork mechanism for TapedTask.
-	
+
 Some potentially sharp edges of this implementation:
 
-  1. GlobalRef is evaluated at the tape-recording time (compile-time). Most times, 
-     the value/object associated with a GlobalRef does not change at run time. 
-     So this works well. But, if you do something like `module A v=1 end; make tapedfunction; A.eval(:(v=2)); run tf;`, 
+  1. GlobalRef is evaluated at the tape-recording time (compile-time). Most times,
+     the value/object associated with a GlobalRef does not change at run time.
+     So this works well. But, if you do something like `module A v=1 end; make tapedfunction; A.eval(:(v=2)); run tf;`,
      The assignment won't work.
-  2. QuoteNode is also evaluated at the tape-recording time (compile-time). Primarily 
+  2. QuoteNode is also evaluated at the tape-recording time (compile-time). Primarily
      the result of evaluating a QuoteNode is a Symbol, which works well most of the time.
-  3. Each Instruction execution contains one unnecessary allocation at the moment. 
-     So writing a function with vectorised computation will be more performant, 
+  3. Each Instruction execution contains one unnecessary allocation at the moment.
+     So writing a function with vectorised computation will be more performant,
      for example, using broadcasting instead of a loop.
 =#
 
@@ -58,8 +58,9 @@ mutable struct TapedFunction{F, TapeType}
     binding_values::Bindings
     arg_binding_slots::Vector{Int} # arg indices in binding_values
     retval_binding_slot::Int # 0 indicates the function has not returned
+    deepcopy_types::Vector{Any}
 
-    function TapedFunction{F, T}(f::F, args...; cache=false) where {F, T}
+    function TapedFunction{F, T}(f::F, args...; cache=false, deepcopy_types=[]) where {F, T}
         args_type = _accurate_typeof.(args)
         cache_key = (f, args_type...)
 
@@ -72,17 +73,17 @@ mutable struct TapedFunction{F, TapeType}
         ir = _infer(f, args_type)
         binding_values, slots, tape = translate!(RawTape(), ir)
 
-        tf = new{F, T}(f, length(args), ir, tape, 1, binding_values, slots, 0)
+        tf = new{F, T}(f, length(args), ir, tape, 1, binding_values, slots, 0, deepcopy_types)
         TRCache[cache_key] = tf # set cache
         return tf
     end
 
-    TapedFunction(f, args...; cache=false) =
-        TapedFunction{typeof(f), RawTape}(f, args...; cache=cache)
+    TapedFunction(f, args...; cache=false, deepcopy_types=[]) =
+        TapedFunction{typeof(f), RawTape}(f, args...; cache=cache, deepcopy_types=deepcopy_types)
 
     function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
         new{F, T0}(tf.func, tf.arity, tf.ir, tf.tape,
-                   tf.counter, tf.binding_values, tf.arg_binding_slots, 0)
+                   tf.counter, tf.binding_values, tf.arg_binding_slots, 0, tf.deepcopy_types)
     end
 
     TapedFunction(tf::TapedFunction{F, T}) where {F, T} = TapedFunction{F, T}(tf)
@@ -444,31 +445,50 @@ end
 ## copy Bindings, TapedFunction
 
 """
-    tape_copy(x)
+    tape_shallowcopy(x)
+    tape_deepcopy(x)
 
-Function `tape_copy` is used to copy data while copying a
-TapedFunction, the default behaviour is: we perform share the data
-between tasks, i.e., `tape_copy(x) = x`. If one wants some kinds of
-data to be copied, or deeply copied, one can overload this function.
+Function `tape_shallowcopy` and `tape_deepcopy` are used to copy data
+while copying a TapedFunction. A value in the bindings of a
+TapedFunction is either `tape_shallowcopy`ed or `tape_deepcopy`ed. For
+TapedFunction, all types are shallow copied by default, and you can
+specify some types to be deep copied by giving the `deepcopy_types`
+kwyword argument while constructing a TapedFunction.
+
+The default behaviour of `tape_shallowcopy` is, we return its argument
+untouched, like `identity` does, i.e., `tape_copy(x) = x`. The default
+behaviour of `tape_deepcopy` is, we call `deepcopy` on its argument
+and return the result, `tape_deepcopy(x) = deepcopy(x)`. If one wants
+some kinds of data to be copied (shallowly or deeply) in a different
+way, one can overload these functions.
+
 """
-function tape_copy end
-tape_copy(x) = x
-# Core.Box is used as closure captured variable container, so we should tape_copy its contents
-tape_copy(x::Core.Box) = Core.Box(tape_copy(x.contents))
-# ?? should we deepcopy Array and Dict by default?
-# tape_copy(x::Array) = deepcopy(x)
-# tape_copy(x::Dict) = deepcopy(x)
+function tape_shallowcopy end, function tape_deepcopy end
 
-function copy_bindings(old::Bindings)
+tape_shallowcopy(x) = x
+tape_deepcopy(x) = deepcopy(x)
+# Core.Box is used as closure captured variable container, so we should tape_copy its contents
+tape_shallowcopy(x::Core.Box) = Core.Box(tape_shallowcopy(x.contents))
+tape_deepcopy(x::Core.Box) = Core.Box(tape_deepcopy(x.contents))
+
+function _tape_copy(v, deepcopy_types)
+    if any(t -> isa(v, t), deepcopy_types)
+        tape_deepcopy(v)
+    else
+        tape_shallowcopy(v)
+    end
+end
+
+function copy_bindings(old::Bindings, deepcopy_types)
     newb = copy(old)
     for k in 1:length(old)
-        isassigned(old, k) && (newb[k] = tape_copy(old[k]))
+        newb[k] = _tape_copy(old[k], deepcopy_types)
     end
     return newb
 end
 
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf)
-    new_tf.binding_values = copy_bindings(tf.binding_values)
+    new_tf.binding_values = copy_bindings(tf.binding_values, tf.deepcopy_types)
     return new_tf
 end

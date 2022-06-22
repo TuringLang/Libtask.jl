@@ -21,8 +21,8 @@
         @inferred Libtask.TapedFunction(f)
     end
 
-    # Test case 2: heap allocated objects are shallowly copied.
-    @testset "heap allocated objects" begin
+    # Test case 2: Array objects are deeply copied.
+    @testset "Array objects" begin
         function f()
             t = [0 1 2]
             while true
@@ -37,10 +37,33 @@
         a = copy(ttask)
         @test consume(a) == 2
         @test consume(a) == 3
+        @test consume(ttask) == 2
+        @test consume(ttask) == 3
         @test consume(ttask) == 4
         @test consume(ttask) == 5
-        @test consume(ttask) == 6
-        @test consume(ttask) == 7
+    end
+
+    # Test case 3: Dict objects are shallowly copied.
+    @testset "Dict objects" begin
+        function f()
+            t = Dict(1=>10, 2=>20)
+            while true
+                produce(t[1])
+                t[1] = 1 + t[1]
+            end
+        end
+
+        ttask = TapedTask(f)
+
+        @test consume(ttask) == 10
+        @test consume(ttask) == 11
+
+        a = copy(ttask)
+        @test consume(a) == 12
+        @test consume(a) == 13
+
+        @test consume(ttask) == 14
+        @test consume(ttask) == 15
     end
 
     @testset "iteration" begin
