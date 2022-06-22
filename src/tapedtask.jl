@@ -206,6 +206,6 @@ function tfill(args...)
     fill(args...)
 end
 function TRef(x)
-    Base.depwarn("`TRef` is deprecated, please use `Ref` instead.", :TArray)
+    Base.depwarn("`TRef` is deprecated, please use `Ref` instead.", :TRef)
     Ref(x)
 end
