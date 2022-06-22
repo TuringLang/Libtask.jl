@@ -1,71 +1,4 @@
 @testset "tapedtask" begin
-    # Test case 1: stack allocated objects are deep copied.
-    @testset "stack allocated objects" begin
-        function f()
-            t = 0
-            while true
-                produce(t)
-                t = 1 + t
-            end
-        end
-
-        ttask = TapedTask(f)
-        @test consume(ttask) == 0
-        @test consume(ttask) == 1
-        a = copy(ttask)
-        @test consume(a) == 2
-        @test consume(a) == 3
-        @test consume(ttask) == 2
-        @test consume(ttask) == 3
-
-        @inferred Libtask.TapedFunction(f)
-    end
-
-    # Test case 2: Array objects are deeply copied.
-    @testset "Array objects" begin
-        function f()
-            t = [0 1 2]
-            while true
-                produce(t[1])
-                t[1] = 1 + t[1]
-            end
-        end
-
-        ttask = TapedTask(f)
-        @test consume(ttask) == 0
-        @test consume(ttask) == 1
-        a = copy(ttask)
-        @test consume(a) == 2
-        @test consume(a) == 3
-        @test consume(ttask) == 2
-        @test consume(ttask) == 3
-        @test consume(ttask) == 4
-        @test consume(ttask) == 5
-    end
-
-    # Test case 3: Dict objects are shallowly copied.
-    @testset "Dict objects" begin
-        function f()
-            t = Dict(1=>10, 2=>20)
-            while true
-                produce(t[1])
-                t[1] = 1 + t[1]
-            end
-        end
-
-        ttask = TapedTask(f)
-
-        @test consume(ttask) == 10
-        @test consume(ttask) == 11
-
-        a = copy(ttask)
-        @test consume(a) == 12
-        @test consume(a) == 13
-
-        @test consume(ttask) == 14
-        @test consume(ttask) == 15
-    end
-
     @testset "iteration" begin
         function f()
             t = 1
@@ -205,31 +138,6 @@
             if VERSION >= v"1.5"
                 @test ttask2.task.exception isa BoundsError
             end
-        end
-    end
-
-    @testset "Issues" begin
-        @testset "Issue-140, copy unstarted task" begin
-            function f(x)
-                for i in 1:3
-                    produce(i + x)
-                end
-            end
-
-            ttask = TapedTask(f, 3)
-            ttask2 = copy(ttask)
-            @test consume(ttask2) == 4
-            ttask3 = copy(ttask; args=(4,))
-            @test consume(ttask3) == 5
-        end
-
-        @testset "Issue-148, unused argument" begin
-            function f(x)
-                produce(1)
-            end
-
-            ttask = TapedTask(f, 2)
-            @test consume(ttask) == 1
         end
     end
 end

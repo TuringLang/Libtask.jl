@@ -197,8 +197,14 @@ function TArray(T::Type, dim)
     Base.depwarn("`TArray` is deprecated, please use `Array` instead.", :TArray)
     Array{T}(undef, dim)
 end
-tzeros, tfill = zeros, fill
-
+function tzeros(args...)
+    Base.depwarn("`tzeros` is deprecated, please use `zeros` instead.", :tzeros)
+    zeros(args...)
+end
+function tfill(args...)
+    Base.depwarn("`tfill` is deprecated, please use `fill` instead.", :tzeros)
+    fill(args...)
+end
 function TRef(x)
     Base.depwarn("`TRef` is deprecated, please use `Ref` instead.", :TArray)
     Ref(x)
