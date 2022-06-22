@@ -445,25 +445,31 @@ end
 ## copy Bindings, TapedFunction
 
 """
-    tape_copy(x)
+    tape_shallowcopy(x)
+    tape_deepcopy(x)
 
-Function `tape_copy` is used to copy data while copying a
-TapedFunction, the default behaviour is: we perform share the data
-between tasks, i.e., `tape_copy(x) = x`. If one wants some kinds of
-data to be copied, or deeply copied, one can overload this function.
+Function `tape_shallowcopy` and `tape_deepcopy` are used to copy data
+while copying a TapedFunction. A value in the bindings of a
+TapedFunction is either `tape_shallowcopy`ed or `tape_deepcopy`ed. For
+TapedFunction, all types are shallow copied by default, and you can
+specify some types to be deep copied by giving the `deepcopy_types`
+kwyword argument while constructing a TapedFunction.
+
+The default behaviour of `tape_shallowcopy` is, we return its argument
+untouched, like `identity` does, i.e., `tape_copy(x) = x`. The default
+behaviour of `tape_deepcopy` is, we call `deepcopy` on its argument
+and return the result, `tape_deepcopy(x) = deepcopy(x)`. If one wants
+some kinds of data to be copied (shallowly or deeply) in a different
+way, one can overload these functions.
+
 """
-function tape_shallowcopy end
-tape_shallowcopy(x) = x
-function tape_deepcopy end
-tape_deepcopy(x) = deepcopy(x)
+function tape_shallowcopy end, function tape_deepcopy end
 
+tape_shallowcopy(x) = x
+tape_deepcopy(x) = deepcopy(x)
 # Core.Box is used as closure captured variable container, so we should tape_copy its contents
 tape_shallowcopy(x::Core.Box) = Core.Box(tape_shallowcopy(x.contents))
 tape_deepcopy(x::Core.Box) = Core.Box(tape_deepcopy(x.contents))
-
-# ?? should we deepcopy Array and Dict by default?
-# tape_copy(x::Array) = deepcopy(x)
-# tape_copy(x::Dict) = deepcopy(x)
 
 function _tape_copy(v, deepcopy_types)
     if any(t -> isa(v, t), deepcopy_types)
