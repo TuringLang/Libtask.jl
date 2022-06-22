@@ -37,10 +37,10 @@
         a = copy(ttask)
         @test consume(a) == 2
         @test consume(a) == 3
+        @test consume(ttask) == 2
+        @test consume(ttask) == 3
         @test consume(ttask) == 4
         @test consume(ttask) == 5
-        @test consume(ttask) == 6
-        @test consume(ttask) == 7
     end
 
     @testset "iteration" begin

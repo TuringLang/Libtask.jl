@@ -65,8 +65,8 @@ end
 
 # NOTE: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
-function TapedTask(f, args...)
-    tf = TapedFunction(f, args...; cache=true)
+function TapedTask(f, args...; deepcopy_types=[Array, Ref]) # deepcoy Array and Ref by default.
+    tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy_types)
     TapedTask(tf, args...)
 end
 
@@ -178,7 +178,7 @@ function Base.copy(t::TapedTask; args=())
             end
         else
             # the task is not started yet, but no args is given
-            tape_copy.(t.args)
+            map(a -> _tape_copy(a, t.tf.deepcopy_types), t.args)
         end
     end
     new_t = TapedTask(tf, task_args...)
@@ -186,4 +186,20 @@ function Base.copy(t::TapedTask; args=())
     new_t.task.storage = copy(storage)
     new_t.task.storage[:tapedtask] = new_t
     return new_t
+end
+
+# TArray and TRef back-compat
+function TArray(args...)
+    Base.depwarn("`TArray` is deprecated, please use `Array` instead.", :TArray)
+    Array(args...)
+end
+function TArray(T::Type, dim)
+    Base.depwarn("`TArray` is deprecated, please use `Array` instead.", :TArray)
+    Array{T}(undef, dim)
+end
+tzeros, tfill = zeros, fill
+
+function TRef(x)
+    Base.depwarn("`TRef` is deprecated, please use `Ref` instead.", :TArray)
+    Ref(x)
 end
