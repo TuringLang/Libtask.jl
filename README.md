@@ -6,7 +6,7 @@ Tape based task copying in Turing
 
 ## Getting Started
 
-Stack allocated objects are deep copied:
+Stack allocated objects are always deep copied:
 
 ```julia
 using Libtask
@@ -32,7 +32,7 @@ a = copy(ttask)
 @show consume(ttask) # 3
 ```
 
-Array and Ref objects are deep copied:
+Heap-allocated Array and Ref objects are deep copied by default:
 
 ```julia
 using Libtask
@@ -58,7 +58,7 @@ a = copy(ttask)
 @show consume(ttask) # 3
 ```
 
-Others Heap allocated objects (e.g., `Dict`) are shallow copied:
+Other heap-allocated objects (e.g., `Dict`) are shallow copied, by default:
 
 ```julia
 using Libtask
@@ -86,12 +86,10 @@ a = copy(ttask)
 
 Notes:
 
-- The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming
-language uses this task copying feature in
-an efficient implementation of the [particle
-filtering](https://en.wikipedia.org/wiki/Particle_filter) sampling
-algorithm for arbitary order [Markov
-processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
+- The [Turing](https://github.com/TuringLang/Turing.jl) probabilistic 
+programming language uses this task copying feature in an efficient 
+implementation of the [particle filtering](https://en.wikipedia.org/wiki/Particle_filter) 
+sampling algorithm for arbitrary order [Markov processes](https://en.wikipedia.org/wiki/Markov_model#Hidden_Markov_model).
 
 - From v0.6.0, Libtask is implemented by recording all the computing
   to a tape and copying that tape. Before that version, it is based on
