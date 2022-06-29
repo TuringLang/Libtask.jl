@@ -65,12 +65,13 @@ end
 
 # NOTE: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
-function TapedTask(f, args...; deepcopy_types=[Array, Ref]) # deepcoy Array and Ref by default.
+function TapedTask(f, args...; deepcopy_types=Union{Array, Ref}) # deepcoy Array and Ref by default.
     tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy_types)
     TapedTask(tf, args...)
 end
 
-TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...)
+TapedTask(finfo::Tuple{Any, Type}, args...) = TapedTask(finfo[1], args...; deepcopy_types=finfo[2])
+TapedTask(t::TapedTask, args...) = TapedTask(func(t), args...; deepcopy_types=t.tf.deepcopy_types)
 func(t::TapedTask) = t.tf.func
 
 #=

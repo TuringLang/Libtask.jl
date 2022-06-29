@@ -58,9 +58,9 @@ mutable struct TapedFunction{F, TapeType}
     binding_values::Bindings
     arg_binding_slots::Vector{Int} # arg indices in binding_values
     retval_binding_slot::Int # 0 indicates the function has not returned
-    deepcopy_types::Vector{Any}
+    deepcopy_types::Type # use a Union type for multiple types
 
-    function TapedFunction{F, T}(f::F, args...; cache=false, deepcopy_types=[]) where {F, T}
+    function TapedFunction{F, T}(f::F, args...; cache=false, deepcopy_types=Union{}) where {F, T}
         args_type = _accurate_typeof.(args)
         cache_key = (f, args_type...)
 
@@ -78,7 +78,7 @@ mutable struct TapedFunction{F, TapeType}
         return tf
     end
 
-    TapedFunction(f, args...; cache=false, deepcopy_types=[]) =
+    TapedFunction(f, args...; cache=false, deepcopy_types=Union{}) =
         TapedFunction{typeof(f), RawTape}(f, args...; cache=cache, deepcopy_types=deepcopy_types)
 
     function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
@@ -472,7 +472,7 @@ tape_shallowcopy(x::Core.Box) = Core.Box(tape_shallowcopy(x.contents))
 tape_deepcopy(x::Core.Box) = Core.Box(tape_deepcopy(x.contents))
 
 function _tape_copy(v, deepcopy_types)
-    if any(t -> isa(v, t), deepcopy_types)
+    if isa(v, deepcopy_types)
         tape_deepcopy(v)
     else
         tape_shallowcopy(v)
