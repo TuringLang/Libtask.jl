@@ -1,4 +1,20 @@
 @testset "tapedtask" begin
+    @testset "construction" begin
+        function f()
+            t = 1
+            while true
+                produce(t)
+                t = 1 + t
+            end
+        end
+
+        ttask = TapedTask(f)
+        @test consume(ttask) == 1
+
+        ttask = TapedTask((f, Union{}))
+        @test consume(ttask) == 1
+    end
+
     @testset "iteration" begin
         function f()
             t = 1
