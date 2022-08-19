@@ -446,7 +446,7 @@ function translate!!(var::IRVar, line::Expr,
     end
 end
 
-function translate!!(var, line, bindings, i, ir)
+function translate!!(var, line, bindings, isconst, ir)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
     throw(ErrorException("Unknown IR code"))
 end
