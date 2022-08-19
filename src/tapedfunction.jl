@@ -369,6 +369,15 @@ function translate!!(var::IRVar, line::Core.SlotNumber,
     return Instruction(func, input, output)
 end
 
+function translate!!(var::IRVar, line::NTuple{N, Symbol},
+                     bindings::Bindings, isconst::Bool, ir) where {N}
+    # for syntax (; x, y, z), see Turing.jl#1873
+    func = identity
+    input = (bind_var!(line, bindings, ir),)
+    output =  bind_var!(var, bindings, ir)
+    return Instruction(func, input, output)
+end
+
 function translate!!(var::IRVar, line::Core.TypedSlot,
                      bindings::Bindings, isconst::Bool, ir)
     input_box = bind_var!(Core.SlotNumber(line.id), bindings, ir)
@@ -437,7 +446,7 @@ function translate!!(var::IRVar, line::Expr,
     end
 end
 
-function translate!!(var, line, bindings, ir)
+function translate!!(var, line, bindings, isconst, ir)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
     throw(ErrorException("Unknown IR code"))
 end

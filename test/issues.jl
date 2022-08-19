@@ -48,4 +48,15 @@
         ttask = TapedTask(f, 2)
         @test consume(ttask) == 1
     end
+
+    @testset "Issue-Turing-1873, NamedTuple syntax" begin
+        function g(x, y)
+            c = x + y
+            return (; c, x, y)
+        end
+
+        tf = Libtask.TapedFunction(g, 1, 2)
+        r = tf(1, 2)
+        @test r == (c=3, x=1, y=2)
+    end
 end
