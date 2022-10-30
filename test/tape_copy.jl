@@ -171,4 +171,25 @@
         y[][2] = 19
         @test y[][2] == 19
     end
+
+    @testset "override deepcopy_types" begin
+        struct DummyType end
+
+        function f(start::Int)
+            t = [start]
+            while true
+                produce(t[1])
+                t[1] = 1 + t[1]
+            end
+        end
+        
+        ttask = TapedTask(f, 0; deepcopy_types=DummyType)
+        consume(ttask)
+
+        ttask2 = copy(ttask)
+        consume(ttask2)
+
+        @test consume(ttask) == 1
+        @test consume(ttask2) == 2
+    end
 end
