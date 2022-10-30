@@ -63,10 +63,17 @@ function TapedTask(tf::TapedFunction, args...)
     return t
 end
 
+BASE_COPY_TYPES = Union{Array, Ref}
+
 # NOTE: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
-function TapedTask(f, args...; deepcopy_types=Union{Array, Ref}) # deepcoy Array and Ref by default.
-    tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy_types)
+function TapedTask(f, args...; deepcopy_types=nothing) # deepcoy Array and Ref by default.
+    if isnothing(deepcopy_types)
+        deepcopy = BASE_COPY_TYPES
+    else
+        deepcopy = Union{BASE_COPY_TYPES, deepcopy_types}
+    end
+    tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy)
     TapedTask(tf, args...)
 end
 
