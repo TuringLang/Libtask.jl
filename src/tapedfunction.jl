@@ -62,7 +62,7 @@ mutable struct TapedFunction{F, TapeType}
 
     function TapedFunction{F, T}(f::F, args...; cache=false, deepcopy_types=Union{}) where {F, T}
         args_type = _accurate_typeof.(args)
-        cache_key = (f, args_type...)
+        cache_key = (f, deepcopy_types, args_type...)
 
         if cache && haskey(TRCache, cache_key) # use cache
             cached_tf = TRCache[cache_key]::TapedFunction{F, T}
