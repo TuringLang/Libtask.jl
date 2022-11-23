@@ -476,9 +476,9 @@ function tape_shallowcopy end, function tape_deepcopy end
 
 tape_shallowcopy(x) = x
 tape_deepcopy(x) = deepcopy(x)
+
 # Core.Box is used as closure captured variable container, so we should tape_copy its contents
-tape_shallowcopy(x::Core.Box) = Core.Box(tape_shallowcopy(x.contents))
-tape_deepcopy(x::Core.Box) = Core.Box(tape_deepcopy(x.contents))
+_tape_copy(box::Core.Box, deepcopy_types) = Core.Box(_tape_copy(box.contents, deepcopy_types))
 
 function _tape_copy(v, deepcopy_types)
     if isa(v, deepcopy_types)
