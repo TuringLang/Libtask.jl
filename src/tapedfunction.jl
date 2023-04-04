@@ -297,7 +297,8 @@ function bind_var!(var::Core.SSAValue, bindings::Bindings, ir::Core.CodeInfo)
 end
 
 allocate_binding!(var, bindings::Bindings, c::Core.Const) =
-    allocate_binding!(var, bindings, _loose_type(Type{c.val}))
+    allocate_binding!(var, bindings, _loose_type(Type{_accurate_typeof(c.val)}))
+
 allocate_binding!(var, bindings::Bindings, c::Core.PartialStruct) =
     allocate_binding!(var, bindings, _loose_type(c.typ))
 function allocate_binding!(var, bindings::Bindings, ::Type{T}) where T
