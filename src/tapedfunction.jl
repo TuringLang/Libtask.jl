@@ -285,7 +285,7 @@ function bind_var!(var::QuoteNode, bindings::Bindings, ir::Core.CodeInfo)
     LOGGING[] && @info "evaluating QuoteNode $var at compile time"
     bind_var!(eval(var), bindings, ir)
 end
-function bind_var!(var::Core.TypedSlot, bindings::Bindings, ir::Core.CodeInfo)
+function bind_var!(var::TypedSlot, bindings::Bindings, ir::Core.CodeInfo)
     # turn TypedSlot to SlotNumber
     bind_var!(Core.SlotNumber(var.id), bindings, ir)
 end
@@ -295,9 +295,9 @@ end
 function bind_var!(var::Core.SSAValue, bindings::Bindings, ir::Core.CodeInfo)
     get!(bindings[1], var, allocate_binding!(var, bindings, ir.ssavaluetypes[var.id]))
 end
-
 allocate_binding!(var, bindings::Bindings, c::Core.Const) =
-    allocate_binding!(var, bindings, _loose_type(Type{c.val}))
+    allocate_binding!(var, bindings, _loose_type(Type{_accurate_typeof(c.val)}))
+
 allocate_binding!(var, bindings::Bindings, c::Core.PartialStruct) =
     allocate_binding!(var, bindings, _loose_type(c.typ))
 function allocate_binding!(var, bindings::Bindings, ::Type{T}) where T
@@ -378,7 +378,7 @@ function translate!!(var::IRVar, line::NTuple{N, Symbol},
     return Instruction(func, input, output)
 end
 
-function translate!!(var::IRVar, line::Core.TypedSlot,
+function translate!!(var::IRVar, line::TypedSlot,
                      bindings::Bindings, isconst::Bool, ir)
     input_box = bind_var!(Core.SlotNumber(line.id), bindings, ir)
     return Instruction(identity, (input_box,), bind_var!(var, bindings, ir))
