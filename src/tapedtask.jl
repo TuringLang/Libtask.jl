@@ -67,13 +67,14 @@ BASE_COPY_TYPES = Union{Array, Ref}
 
 # NOTE: evaluating model without a trace, see
 # https://github.com/TuringLang/Turing.jl/pull/1757#diff-8d16dd13c316055e55f300cd24294bb2f73f46cbcb5a481f8936ff56939da7ceR329
-function TapedTask(f, args...; deepcopy_types=nothing) # deepcoy Array and Ref by default.
+function TapedTask(f, args...; deepcopy_types=nothing, kwargs...) # deepcoy Array and Ref by default.
     if isnothing(deepcopy_types)
         deepcopy = BASE_COPY_TYPES
     else
         deepcopy = Union{BASE_COPY_TYPES, deepcopy_types}
     end
-    tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy)
+    tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy, kwargs...)
+    args = last(make_kwcall_maybe(f, args...; kwargs...))
     TapedTask(tf, args...)
 end
 
@@ -169,7 +170,9 @@ Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 # copy the task
 
-function Base.copy(t::TapedTask; args=())
+function Base.copy(t::TapedTask; args=(), kwargs=())
+    args = last(make_kwcall_maybe(func(t), args...; kwargs...))
+
     length(args) > 0 && t.tf.counter >1 &&
         error("can't copy started task with new arguments")
     tf = copy(t.tf)
