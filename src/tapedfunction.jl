@@ -68,7 +68,7 @@ mutable struct TapedFunction{F, TapeType}
 
         cache_key = (f, deepcopy_types, args_type...)
         if cache && haskey(TRCache, cache_key) # use cache
-            cached_tf = TRCache[cache_key]::TapedFunction{F, T}
+            cached_tf = TRCache[cache_key]::TapedFunction{typeof(f), T}
             tf = copy(cached_tf)
             tf.counter = 1
             return tf
