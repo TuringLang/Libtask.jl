@@ -1,5 +1,10 @@
 using Libtask
 
+foo(x) = sin(cos(x))
+bar(x) = foo(foo(x))
+
+Libtask.is_primitive(::typeof(foo), args...) = false
+
 @testset "tapedfunction" begin
     # Test case 1: stack allocated objects are deep copied.
     @testset "Instruction{typeof(__new__)}" begin
@@ -30,5 +35,11 @@ using Libtask
         r = ctf(1., 2.)
 
         @test typeof(r) === Float64
+    end
+    @testset "recurse into function" begin
+        tf = Libtask.TapedFunction(bar, 5.0)
+        count = 0
+        tf(4.0; callback=() -> (count += 1))
+        @test count == 9
     end
 end
