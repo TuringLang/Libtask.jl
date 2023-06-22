@@ -96,6 +96,7 @@ end
 const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
 const CompiledTape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
 
+# TODO: Make this work on pre-1.9 Julia.
 iskwcall(tf::TapedFunction) = tf.func === Core.kwcall
 function make_kwcall_maybe(f, args...; kwargs...)
     return if length(kwargs) > 0
