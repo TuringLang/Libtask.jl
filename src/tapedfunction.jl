@@ -49,6 +49,17 @@ function _infer(f, args_type)
     return ir0
 end
 
+resolve_globalref(var) = var
+resolve_globalref(var::Core.GlobalRef) = getproperty(var.mod, var.name)
+
+function mark_kwarg_func_as_nonprimitive(ir::Core.CodeInfo)
+    line = ir.code[end - 1]
+    Meta.isexpr(line, :call) || error("Expected a call expression")
+    f = resolve_globalref(line.args[1])
+    @debug "Marking $f as non-primitive"
+    @eval is_primitive(::typeof($f)) = false
+end
+
 const Bindings = Vector{Any}
 
 mutable struct TapedFunction{F, TapeType}
@@ -62,8 +73,8 @@ mutable struct TapedFunction{F, TapeType}
     retval_binding_slot::Int # 0 indicates the function has not returned
     deepcopy_types::Type # use a Union type for multiple types
 
-    function TapedFunction{F, T}(f::F, args...; cache=false, deepcopy_types=Union{}, kwargs...) where {F, T}
-        f, args = make_kwcall_maybe(f, args...; kwargs...)
+    function TapedFunction{F, T}(_f::F, _args...; cache=false, deepcopy_types=Union{}, _kwargs...) where {F, T}
+        f, args = make_kwcall_maybe(_f, _args...; _kwargs...)
         args_type = _accurate_typeof.(args)
 
         cache_key = (f, deepcopy_types, args_type...)
@@ -74,6 +85,9 @@ mutable struct TapedFunction{F, TapeType}
             return tf
         end
         ir = _infer(f, args_type)
+        if iskwcall(f)
+            mark_kwarg_func_as_nonprimitive(ir)
+        end
         binding_values, slots, tape = translate!(RawTape(), ir)
 
         # TODO: Make this use `kwcall` instead.
@@ -97,6 +111,8 @@ const TRCache = LRU{Tuple, TapedFunction}(maxsize=10)
 const CompiledTape = Vector{FunctionWrapper{Nothing, Tuple{TapedFunction}}}
 
 # TODO: Make this work on pre-1.9 Julia.
+iskwcall(f) = false
+iskwcall(f::typeof(Core.kwcall)) = true
 iskwcall(tf::TapedFunction) = tf.func === Core.kwcall
 function make_kwcall_maybe(f, args...; kwargs...)
     return if length(kwargs) > 0
