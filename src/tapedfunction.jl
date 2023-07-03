@@ -459,7 +459,10 @@ end
 """
     is_primitive(f, args...)
 
-Should a function be recursed into, or should it be treated as a single instruction.
+Should a function be recursed into, or should it be treated as a single instruction, when
+encountered inside of a `TapedFunction`. If `is_primitive(f, args...)` is `true`, then
+the instruction will not be traced into. Conversely, if `is_primitive(f, args...)` is
+`false`, a `TapedFunction` is constructed.
 """
 is_primitive(f, args...) = true
 
