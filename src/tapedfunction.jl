@@ -219,7 +219,8 @@ function (instr::Instruction{F})(tf::TapedFunction, callback=nothing) where F
         output = if is_primitive(func, inputs...)
             func(inputs...)
         else
-            TapedFunction(func, inputs...)(inputs...; callback=callback)
+            tf_inner = TapedFunction(func, inputs..., cache=true)
+            tf_inner(inputs...; callback=callback)
         end
         _update_var!(tf, instr.output, output)
         tf.counter += 1
