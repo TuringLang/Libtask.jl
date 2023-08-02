@@ -109,6 +109,22 @@ benchmark_driver!(neural_net, xs...)
 
 ####################################################################
 
+layer(w, x) = relu(w * x)
+Libtask.is_primitive(::typeof(layer), w, x) = false
+
+function neural_net(w1, w2, w3, x1, callback=nothing)
+    x2 = layer(w1, x1)
+    x3 = layer(w2, x2)
+    ret = sigmoid(LinearAlgebra.dot(w3, x3))
+    callback !== nothing && callback(ret)
+    return ret
+end
+
+xs = (randn(10,10), randn(10,10), randn(10), rand(10))
+benchmark_driver!(neural_net, xs...)
+
+####################################################################
+
 println("======= breakdown benchmark =======")
 
 x = rand(100000)
