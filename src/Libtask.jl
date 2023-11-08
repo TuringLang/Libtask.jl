@@ -1,6 +1,5 @@
 module Libtask
 
-using FunctionWrappers: FunctionWrapper
 using LRUCache
 
 export TapedTask, consume, produce
