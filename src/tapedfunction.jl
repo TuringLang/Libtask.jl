@@ -162,7 +162,7 @@ function (tf::TapedFunction)(args...; callback=nothing, continuation=false)
     # run the raw tape
     while true
         ins = tf.tape[tf.counter]
-        ins(tf)
+        ins(tf, callback)
         callback !== nothing && callback()
         tf.retval_binding_slot != 0 && break
     end
@@ -211,12 +211,17 @@ function Base.show(io::IO, instr::CondGotoInstruction)
     println(io, "CondGotoInstruction(", instr.condition, ", dest=", instr.dest, ")")
 end
 
-function (instr::Instruction{F})(tf::TapedFunction) where F
+function (instr::Instruction{F})(tf::TapedFunction, callback=nothing) where F
     # catch run-time exceptions / errors.
     try
         func = F === Int ? _lookup(tf, instr.func) : instr.func
         inputs = map(x -> _lookup(tf, x), instr.input)
-        output = func(inputs...)
+        output = if is_primitive(func, inputs...)
+            func(inputs...)
+        else
+            tf_inner = TapedFunction(func, inputs..., cache=true)
+            tf_inner(inputs...; callback=callback)
+        end
         _update_var!(tf, instr.output, output)
         tf.counter += 1
     catch e
@@ -227,11 +232,11 @@ function (instr::Instruction{F})(tf::TapedFunction) where F
     end
 end
 
-function (instr::GotoInstruction)(tf::TapedFunction)
+function (instr::GotoInstruction)(tf::TapedFunction, callback=nothing)
     tf.counter = instr.dest
 end
 
-function (instr::CondGotoInstruction)(tf::TapedFunction)
+function (instr::CondGotoInstruction)(tf::TapedFunction, callback=nothing)
     cond = _lookup(tf, instr.condition)
     if cond
         tf.counter += 1
@@ -240,11 +245,11 @@ function (instr::CondGotoInstruction)(tf::TapedFunction)
     end
 end
 
-function (instr::ReturnInstruction)(tf::TapedFunction)
+function (instr::ReturnInstruction)(tf::TapedFunction, callback=nothing)
     tf.retval_binding_slot = instr.arg
 end
 
-function (instr::NOOPInstruction)(tf::TapedFunction)
+function (instr::NOOPInstruction)(tf::TapedFunction, callback=nothing)
     tf.counter += 1
 end
 
@@ -449,6 +454,18 @@ function translate!!(var, line, bindings, isconst, ir)
     @error "Unknown IR code: " typeof(var) var typeof(line) line
     throw(ErrorException("Unknown IR code"))
 end
+
+## primitives.
+
+"""
+    is_primitive(f, args...)
+
+Should a function be recursed into, or should it be treated as a single instruction, when
+encountered inside of a `TapedFunction`. If `is_primitive(f, args...)` is `true`, then
+the instruction will not be traced into. Conversely, if `is_primitive(f, args...)` is
+`false`, a `TapedFunction` is constructed.
+"""
+is_primitive(f, args...) = true
 
 ## copy Bindings, TapedFunction
 
