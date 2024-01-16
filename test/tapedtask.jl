@@ -155,5 +155,21 @@
                 @test ttask2.task.exception isa BoundsError
             end
         end
+
+        @testset "Too much producers" begin
+            
+
+            function f()
+                produce(1)
+                produce(2)
+            end
+
+            function g()
+                f()
+            end
+
+            ttask = TapedTask(g)
+            @test_throws Exception consume(ttask)
+        end
     end
 end

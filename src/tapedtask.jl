@@ -122,7 +122,7 @@ end
 function produce(val)
     is_in_tapedtask() || return nothing
     ttask = current_task().storage[:tapedtask]::TapedTask
-    length(ttask.produced_val) > 1 &&
+    length(ttask.produced_val) > 0 &&
         error("There is a produced value which is not consumed.")
     push!(ttask.produced_val, val)
     return nothing
