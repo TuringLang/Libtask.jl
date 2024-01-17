@@ -222,7 +222,6 @@ function (instr::Instruction{F})(tf::TapedFunction, callback=nothing) where F
         else
             tf_inner = get!(tf.subtapes, instr, TapedFunction(func, inputs..., cache=true))
             tf_inner(inputs...; callback=callback, continuation=true)
-            @assert tf_inner.retval_binding_slot != 0 # tf_inner should return
         end
         _update_var!(tf, instr.output, output)
         tf.counter += 1
