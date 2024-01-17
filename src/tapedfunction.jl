@@ -221,6 +221,7 @@ function (instr::Instruction{F})(tf::TapedFunction, callback=nothing) where F
             func(inputs...)
         else
             tf_inner = get!(tf.subtapes, instr, TapedFunction(func, inputs..., cache=true))
+            # continuation=false breaks "Multiple func calls subtapes" and "Copying task with subtapes"
             tf_inner(inputs...; callback=callback, continuation=true)
         end
         _update_var!(tf, instr.output, output)

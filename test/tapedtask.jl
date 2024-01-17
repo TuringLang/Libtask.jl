@@ -169,5 +169,22 @@
             ttask = TapedTask(g)
             @test_throws Exception consume(ttask)
         end
+
+        @testset "Multiple producers for non-primitive" begin
+            function f2()
+                produce(1)
+                produce(2)
+            end
+            Libtask.is_primitive(::typeof(f2), args...) = false
+
+            function g2()
+                f2()
+            end
+
+            ttask = TapedTask(g2)
+            @test consume(ttask) == 1
+            @test consume(ttask) == 2
+            @test consume(ttask) === nothing
+        end
     end
 end
