@@ -186,5 +186,28 @@
             @test consume(ttask) == 2
             @test consume(ttask) === nothing
         end
+
+        @testset "Run two times" begin
+            function f4()
+                produce(2)
+            end
+
+            function g4()
+                produce(1)
+                f4()
+            end
+
+            Libtask.is_primitive(::typeof(f4), args...) = false
+
+            ttask = TapedTask(g4)
+            @test consume(ttask) == 1
+            @test consume(ttask) == 2
+            @test consume(ttask) === nothing
+
+            ttask = TapedTask(g4)
+            @test consume(ttask) == 1
+            @test consume(ttask) == 2
+            @test consume(ttask) === nothing
+        end
     end
 end

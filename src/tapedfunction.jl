@@ -523,3 +523,10 @@ function Base.copy(tf::TapedFunction)
     new_tf.subtapes = IdDict{Any,TapedFunction}(func => copy(subtape) for (func, subtape) in tf.subtapes)
     return new_tf
 end
+
+# when copying we want to keep the counters
+# but if we instantiate new TapedTask, we have to reset the counters of cached tapes
+function reset_counters!(tf::TapedFunction)
+    tf.counter = 1
+    reset_counters!.(values(tf.subtapes))
+end

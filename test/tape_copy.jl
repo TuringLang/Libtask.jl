@@ -246,6 +246,5 @@
 
         @test consume(ttask3) == 2
         @test consume(ttask3) === nothing
-
     end
 end

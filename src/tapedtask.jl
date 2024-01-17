@@ -74,6 +74,7 @@ function TapedTask(f, args...; deepcopy_types=nothing) # deepcoy Array and Ref b
         deepcopy = Union{BASE_COPY_TYPES, deepcopy_types}
     end
     tf = TapedFunction(f, args...; cache=true, deepcopy_types=deepcopy)
+    reset_counters!(tf) # we have to reset the counters of cached tapes
     TapedTask(tf, args...)
 end
 
