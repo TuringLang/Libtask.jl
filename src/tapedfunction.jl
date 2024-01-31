@@ -67,7 +67,8 @@ mutable struct TapedFunction{F, TapeType}
         if cache && haskey(TRCache, cache_key) # use cache
             cached_tf = TRCache[cache_key]::TapedFunction{F, T}
             tf = copy(cached_tf)
-            tf.counter = 1
+            # we have to reset the counters of cached tapes (also the counters of subtapes)
+            reset_counters!(tf)
             return tf
         end
         ir = _infer(f, args_type)
