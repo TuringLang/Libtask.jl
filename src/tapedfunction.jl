@@ -529,5 +529,5 @@ end
 # but if we instantiate new TapedTask, we have to reset the counters of cached tapes
 function reset_counters!(tf::TapedFunction)
     tf.counter = 1
-    reset_counters!.(values(tf.subtapes))
+    foreach(reset_counters!, values(tf.subtapes))
 end
