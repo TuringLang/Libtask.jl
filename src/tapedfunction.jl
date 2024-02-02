@@ -221,7 +221,9 @@ function (instr::Instruction{F})(tf::TapedFunction, callback=nothing) where F
         output = if is_primitive(func, inputs...)
             func(inputs...)
         else
-            tf_inner = get!(tf.subtapes, instr, TapedFunction(func, inputs..., cache=true))
+            tf_inner = get!(tf.subtapes, instr) do
+                TapedFunction(func, inputs...; cache=true)
+            end
             # continuation=false breaks "Multiple func calls subtapes" and "Copying task with subtapes"
             tf_inner(inputs...; callback=callback, continuation=true)
         end
