@@ -156,7 +156,7 @@
             end
         end
 
-        @testset "Too much producers" begin
+        @testset "Too many producers" begin
             function f()
                 produce(1)
                 produce(2)

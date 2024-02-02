@@ -420,12 +420,6 @@ function translate!!(var::IRVar, line::Expr,
         # inferred as constants: we only optimize primitive and datatype constants for now. For
         # optimised function calls, we will evaluate the function at compile-time and cache results.
 
-        # even if return value is const. The call may has side-effects.
-        # In particular, it may contain produce statements.
-        # if isconst
-        #     v = ir.ssavaluetypes[var.id].val
-        #     _canbeoptimized(v) && return _const_instruction(var, v, bindings, ir)
-        # end
         args = map(_bind_fn, line.args)
         # args[1] is the function
         func = line.args[1]

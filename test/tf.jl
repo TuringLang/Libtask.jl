@@ -37,11 +37,8 @@ Libtask.is_primitive(::typeof(foo), args...) = false
         @test typeof(r) === Float64
     end
     @testset "recurse into function" begin
-        # tf = Libtask.TapedFunction(bar, 5.0)
-        # count = 0
-        # tf(4.0; callback=() -> (count += 1))
-        # @test count == 9
-
+        
+    end
         function recurse(n::Int)
             if n == 0
                 return 0
