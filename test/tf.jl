@@ -37,8 +37,6 @@ Libtask.is_primitive(::typeof(foo), args...) = false
         @test typeof(r) === Float64
     end
     @testset "recurse into function" begin
-        
-    end
         function recurse(n::Int)
             if n == 0
                 return 0
