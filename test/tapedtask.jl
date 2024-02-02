@@ -155,5 +155,59 @@
                 @test ttask2.task.exception isa BoundsError
             end
         end
+
+        @testset "Too many producers" begin
+            function f()
+                produce(1)
+                produce(2)
+            end
+
+            function g()
+                f()
+            end
+
+            ttask = TapedTask(g)
+            @test_throws Exception consume(ttask)
+        end
+
+        @testset "Multiple producers for non-primitive" begin
+            function f2()
+                produce(1)
+                produce(2)
+            end
+            Libtask.is_primitive(::typeof(f2), args...) = false
+
+            function g2()
+                f2()
+            end
+
+            ttask = TapedTask(g2)
+            @test consume(ttask) == 1
+            @test consume(ttask) == 2
+            @test consume(ttask) === nothing
+        end
+
+        @testset "Run two times" begin
+            function f4()
+                produce(2)
+            end
+
+            function g4()
+                produce(1)
+                f4()
+            end
+
+            Libtask.is_primitive(::typeof(f4), args...) = false
+
+            ttask = TapedTask(g4)
+            @test consume(ttask) == 1
+            @test consume(ttask) == 2
+            @test consume(ttask) === nothing
+
+            ttask = TapedTask(g4)
+            @test consume(ttask) == 1
+            @test consume(ttask) == 2
+            @test consume(ttask) === nothing
+        end
     end
 end

@@ -58,6 +58,7 @@ mutable struct TapedFunction{F, TapeType}
     arg_binding_slots::Vector{Int} # arg indices in binding_values
     retval_binding_slot::Int # 0 indicates the function has not returned
     deepcopy_types::Type # use a Union type for multiple types
+    subtapes::IdDict{Any,TapedFunction}
 
     function TapedFunction{F, T}(f::F, args...; cache=false, deepcopy_types=Union{}) where {F, T}
         args_type = _accurate_typeof.(args)
@@ -66,13 +67,14 @@ mutable struct TapedFunction{F, TapeType}
         if cache && haskey(TRCache, cache_key) # use cache
             cached_tf = TRCache[cache_key]::TapedFunction{F, T}
             tf = copy(cached_tf)
-            tf.counter = 1
+            # we have to reset the counters of cached tapes (also the counters of subtapes)
+            reset_counters!(tf)
             return tf
         end
         ir = _infer(f, args_type)
         binding_values, slots, tape = translate!(RawTape(), ir)
 
-        tf = new{F, T}(f, length(args), ir, tape, 1, binding_values, slots, 0, deepcopy_types)
+        tf = new{F, T}(f, length(args), ir, tape, 1, binding_values, slots, 0, deepcopy_types, IdDict{Any,TapedFunction}())
         TRCache[cache_key] = tf # set cache
         return tf
     end
@@ -82,7 +84,7 @@ mutable struct TapedFunction{F, TapeType}
 
     function TapedFunction{F, T0}(tf::TapedFunction{F, T1}) where {F, T0, T1}
         new{F, T0}(tf.func, tf.arity, tf.ir, tf.tape,
-                   tf.counter, tf.binding_values, tf.arg_binding_slots, 0, tf.deepcopy_types)
+                   tf.counter, tf.binding_values, tf.arg_binding_slots, 0, tf.deepcopy_types, tf.subtapes)
     end
 
     TapedFunction(tf::TapedFunction{F, T}) where {F, T} = TapedFunction{F, T}(tf)
@@ -219,8 +221,11 @@ function (instr::Instruction{F})(tf::TapedFunction, callback=nothing) where F
         output = if is_primitive(func, inputs...)
             func(inputs...)
         else
-            tf_inner = TapedFunction(func, inputs..., cache=true)
-            tf_inner(inputs...; callback=callback)
+            tf_inner = get!(tf.subtapes, instr) do
+                TapedFunction(func, inputs...; cache=true)
+            end
+            # continuation=false breaks "Multiple func calls subtapes" and "Copying task with subtapes"
+            tf_inner(inputs...; callback=callback, continuation=true)
         end
         _update_var!(tf, instr.output, output)
         tf.counter += 1
@@ -416,10 +421,7 @@ function translate!!(var::IRVar, line::Expr,
         # Only some of the function calls can be optimized even though many of their results are
         # inferred as constants: we only optimize primitive and datatype constants for now. For
         # optimised function calls, we will evaluate the function at compile-time and cache results.
-        if isconst
-            v = ir.ssavaluetypes[var.id].val
-            _canbeoptimized(v) && return _const_instruction(var, v, bindings, ir)
-        end
+
         args = map(_bind_fn, line.args)
         # args[1] is the function
         func = line.args[1]
@@ -515,5 +517,13 @@ end
 function Base.copy(tf::TapedFunction)
     new_tf = TapedFunction(tf)
     new_tf.binding_values = copy_bindings(tf.binding_values, tf.deepcopy_types)
+    new_tf.subtapes = IdDict{Any,TapedFunction}(func => copy(subtape) for (func, subtape) in tf.subtapes)
     return new_tf
+end
+
+# when copying we want to keep the counters
+# but if we instantiate new TapedTask, we have to reset the counters of cached tapes
+function reset_counters!(tf::TapedFunction)
+    tf.counter = 1
+    foreach(reset_counters!, values(tf.subtapes))
 end

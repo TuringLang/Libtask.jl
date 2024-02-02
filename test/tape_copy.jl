@@ -192,4 +192,59 @@
         @test consume(ttask) == 1
         @test consume(ttask2) == 2
     end
+
+    @testset "Copying task with subtapes" begin
+        function f2()
+            produce(1)
+            produce(2)
+        end
+
+        function g2()
+            f2()
+        end
+
+        Libtask.is_primitive(::typeof(f2), args...) = false
+
+        ttask = TapedTask(g2)
+        @test consume(ttask) == 1
+
+        ttask2 = copy(ttask)
+        @test consume(ttask2) == 2
+        @test consume(ttask) == 2
+
+        @test consume(ttask2) === nothing
+        @test consume(ttask) === nothing
+    end
+
+    @testset "Multiple func calls subtapes" begin
+        function f3()
+            produce(1)
+            produce(2)
+        end
+
+        function g3()
+            f3()
+            f3()
+        end
+
+        Libtask.is_primitive(::typeof(f3), args...) = false
+
+        ttask = TapedTask(g3)
+
+        @test consume(ttask) == 1
+        ttask2 = copy(ttask)
+        @test consume(ttask) == 2
+        @test consume(ttask) == 1
+        ttask3 = copy(ttask)
+        @test consume(ttask) == 2
+        @test consume(ttask) === nothing
+
+        @test consume(ttask2) == 2
+        @test consume(ttask2) == 1
+        @test consume(ttask2) == 2
+        @test consume(ttask2) === nothing
+
+        @test consume(ttask3) == 2
+        @test consume(ttask3) === nothing
+    end
 end
