@@ -1,3 +1,4 @@
+using Random
 using Libtask
 using Turing, DynamicPPL, AdvancedPS
 using BenchmarkTools
@@ -13,7 +14,8 @@ end
 
 
 # Case 1: Sample from the prior.
-m = Turing.Core.TracedModel(gdemo(1.5, 2.), SampleFromPrior(), VarInfo())
+rng = MersenneTwister()
+m = Turing.Core.TracedModel(gdemo(1.5, 2.), SampleFromPrior(), VarInfo(), rng)
 f = m.evaluator[1];
 args = m.evaluator[2:end];
 
@@ -26,7 +28,7 @@ println("Run a tape...")
 @btime t.tf(args...)
 
 # Case 2: SMC sampler
-m = Turing.Core.TracedModel(gdemo(1.5, 2.), Sampler(SMC(50)), VarInfo());
+m = Turing.Core.TracedModel(gdemo(1.5, 2.), Sampler(SMC(50)), VarInfo(), rng)
 f = m.evaluator[1];
 args = m.evaluator[2:end];
 
