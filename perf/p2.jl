@@ -41,18 +41,18 @@ using Turing, Test, AbstractMCMC, DynamicPPL, Random, Turing.RandomMeasures, Lib
 end
 
 # Generate some test data.
-Random.seed!(1)
+rng = Random.seed!(1)
 
-data = vcat(randn(10), randn(10) .- 5, randn(10) .+ 10)
+data = vcat(randn(rng, 10), randn(rng, 10) .- 5, randn(rng, 10) .+ 10)
 data .-= mean(data)
 data /= std(data)
 
 # MCMC sampling
-Random.seed!(2)
+Random.seed!(rng, 2)
 iterations = 500
 model_fun = infiniteGMM(data)
 
-m = Turing.Core.TracedModel(model_fun, Sampler(SMC(50)), VarInfo())
+m = Turing.Core.TracedModel(model_fun, Sampler(SMC(50)), VarInfo(), rng)
 f = m.evaluator[1]
 args = m.evaluator[2:end]
 
