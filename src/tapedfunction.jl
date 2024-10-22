@@ -412,8 +412,12 @@ function translate!!(var::IRVar, line::Expr,
                      bindings::Bindings, isconst::Bool, ir::Core.CodeInfo)
     head = line.head
     _bind_fn = (x) -> bind_var!(x, bindings, ir)
+    # expand static parameter
+    _expand_sp = (x) -> begin
+        Meta.isexpr(x, :static_parameter) ? ir.parent.sparam_vals[x.args[1]] : x
+    end
     if head === :new
-        args = map(_bind_fn, line.args)
+        args = map(_bind_fn ∘ _expand_sp, line.args)
         return Instruction(__new__, args |> Tuple, _bind_fn(var))
     elseif head === :call
         # Only some of the function calls can be optimized even though many of their results are
@@ -423,7 +427,7 @@ function translate!!(var::IRVar, line::Expr,
             v = ir.ssavaluetypes[var.id].val
             _canbeoptimized(v) && return _const_instruction(var, v, bindings, ir)
         end
-        args = map(_bind_fn, line.args)
+        args = map(_bind_fn ∘ _expand_sp, line.args)
         # args[1] is the function
         func = line.args[1]
         if Meta.isexpr(func, :static_parameter) # func is a type parameter
