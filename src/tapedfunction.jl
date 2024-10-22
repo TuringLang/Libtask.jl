@@ -270,7 +270,7 @@ end
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
 function bind_var!(var, bindings::Bindings, ir::Core.CodeInfo)
-    # for literal constants, and statuc parameter
+    # for literal constants, and static parameters
     var = Meta.isexpr(var, :static_parameter) ? ir.parent.sparam_vals[var.args[1]] : var
     push!(bindings, var)
     idx = length(bindings)
