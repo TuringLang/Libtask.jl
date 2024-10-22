@@ -70,6 +70,14 @@
         tf = Libtask.TapedFunction(f)
         r = tf()
         @test r == nothing
+
+        # static parameter
+        function g(::Type{T}) where {T}
+            a = zeros(T, 10)
+        end
+        tf = Libtask.TapedFunction(g, Float64)
+        r = tf(Float64)
+        @test r == zeros(Float64, 10)
     end
 
 end
