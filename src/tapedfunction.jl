@@ -439,6 +439,9 @@ function translate!!(var::IRVar, line::Expr,
             end
             return Instruction(identity, (_bind_fn(rhs),), _bind_fn(lhs))
         end
+    elseif head === :static_parameter
+        v = ir.parent.sparam_vals[line.args[1]]
+        return Instruction(identity, (_bind_fn(v),), _bind_fn(var))
     else
         @error "Unknown Expression: " typeof(var) var typeof(line) line
         throw(ErrorException("Unknown Expression"))
