@@ -368,6 +368,14 @@ function translate!!(var::IRVar, line::Core.SlotNumber,
     return Instruction(func, input, output)
 end
 
+function translate!!(var::IRVar, line::Number, # literal vars
+                     bindings::Bindings, isconst::Bool, ir)
+    func = identity
+    input = (bind_var!(line, bindings, ir),)
+    output =  bind_var!(var, bindings, ir)
+    return Instruction(func, input, output)
+end
+
 function translate!!(var::IRVar, line::NTuple{N, Symbol},
                      bindings::Bindings, isconst::Bool, ir) where {N}
     # for syntax (; x, y, z), see Turing.jl#1873
