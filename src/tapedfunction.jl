@@ -269,9 +269,10 @@ end
 
 const IRVar = Union{Core.SSAValue, Core.SlotNumber}
 
-function bind_var!(var_literal, bindings::Bindings, ir::Core.CodeInfo)
-    # for literal constants
-    push!(bindings, var_literal)
+function bind_var!(var, bindings::Bindings, ir::Core.CodeInfo)
+    # for literal constants, and static parameters
+    var = Meta.isexpr(var, :static_parameter) ? ir.parent.sparam_vals[var.args[1]] : var
+    push!(bindings, var)
     idx = length(bindings)
     return idx
 end
@@ -368,6 +369,14 @@ function translate!!(var::IRVar, line::Core.SlotNumber,
     return Instruction(func, input, output)
 end
 
+function translate!!(var::IRVar, line::Number, # literal vars
+                     bindings::Bindings, isconst::Bool, ir)
+    func = identity
+    input = (bind_var!(line, bindings, ir),)
+    output =  bind_var!(var, bindings, ir)
+    return Instruction(func, input, output)
+end
+
 function translate!!(var::IRVar, line::NTuple{N, Symbol},
                      bindings::Bindings, isconst::Bool, ir) where {N}
     # for syntax (; x, y, z), see Turing.jl#1873
@@ -439,6 +448,9 @@ function translate!!(var::IRVar, line::Expr,
             end
             return Instruction(identity, (_bind_fn(rhs),), _bind_fn(lhs))
         end
+    elseif head === :static_parameter
+        v = ir.parent.sparam_vals[line.args[1]]
+        return Instruction(identity, (_bind_fn(v),), _bind_fn(var))
     else
         @error "Unknown Expression: " typeof(var) var typeof(line) line
         throw(ErrorException("Unknown Expression"))

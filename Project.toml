@@ -3,7 +3,7 @@ uuid = "6f1fad26-d15e-5dc8-ae53-837a1d7b8c9f"
 license = "MIT"
 desc = "Tape based task copying in Turing"
 repo = "https://github.com/TuringLang/Libtask.jl.git"
-version = "0.8.7"
+version = "0.8.8"
 
 [deps]
 FunctionWrappers = "069b7b12-0de2-55c6-9aab-29f3d0a68a2e"

@@ -114,7 +114,8 @@ println("======= breakdown benchmark =======")
 x = rand(100000)
 tf = Libtask.TapedFunction(ackley, x, nothing)
 tf(x, nothing);
-ins = tf.tape[45]
+idx = findlast((x)->isa(x, Libtask.Instruction), tf.tape)
+ins = tf.tape[idx]
 b = ins.input[1]
 
 @show ins.input |> length
