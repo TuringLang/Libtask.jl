@@ -59,4 +59,17 @@
         r = tf(1, 2)
         @test r == (c=3, x=1, y=2)
     end
+
+    @testset "Issue-Libtask-174, SSAValue=Int and static parameter" begin
+        # SSAValue = Int
+        function f()
+            # this line generates: %1 = 1::Core.Const(1)
+            r = (a = 1)
+            return nothing
+        end
+        tf = Libtask.TapedFunction(f)
+        r = tf()
+        @test r == nothing
+    end
+
 end
