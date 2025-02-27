@@ -42,6 +42,7 @@ function test_cases()
         [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
     ),
     Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
+    Testcase("new object", (new_object_test, 5, 4), Any[C(5, 4)]),
 ]
 end
 
@@ -68,6 +69,8 @@ mutable struct C
     i::Int
     C(x, y) = new(x + y)
 end
+
+Base.:(==)(c::C, d::C) = c.i == d.i
 
 function new_object_test(x, y)
     produce(C(x, y))
