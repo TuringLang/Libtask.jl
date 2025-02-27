@@ -1,9 +1,7 @@
 using Libtask
 using Test
 
-include("tf.jl")
-include("tapedtask.jl")
-include("tape_copy.jl")
+include("copyable_task.jl")
 include("issues.jl")
 
 if haskey(ENV, "BENCHMARK")
