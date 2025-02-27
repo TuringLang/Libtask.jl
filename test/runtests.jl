@@ -1,9 +1,7 @@
-using Libtask
-using Test
+using JuliaFormatter, Libtask, Test
 
-include("copyable_task.jl")
-include("issues.jl")
+@testset "Libtask" begin
 
-if haskey(ENV, "BENCHMARK")
-    include("benchmarks.jl")
+    include("copyable_task.jl")
+    include("issues.jl")
 end
