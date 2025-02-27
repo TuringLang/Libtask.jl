@@ -44,6 +44,7 @@ function test_cases()
     Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
     Testcase("new object", (new_object_test, 5, 4), [C(5, 4)]),
     Testcase("branching test l", (branching_test, 5.0, 4.0), [string(sin(5.0))]),
+    Testcase("branching test r", (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
 ]
 end
 
