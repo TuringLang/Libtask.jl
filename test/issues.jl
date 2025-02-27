@@ -41,5 +41,4 @@
         ttask3 = copy(ttask; args=(4,))
         @test consume(ttask3) == 5
     end
-
 end

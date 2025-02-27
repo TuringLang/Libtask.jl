@@ -10,7 +10,7 @@ end
 # Old test case without any produce statements. Might make sense to ensure that something
 # vaguely like this is included in the test suite, but isn't directly relevant.
 function g(x, y)
-    if x>y
+    if x > y
         r = string(sin(x))
     else
         r = sin(x) * cos(y)
@@ -21,6 +21,7 @@ end
 # Old test case -- github.com/TuringLang/Libtask.jl/issues/148, unused argument
 function f(x)
     produce(1)
+    return nothing
 end
 
 # Old test case. Probably redundant, but makes sense to check. Might want to replace the
