@@ -115,6 +115,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     #   following the final `produce(%x)` statment, until the end of `bb`.
     #   Furthermore, each `produce(%x)` statement is replaced with a `ReturnNode(%x)`.
     #   We log the `ID`s of each of these new basic blocks, for use later.
+    replacements = Dict{ID,ID}()
     new_bblocks = map(ir.blocks) do bb
 
         # If the final statement in the block is a `produce` statement, insert an additional
@@ -128,17 +129,18 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
         produce_indices = findall(x -> is_produce_stmt(x.stmt), bb.insts)
         terminator_indices = vcat(produce_indices, length(bb))
 
-        # TODO: WHAT HAPPENS IF THE PRODUCE STATEMENT IS A FALLTHROUGH TERMINATOR?????
-
         # The `ID`s of the new basic blocks.
-        new_block_ids = vcat(bb.id, [ID() for _ in produce_indices])
+        old_id = bb.id
+        new_block_ids = vcat([ID() for _ in produce_indices], bb.id)
+        new_id = first(new_block_ids)
+        replacements[old_id] = new_id
 
-        # Construct `n_produce + 1` new basic blocks. The first basic block retains the
-        # `ID` of `bb`, the remaining `n_produce + 1` blocks get new `ID`s (which we log).
+        # Construct `n_produce + 1` new basic blocks. The last basic block retains the
+        # `ID` of `bb`, the remaining `n_produce` blocks get new `ID`s (which we log).
         # All `produce(%x)` statements are replaced with `Return(%x)` statements.
         return map(enumerate(terminator_indices)) do (n, term_ind)
 
-            # The first new block has the same `ID` as `bb`. The others gets new ones.
+            # The last new block has the same `ID` as `bb`. The others gets new ones.
             block_id = new_block_ids[n]
 
             # Pull out the instructions and their `ID`s for the new block.
@@ -165,11 +167,28 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 )
             end
 
-            #  Construct + return new basic block.
+            # Construct + return new basic block.
             return BBlock(block_id, inst_ids, insts)
         end
     end
     new_bblocks = reduce(vcat, new_bblocks)
+
+    # Hunt for `IDGotoNode`s and `IDGotoIfNot`s, and replace them with the new ID of the
+    # start of these blocks.
+    for (old_id, new_id) in replacements, bb in new_bblocks
+        inst = last(bb.insts)
+        stmt = inst.stmt
+        new_stmt = if stmt isa IDGotoNode && stmt.label == old_id
+            IDGotoNode(new_id)
+        elseif stmt isa IDGotoIfNot && stmt.dest == old_id
+            IDGotoIfNot(stmt.cond, new_id)
+        else
+            continue
+        end
+        bb.insts[end] = CC.NewInstruction(
+            new_stmt, inst.type, inst.info, inst.line, inst.flag
+        )
+    end
 
     # Construct map between SSA IDs and their index in the state data structure and back.
     # Optimisation TODO: don't create an entry for literally every line in the IR, just the
@@ -211,7 +230,10 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
 
         foreach(zip(bb.inst_ids, bb.insts)) do (id, inst)
             stmt = inst.stmt
-            if Meta.isexpr(stmt, :invoke) || Meta.isexpr(stmt, :call)
+            if Meta.isexpr(stmt, :invoke) ||
+                Meta.isexpr(stmt, :call) ||
+                Meta.isexpr(stmt, :new) ||
+                Meta.isexpr(stmt, :foreigncall)
 
                 # Skip over set_resume_block! statements inserted in the previous pass.
                 if stmt.args[1] == set_resume_block!
@@ -238,13 +260,34 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 out_ind = ssa_id_to_ref_index_map[id]
                 set_ref = Expr(:call, set_ref_at!, refs_id, out_ind, id)
                 push!(inst_pairs, (ID(), new_inst(set_ref)))
-            elseif Meta.isexpr(stmt, :new)
+            elseif Meta.isexpr(stmt, :boundscheck)
                 push!(inst_pairs, (id, inst))
             elseif stmt isa ReturnNode
-                push!(inst_pairs, (id, inst))
-            elseif stmt isa IDGotoNode
-                push!(inst_pairs, (id, inst))
+                # If returning an SSA, it might be one whose value was restored from before.
+                # Therefore, grab it out of storage, rather than assuming that it is def-ed.
+                if isdefined(stmt, :val) && stmt.val isa ID
+                    ref_ind = ssa_id_to_ref_index_map[stmt.val]
+                    val_id = ID()
+                    expr = Expr(:call, get_ref_at, refs_id, ref_ind)
+                    push!(inst_pairs, (val_id, new_inst(expr)))
+                    push!(inst_pairs, (ID(), new_inst(ReturnNode(val_id))))
+                else
+                    push!(inst_pairs, (id, inst))
+                end
             elseif stmt isa IDGotoIfNot
+                # If the condition is an SSA, it might be one whose value was restored from
+                # before. Therefore, grab it out of storage, rather than assuming that it is
+                # defined.
+                if stmt.cond isa ID
+                    ref_ind = ssa_id_to_ref_index_map[stmt.cond]
+                    cond_id = ID()
+                    expr = Expr(:call, get_ref_at, refs_id, ref_ind)
+                    push!(inst_pairs, (cond_id, new_inst(expr)))
+                    push!(inst_pairs, (ID(), new_inst(IDGotoIfNot(cond_id, stmt.dest))))
+                else
+                    push!(inst_pairs, (id, inst))
+                end
+            elseif stmt isa IDGotoNode
                 push!(inst_pairs, (id, inst))
             elseif stmt isa IDPhiNode
                 # we'll fix up the PhiNodes after this, so identity transform for now.
@@ -281,14 +324,6 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
         deref_ids = map(phi_inds) do n
             id = bb.inst_ids[n]
             phi_id = phi_ids[n]
-
-            # # Re-reference the PhiNode.
-            # n_id = ID()
-            # push!(phi_inst_pairs, (n_id, new_inst(Expr(:call, getfield, phi_id, :n))))
-            # ref_id = ID()
-            # push!(phi_inst_pairs, (ref_id, new_inst(Expr(:call, getfield, refs_id, n_id))))
-            # push!(phi_inst_pairs, (id, new_inst(Expr(:call, getfield, ref_id, :x))))
-
             push!(phi_inst_pairs, (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id))))
             return id
         end

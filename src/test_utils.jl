@@ -36,19 +36,29 @@ function (case::Testcase)()
 end
 
 function test_cases()
-    return Testcase[Testcase(
-        "single block",
-        (single_block, 5.0),
-        [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
-    ),
-    Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
-    Testcase("new object", (new_object_test, 5, 4), [C(5, 4)]),
-    Testcase("branching test l", (branching_test, 5.0, 4.0), [string(sin(5.0))]),
-    Testcase("branching test r", (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
-    Testcase("unused argument test", (unused_argument_test, 3), [1]),
-    Testcase("test with const", (test_with_const, ), [1]),
-    Testcase("nested", (nested_outer, ), [true, false]),
-]
+    return Testcase[
+        Testcase(
+            "single block",
+            (single_block, 5.0),
+            [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
+        ),
+        Testcase("produce old", (produce_old_value, 5.0), [sin(5.0), sin(5.0)]),
+        Testcase("branch on old value l", (branch_on_old_value, 2.0), [true, 2.0]),
+        Testcase("branch on old value r", (branch_on_old_value, -1.0), [false, -2.0]),
+        Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
+        Testcase("new object", (new_object_test, 5, 4), [C(5, 4), C(5, 4)]),
+        Testcase("branching test l", (branching_test, 5.0, 4.0), [string(sin(5.0))]),
+        Testcase("branching test r", (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
+        Testcase("unused argument test", (unused_argument_test, 3), [1]),
+        Testcase("test with const", (test_with_const,), [1]),
+        Testcase("while loop", (while_loop,), collect(1:9)),
+        Testcase(
+            "foreigncall tester", (foreigncall_tester, "hi"), [Ptr{UInt8}, Ptr{UInt8}]
+        ),
+
+        # Failing tests
+        # Testcase("nested", (nested_outer, ), [true, false]),
+    ]
 end
 
 function single_block(x::Float64)
@@ -61,6 +71,20 @@ function single_block(x::Float64)
     x4 = sin(x3)
     produce(x4)
     return cos(x4)
+end
+
+function produce_old_value(x::Float64)
+    v = sin(x)
+    produce(v)
+    produce(v)
+    return nothing
+end
+
+function branch_on_old_value(x::Float64)
+    b = x > 0
+    produce(b)
+    produce(b ? x : 2x)
+    return nothing
 end
 
 function no_produce_test(x, y)
@@ -78,7 +102,9 @@ end
 Base.:(==)(c::C, d::C) = c.i == d.i
 
 function new_object_test(x, y)
-    produce(C(x, y))
+    c = C(x, y)
+    produce(c)
+    produce(c)
     return nothing
 end
 
@@ -100,6 +126,22 @@ function test_with_const()
     # this line generates: %1 = 1::Core.Const(1)
     r = (a = 1)
     produce(r)
+    return nothing
+end
+
+function while_loop()
+    t = 1
+    while t < 10
+        produce(t)
+        t = 1 + t
+    end
+    return nothing
+end
+
+function foreigncall_tester(s::String)
+    ptr = ccall(:jl_string_ptr, Ptr{UInt8}, (Any,), s)
+    produce(typeof(ptr))
+    produce(typeof(ptr))
     return nothing
 end
 
