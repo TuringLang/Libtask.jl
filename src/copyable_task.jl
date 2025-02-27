@@ -81,11 +81,6 @@ function produce_value(x::Expr)
     return x.args[2] # must be a `:call` Expr.
 end
 
-"""
-    derive_copyable_task_ir(ir::IRCode)::IRCode
-
-
-"""
 function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
 
     # Replace all existing `ReturnNode`s with `ReturnNode(nothing)` in order to provide the
