@@ -45,6 +45,9 @@ function test_cases()
     Testcase("new object", (new_object_test, 5, 4), [C(5, 4)]),
     Testcase("branching test l", (branching_test, 5.0, 4.0), [string(sin(5.0))]),
     Testcase("branching test r", (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
+    Testcase("unused argument test", (unused_argument_test, 3), [1]),
+    Testcase("test with const", (test_with_const, ), [1]),
+    Testcase("nested", (nested_outer, ), [true, false]),
 ]
 end
 
@@ -96,6 +99,7 @@ end
 function test_with_const()
     # this line generates: %1 = 1::Core.Const(1)
     r = (a = 1)
+    produce(r)
     return nothing
 end
 
