@@ -117,11 +117,17 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     #   We log the `ID`s of each of these new basic blocks, for use later.
     new_bblocks = map(ir.blocks) do bb
 
+        # If the final statement in the block is a `produce` statement, insert an additional
+        # statement afterwards.
+        if is_produce_stmt(bb.insts[end].stmt)
+            push!(bb.inst_ids, ID())
+            push!(bb.insts, new_inst(nothing, Nothing))
+        end
+
         # Find all of the `produce` statements.
         produce_indices = findall(x -> is_produce_stmt(x.stmt), bb.insts)
         terminator_indices = vcat(produce_indices, length(bb))
 
-        # TODO: WHAT HAPPENS IF THERE ARE NO PRODUCE STATEMENTS?
         # TODO: WHAT HAPPENS IF THE PRODUCE STATEMENT IS A FALLTHROUGH TERMINATOR?????
 
         # The `ID`s of the new basic blocks.

@@ -42,7 +42,8 @@ function test_cases()
         [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
     ),
     Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
-    Testcase("new object", (new_object_test, 5, 4), Any[C(5, 4)]),
+    Testcase("new object", (new_object_test, 5, 4), [C(5, 4)]),
+    Testcase("branching test l", (branching_test, 5.0, 4.0), [string(sin(5.0))]),
 ]
 end
 
@@ -79,11 +80,11 @@ end
 
 function branching_test(x, y)
     if x > y
-        r = string(sin(x))
+        produce(string(sin(x)))
     else
-        r = sin(x) * cos(y)
+        produce(sin(x) * cos(y))
     end
-    return r
+    return nothing
 end
 
 function unused_argument_test(x)
