@@ -41,7 +41,7 @@ function test_cases()
         (single_block, 5.0),
         [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
     ),
-    # Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
+    Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
 ]
 end
 

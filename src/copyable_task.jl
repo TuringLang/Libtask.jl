@@ -308,8 +308,8 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     cond_dests = ID[x[2] for x in cases]
     cond_stmts = Any[x[3] for x in cases]
     switch_stmt = Switch(Any[x for x in cond_ids], cond_dests, first(new_bblocks).id)
-    entry_stmts = vcat(cond_stmts, switch_stmt)
-    entry_block = BBlock(ID(), vcat(cond_ids, ID()), map(new_inst, entry_stmts))
+    entry_stmts = vcat(cond_stmts, nothing, switch_stmt)
+    entry_block = BBlock(ID(), vcat(cond_ids, ID(), ID()), map(new_inst, entry_stmts))
     new_bblocks = vcat(entry_block, new_bblocks)
 
     # New argtypes are the same as the old ones, except we have `Ref`s in the first argument
