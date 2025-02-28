@@ -48,7 +48,7 @@ rather specific semantics of `copy`. Calling `copy` on a `TapedTask` does the fo
     `position` field -- for this element we use the copy we made in step 1.
 
 `_tape_copy` doesn't actually make a copy of the object at all if it is not either an
-`Array`, a `Ref`, or an instance of one of the types listed in the task's `deepcopy_type`
+`Array`, a `Ref`, or an instance of one of the types listed in the task's `deepcopy_types`
 field. If it is an instance of one of these types then `_tape_copy` just calls `deepcopy`.
 
 This behaviour is plainly entirely acceptable if the argument to `_tape_copy` is a bits
@@ -77,11 +77,19 @@ this is a viable option.
 """
 function Base.copy(t::T) where {T<:TapedTask}
     captures = t.mc.oc.captures
-    new_captures = map(Base.Fix2(_tape_copy, t.deepcopy_types), captures)
+    new_captures = map(Base.Fix2(_copy_capture, t.deepcopy_types), captures)
     new_position = new_captures[end] # baked in later on.
     new_args = map(Base.Fix2(_tape_copy, t.deepcopy_types), t.args)
     new_mc = Mooncake.replace_captures(t.mc, new_captures)
     return T(new_mc, new_args, new_position, t.deepcopy_types)
+end
+
+function _copy_capture(r::Ref{T}, deepcopy_types::Type) where {T}
+    new_capture = Ref{T}()
+    if isassigned(r)
+        new_capture[] = _tape_copy(r[], deepcopy_types)
+    end
+    return new_capture
 end
 
 _tape_copy(v, deepcopy_types::Type) = v isa deepcopy_types ? deepcopy(v) : v
