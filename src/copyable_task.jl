@@ -108,7 +108,7 @@ end
 function TapedTask(fargs...; deepcopy_types::Type=Union{})
     sig = typeof(fargs)
     mc, count_ref = build_callable(Base.code_ircode_by_type(sig)[1][1])
-    return TapedTask(mc, fargs[2:end], count_ref, Union{deepcopy_types, Array, Ref})
+    return TapedTask(mc, fargs[2:end], count_ref, Union{deepcopy_types,Array,Ref})
 end
 
 function build_callable(ir::IRCode)
