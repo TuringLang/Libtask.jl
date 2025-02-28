@@ -2,7 +2,7 @@ module TestUtils
 
 using ..Libtask
 using Test
-using ..Libtask: CopyableTask
+using ..Libtask: TapedTask
 
 struct Testcase
     name::String
@@ -14,14 +14,14 @@ function (case::Testcase)()
     testset = @testset "$(case.name)" begin
 
         # Construct the task.
-        t = CopyableTask(case.fargs...)
+        t = TapedTask(case.fargs...)
 
         # Iterate through t. Record the results, and take a copy after each iteration.
         iteration_results = []
-        t_copies = [deepcopy(t)]
+        t_copies = [copy(t)]
         for val in t
             push!(iteration_results, val)
-            push!(t_copies, deepcopy(t))
+            push!(t_copies, copy(t))
         end
 
         # Check that iterating the original task gives the expected results.

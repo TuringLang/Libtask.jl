@@ -4,24 +4,103 @@ __v::Int = 5
     return nothing
 end
 
-mutable struct CopyableTask{Tmc<:MistyClosure,Targs}
+mutable struct TapedTask{Tmc<:MistyClosure,Targs}
     const mc::Tmc
     args::Targs
     const position::Base.RefValue{Int32}
+    const deepcopy_types::Type
 end
 
-@inline consume(t::CopyableTask) = t.mc(t.args...)
+"""
+    Base.copy(t::TapedTask)
 
-function initialise!(t::CopyableTask, args::Vararg{Any,N})::Nothing where {N}
+Makes a copy of `t` which can be run. For the most part, calls to [`consume`](@ref) on the
+copied task will give the same results as the original. There are, however, substantial
+limitations to this, detailed in the extended help.
+
+# Extended Help
+
+We call a copy of a `TapedTask` _consistent_ with the original if the call to `==` in the
+loop below always returns `true`:
+```julia
+t = <some_TapedTask>
+tc = copy(t)
+for (v, vc) in zip(t, tc)
+    v == vc
+end
+```
+(provided that `==` is implemented for all `v` that are produced). Convesely, we refer to a
+copy as _inconsistent_ if this property doesn't hold. In order to ensure
+consistency, we need to ensure that independent copies are made of anything which might be
+mutated by the task or its copy during subsequent `consume` calls. Failure to do this can
+cause problems if, for example, a task reads-to and writes-from some memory.
+If we call `consume` on the original task, and then on a copy of it, any changes made by the
+original will be visible to the copy, potentially causing its behaviour to differ. This can
+manifest itself as a race condition if the task and its copies are run concurrently.
+
+To understand a bit more about when a task is / is not consistent, we need to dig into the
+rather specific semantics of `copy`. Calling `copy` on a `TapedTask` does the following:
+1. `copy` the `position` field,
+2. `map`s `_tape_copy` over the `args` field, and
+3. `map`s `_tape_copy` over the all of the data closed over in the `OpaqueClosure` which
+    implements the task (specifically the values _inside_ the `Ref`s) -- call these the
+    `captures`. Except the last elements of this data, because this is `===` to the
+    `position` field -- for this element we use the copy we made in step 1.
+
+`_tape_copy` doesn't actually make a copy of the object at all if it is not either an
+`Array`, a `Ref`, or an instance of one of the types listed in the task's `deepcopy_type`
+field. If it is an instance of one of these types then `_tape_copy` just calls `deepcopy`.
+
+This behaviour is plainly entirely acceptable if the argument to `_tape_copy` is a bits
+type. For any `mutable struct`s which aren't flagged for `deepcopy`ing, we have an immediate
+risk of inconsistency. Similarly, for any `struct` types which aren't bits types (e.g.
+those which contain an `Array`, `Ref`, or some other `mutable struct` either directly as one
+of their fields, or as a field of a field, etc), we have an inconsistency risk.
+
+Furthermore, for anything which _is_ `deepcopy`ed we introduce inconsistency risks. If, for
+example, two elements of the data closed over by the task alias one another, calling
+`deepcopy` on them separately will cause the copies to _not_ alias one another.
+The same thing can happen if one element is `deepcopy`ed and the other not. For example, if
+we have both an `Array` `x` and `view(x, inds)` stored in separate elements of `captures`,
+`x` will be `deepcopy`ed, while `view(x, inds)` will not. In the copy of `captures`, the
+`view` will still be a view into the original `x`, not the `deepcopy`ed version. Again, this
+introduces inconsistency.
+
+Why do we have these semantics? We have them because Libtask has always had them, and at the
+time of writing we're unsure whether AdvancedPS.jl, and by extension Turing.jl rely on this
+behaviour.
+
+What other options do we have? Simply calling `deepcopy` on a `TapedTask` works fine, and
+should reliably result in consistent behaviour between a `TapedTask` and any copies of it.
+This would, therefore, be a preferable implementation. We should try to determine whether
+this is a viable option.
+"""
+function Base.copy(t::T) where {T<:TapedTask}
+    captures = t.mc.oc.captures
+    new_captures = map(Base.Fix2(_tape_copy, t.deepcopy_types), captures)
+    new_position = new_captures[end] # baked in later on.
+    new_args = map(Base.Fix2(_tape_copy, t.deepcopy_types), t.args)
+    new_mc = Mooncake.replace_captures(t.mc, new_captures)
+    return T(new_mc, new_args, new_position, t.deepcopy_types)
+end
+
+_tape_copy(v, deepcopy_types::Type) = v isa deepcopy_types ? deepcopy(v) : v
+
+# Not sure that we need this in the new implementation.
+_tape_copy(box::Core.Box, deepcopy_types::Type) = error("Found a box")
+
+@inline consume(t::TapedTask) = t.mc(t.args...)
+
+function initialise!(t::TapedTask, args::Vararg{Any,N})::Nothing where {N}
     t.position[] = -1
     t.args = args
     return nothing
 end
 
-function CopyableTask(fargs...)
+function TapedTask(fargs...; deepcopy_types::Type=Union{})
     sig = typeof(fargs)
     mc, count_ref = build_callable(Base.code_ircode_by_type(sig)[1][1])
-    return CopyableTask(mc, fargs[2:end], count_ref)
+    return TapedTask(mc, fargs[2:end], count_ref, Union{deepcopy_types, Array, Ref})
 end
 
 function build_callable(ir::IRCode)
@@ -36,10 +115,10 @@ end
     might_produce(sig::Type{<:Tuple})::Bool
 
 `true` if a call to method with signature `sig` is permitted to contain
-`CopyableTasks.produce` statements.
+`Libtask.produce` statements.
 
 This is an opt-in mechanism. the fallback method of this function returns `false` indicating
-that, by default, we assume that calls do not contain `CopyableTasks.produce` statements.
+that, by default, we assume that calls do not contain `Libtask.produce` statements.
 """
 might_produce(::Type{<:Tuple}) = false
 
@@ -382,9 +461,9 @@ end
 @inline deref_phi(::R, x) where {R<:Tuple} = x
 
 # Implement iterator interface.
-function Base.iterate(t::CopyableTask, state::Nothing=nothing)
+function Base.iterate(t::TapedTask, state::Nothing=nothing)
     v = consume(t)
     return v === nothing ? nothing : (v, nothing)
 end
-Base.IteratorSize(::Type{<:CopyableTask}) = Base.SizeUnknown()
-Base.IteratorEltype(::Type{<:CopyableTask}) = Base.EltypeUnknown()
+Base.IteratorSize(::Type{<:TapedTask}) = Base.SizeUnknown()
+Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()

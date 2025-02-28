@@ -15,6 +15,6 @@ using Core.Compiler: Argument, IRCode, ReturnNode
 include("copyable_task.jl")
 include("test_utils.jl")
 
-export CopyableTask, consume, produce
+export TapedTask, consume, produce
 
 end

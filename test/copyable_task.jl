@@ -27,7 +27,7 @@
             end
         end
 
-        ttask = CopyableTask(f)
+        ttask = TapedTask(f)
 
         next = iterate(ttask)
         @test next === (1, nothing)
@@ -57,7 +57,7 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             try
                 consume(ttask)
             catch ex
@@ -75,7 +75,7 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             try
                 consume(ttask)
             catch ex
@@ -94,7 +94,7 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             try
                 consume(ttask)
             catch ex
@@ -113,7 +113,7 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             @test consume(ttask) == 2
             try
                 consume(ttask)
@@ -133,9 +133,9 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             @test consume(ttask) == 2
-            ttask2 = deepcopy(ttask)
+            ttask2 = copy(ttask)
             try
                 consume(ttask2)
             catch ex
@@ -155,10 +155,10 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             @test consume(ttask) == 0
             @test consume(ttask) == 1
-            a = deepcopy(ttask)
+            a = copy(ttask)
             @test consume(a) == 2
             @test consume(a) == 3
             @test consume(ttask) == 2
@@ -175,10 +175,10 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
             @test consume(ttask) == 0
             @test consume(ttask) == 1
-            a = deepcopy(ttask)
+            a = copy(ttask)
             @test consume(a) == 2
             @test consume(a) == 3
             @test consume(ttask) == 2
@@ -221,11 +221,11 @@
                 end
             end
 
-            ttask = CopyableTask(f)
+            ttask = TapedTask(f)
 
             consume(ttask)
             consume(ttask)
-            a = deepcopy(ttask)
+            a = copy(ttask)
             consume(a)
             consume(a)
 
