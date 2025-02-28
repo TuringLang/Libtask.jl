@@ -346,6 +346,10 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 push!(inst_pairs, (id, inst))
             elseif Meta.isexpr(stmt, :code_coverage_effect)
                 push!(inst_pairs, (id, inst))
+            elseif Meta.isexpr(stmt, :gc_preserve_begin)
+                push!(inst_pairs, (id, inst))
+            elseif Meta.isexpr(stmt, :gc_preserve_end)
+                push!(inst_pairs, (id, inst))
             elseif stmt isa ReturnNode
                 # If returning an SSA, it might be one whose value was restored from before.
                 # Therefore, grab it out of storage, rather than assuming that it is def-ed.

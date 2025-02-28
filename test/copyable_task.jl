@@ -187,28 +187,28 @@
             @test consume(ttask) == 5
         end
 
-        # # Test case 3: Dict objects are shallowly copied.
-        # @testset "Dict objects shallow copy" begin
-        #     function f()
-        #         t = Dict(1 => 10, 2 => 20)
-        #         while true
-        #             produce(t[1])
-        #             t[1] = 1 + t[1]
-        #         end
-        #     end
+        # Test case 3: Dict objects are shallowly copied.
+        @testset "Dict objects shallow copy" begin
+            function f()
+                t = Dict(1 => 10, 2 => 20)
+                while true
+                    produce(t[1])
+                    t[1] = 1 + t[1]
+                end
+            end
 
-        #     ttask = TapedTask(f)
+            ttask = TapedTask(f)
 
-        #     @test consume(ttask) == 10
-        #     @test consume(ttask) == 11
+            @test consume(ttask) == 10
+            @test consume(ttask) == 11
 
-        #     a = copy(ttask)
-        #     @test consume(a) == 12
-        #     @test consume(a) == 13
+            a = copy(ttask)
+            @test consume(a) == 12
+            @test consume(a) == 13
 
-        #     @test consume(ttask) == 14
-        #     @test consume(ttask) == 15
-        # end
+            @test consume(ttask) == 14
+            @test consume(ttask) == 15
+        end
 
         @testset "Array deep copy 2" begin
             function f()
@@ -232,15 +232,15 @@
             @test consume(ttask) == 2
             @test consume(a) == 4
 
-            # DATA = Dict{Task,Array}()
-            # function g()
-            #     ta = zeros(UInt64, 4)
-            #     for i in 1:4
-            #         ta[i] = hash(current_task())
-            #         DATA[current_task()] = ta
-            #         produce(ta[i])
-            #     end
-            # end
+            DATA = Dict{Task,Array}()
+            function g()
+                ta = zeros(UInt64, 4)
+                for i in 1:4
+                    ta[i] = hash(current_task())
+                    DATA[current_task()] = ta
+                    produce(ta[i])
+                end
+            end
 
             # ttask = TapedTask(g)
             # @test consume(ttask) == hash(ttask.task) # index = 1
@@ -258,73 +258,73 @@
             #     [hash(ttask.task), hash(ttask.task), hash(a.task), hash(a.task)]
         end
 
-        # # Test atomic values.
-        # @testset "ref atomic" begin
-        #     function f()
-        #         t = Ref(1)
-        #         t[] = 0
-        #         for _ in 1:6
-        #             produce(t[])
-        #             t[]
-        #             t[] += 1
-        #         end
-        #     end
+        # Test atomic values.
+        @testset "ref atomic" begin
+            function f()
+                t = Ref(1)
+                t[] = 0
+                for _ in 1:6
+                    produce(t[])
+                    t[]
+                    t[] += 1
+                end
+            end
 
-        #     ctask = TapedTask(f)
+            ctask = TapedTask(f)
 
-        #     consume(ctask)
-        #     consume(ctask)
+            consume(ctask)
+            consume(ctask)
 
-        #     a = copy(ctask)
-        #     consume(a)
-        #     consume(a)
+            a = copy(ctask)
+            consume(a)
+            consume(a)
 
-        #     @test consume(ctask) == 2
-        #     @test consume(a) == 4
-        # end
+            @test consume(ctask) == 2
+            @test consume(a) == 4
+        end
 
-        # @testset "ref of dictionary deep copy" begin
-        #     function f()
-        #         t = Ref(Dict("A" => 1, 5 => "B"))
-        #         t[]["A"] = 0
-        #         for _ in 1:6
-        #             produce(t[]["A"])
-        #             t[]["A"] += 1
-        #         end
-        #     end
+        @testset "ref of dictionary deep copy" begin
+            function f()
+                t = Ref(Dict("A" => 1, 5 => "B"))
+                t[]["A"] = 0
+                for _ in 1:6
+                    produce(t[]["A"])
+                    t[]["A"] += 1
+                end
+            end
 
-        #     ctask = TapedTask(f)
+            ctask = TapedTask(f)
 
-        #     consume(ctask)
-        #     consume(ctask)
+            consume(ctask)
+            consume(ctask)
 
-        #     a = copy(ctask)
-        #     consume(a)
-        #     consume(a)
+            a = copy(ctask)
+            consume(a)
+            consume(a)
 
-        #     @test consume(ctask) == 2
-        #     @test consume(a) == 4
-        # end
+            @test consume(ctask) == 2
+            @test consume(a) == 4
+        end
 
-        # @testset "override deepcopy_types #57" begin
-        #     struct DummyType end
+        @testset "override deepcopy_types #57" begin
+            struct DummyType end
 
-        #     function f(start::Int)
-        #         t = [start]
-        #         while true
-        #             produce(t[1])
-        #             t[1] = 1 + t[1]
-        #         end
-        #     end
+            function f(start::Int)
+                t = [start]
+                while true
+                    produce(t[1])
+                    t[1] = 1 + t[1]
+                end
+            end
 
-        #     ttask = TapedTask(f, 0; deepcopy_types=DummyType)
-        #     consume(ttask)
+            ttask = TapedTask(f, 0; deepcopy_types=DummyType)
+            consume(ttask)
 
-        #     ttask2 = copy(ttask)
-        #     consume(ttask2)
+            ttask2 = copy(ttask)
+            consume(ttask2)
 
-        #     @test consume(ttask) == 1
-        #     @test consume(ttask2) == 2
-        # end
+            @test consume(ttask) == 1
+            @test consume(ttask2) == 2
+        end
     end
 end
