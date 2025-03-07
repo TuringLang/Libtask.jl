@@ -52,6 +52,8 @@ There are three central features of a `TapedTask`, which we demonstrate via thre
 
 ## Resumption
 
+The function [`Libtask.produce`](@ref) has a special meaning in Libtask. You can insert it
+into regular Julia functions anywhere that you like. For example
 ```jldoctest tt
 julia> function f()
            for t in 1:2
@@ -63,23 +65,36 @@ julia> function f()
 f (generic function with 1 method)
 ```
 
+If you construct a `TapedTask` from `f`, and call [`Libtask.consume`](@ref) on it, you'll
+see
 ```jldoctest tt
 julia> t = TapedTask(nothing, f);
 
 julia> consume(t)
 1
 ```
+The semantics of this are that [`Libtask.consume`](@ref) runs the function `f` until it
+reaches the call to [`Libtask.produce`](@ref), at which point it will return the argument
+to [`Libtask.produce`](@ref).
 
+Subsequent calls to [`Libtask.produce`](@ref) will _resume_ execution of `f` immediately
+after the last [`Libtask.produce`](@ref) statement that was hit.
 ```jldoctest tt
 julia> consume(t)
 2
+```
 
+When there are no more [`Libtask.produce`](@ref) statements to hit, calling
+[`Libtask.consume`](@ref) will return `nothing`:
+```jldoctest tt
 julia> consume(t)
 
 ```
 
 ## Copying
 
+[`TapedTask`](@ref)s can be copied. Doing so creates a completely independent object.
+For example:
 ```jldoctest tt
 julia> t2 = TapedTask(nothing, f);
 
@@ -87,36 +102,59 @@ julia> consume(t2)
 1
 ```
 
+If we make a copy and advance its state, it produces the same value that the original would
+have produced:
 ```jldoctest tt
 julia> t3 = copy(t2);
 
 julia> consume(t3)
 2
+```
 
+Moreover, advancing the state of the copy has not advanced the state of the original,
+because they are completely independent copies:
+```jldoctest tt
 julia> consume(t2)
 2
 ```
 
 ## Scoped Values
 
-```jldoctest
+It is often desirable to permit a copy of a task and the original to differ in very specific
+ways. For example, in the context of Sequential Monte Carlo, you might want the only
+difference between two copies to be their random number generator.
+
+A generic mechanism is available to achieve this. [`Libtask.get_dynamic_scope`](@ref) and
+[`Libtask.set_dynamic_scope!`](@ref) let you set and retrieve a variable which is specific
+to a given [`Libtask.TapedTask`](@ref). The former can be called inside a function:
+```jldoctest sv
 julia> function f()
            produce(get_dynamic_scope())
            produce(get_dynamic_scope())
            return nothing
        end
 f (generic function with 1 method)
+```
 
+The first argument to [`Libtask.TapedTask`](@ref) is the value that
+[`Libtask.get_dynamic_scope`](@ref) will return:
+```jldoctest sv
 julia> t = TapedTask(1, f);
 
 julia> consume(t)
 1
+```
 
+The value that it returns can be changed between [`Libtask.consume`](@ref) calls:
+```jldoctest sv
 julia> set_dynamic_scope!(t, 2)
 
 julia> consume(t)
 2
 ```
+
+`Int`s have been used here, but it is permissible to set the value returned by
+[`Libtask.get_dynamic_scope`](@ref) to anything you like.
 """
 function TapedTask(dynamic_scope::Any, fargs...)
     mc, count_ref = build_callable(Base.code_ircode_by_type(typeof(fargs))[1][1])
