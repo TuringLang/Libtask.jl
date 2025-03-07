@@ -1,3 +1,4 @@
 # Projects files
 Manifest.toml
 *.cov
+docs/build
