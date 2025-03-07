@@ -1,13 +1,6 @@
 using Documenter, Libtask
 
-DocMeta.setdocmeta!(
-    Libtask,
-    :DocTestSetup,
-    quote
-        using Libtask
-    end;
-    recursive=true,
-)
+DocMeta.setdocmeta!(Libtask, :DocTestSetup, :(using Libtask); recursive=true)
 
 makedocs(;
     sitename="Libtask", doctest=true, pages=["index.md", "internals.md"], modules=[Libtask]
