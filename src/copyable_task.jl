@@ -11,6 +11,15 @@ See also [`set_dynamic_scope!`](@ref).
 get_dynamic_scope() = dynamic_scope[]
 
 __v::Int = 5
+
+"""
+    produce(x)
+
+When run inside a [`TapedTask`](@ref), will immediately yield to the caller, producing value
+`x`.
+
+See also: [`Libtask.consume`](@ref)
+"""
 @noinline function produce(x)
     global __v = 4
     return nothing
