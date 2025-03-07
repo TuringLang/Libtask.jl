@@ -1,4 +1,4 @@
 # Projects files
-Manifest.toml
+Manifest*
 *.cov
 docs/build
