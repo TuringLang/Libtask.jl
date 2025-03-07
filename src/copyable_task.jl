@@ -1,4 +1,4 @@
-const dynamic_scope = Base.ScopedValues.ScopedValue{Any}(0)
+const dynamic_scope = ScopedValue{Any}(0)
 
 """
     get_dynamic_scope()
@@ -82,7 +82,7 @@ called, it start execution from the entry point. If `consume` has previously bee
 `nothing` will be returned.
 """
 @inline function consume(t::TapedTask)
-    return Base.ScopedValues.with(() -> t.mc(t.args...), dynamic_scope => t.dynamic_scope)
+    return with(() -> t.mc(t.args...), dynamic_scope => t.dynamic_scope)
 end
 
 """
