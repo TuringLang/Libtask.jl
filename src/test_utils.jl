@@ -57,6 +57,8 @@ function test_cases()
         Testcase(
             "foreigncall tester", nothing, (foreigncall_tester, "hi"), [Ptr{UInt8}, Ptr{UInt8}]
         ),
+        Testcase("dynamic scope 1", 5, (dynamic_scope_tester_1,), [5]),
+        Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), [6]),
 
         # Failing tests
         # Testcase("nested", (nested_outer, ), [true, false]),
@@ -157,6 +159,11 @@ might_produce(::Type{Tuple{typeof(nested_inner)}}) = true
 function nested_outer()
     nested_inner()
     produce(false)
+    return nothing
+end
+
+function dynamic_scope_tester_1()
+    produce(Libtask.get_dynamic_scope())
     return nothing
 end
 

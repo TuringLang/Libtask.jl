@@ -2,6 +2,18 @@
     for case in Libtask.TestUtils.test_cases()
         case()
     end
+    @testset "set_dynamic_scope" begin
+        function f()
+            produce(typeassert(Libtask.get_dynamic_scope(), Int))
+            produce(typeassert(Libtask.get_dynamic_scope(), Int))
+            return nothing
+        end
+        t = TapedTask(5, f)
+        @test consume(t) == 5
+        Libtask.set_dynamic_scope!(t, 6)
+        @test consume(t) == 6
+        @test consume(t) === nothing
+    end
     @testset "iteration" begin
         function f()
             t = 1
