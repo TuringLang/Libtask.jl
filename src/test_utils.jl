@@ -6,6 +6,7 @@ using ..Libtask: TapedTask
 
 struct Testcase
     name::String
+    dynamic_scope::Any
     fargs::Tuple
     expected_iteration_results::Vector
 end
@@ -14,7 +15,7 @@ function (case::Testcase)()
     testset = @testset "$(case.name)" begin
 
         # Construct the task.
-        t = TapedTask(case.fargs...)
+        t = TapedTask(case.dynamic_scope, case.fargs...)
 
         # Iterate through t. Record the results, and take a copy after each iteration.
         iteration_results = []
@@ -39,21 +40,22 @@ function test_cases()
     return Testcase[
         Testcase(
             "single block",
+            nothing,
             (single_block, 5.0),
             [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
         ),
-        Testcase("produce old", (produce_old_value, 5.0), [sin(5.0), sin(5.0)]),
-        Testcase("branch on old value l", (branch_on_old_value, 2.0), [true, 2.0]),
-        Testcase("branch on old value r", (branch_on_old_value, -1.0), [false, -2.0]),
-        Testcase("no produce", (no_produce_test, 5.0, 4.0), []),
-        Testcase("new object", (new_object_test, 5, 4), [C(5, 4), C(5, 4)]),
-        Testcase("branching test l", (branching_test, 5.0, 4.0), [string(sin(5.0))]),
-        Testcase("branching test r", (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
-        Testcase("unused argument test", (unused_argument_test, 3), [1]),
-        Testcase("test with const", (test_with_const,), [1]),
-        Testcase("while loop", (while_loop,), collect(1:9)),
+        Testcase("produce old", nothing, (produce_old_value, 5.0), [sin(5.0), sin(5.0)]),
+        Testcase("branch on old value l", nothing, (branch_on_old_value, 2.0), [true, 2.0]),
+        Testcase("branch on old value r", nothing, (branch_on_old_value, -1.0), [false, -2.0]),
+        Testcase("no produce", nothing, (no_produce_test, 5.0, 4.0), []),
+        Testcase("new object", nothing, (new_object_test, 5, 4), [C(5, 4), C(5, 4)]),
+        Testcase("branching test l", nothing, (branching_test, 5.0, 4.0), [string(sin(5.0))]),
+        Testcase("branching test r", nothing, (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
+        Testcase("unused argument test", nothing, (unused_argument_test, 3), [1]),
+        Testcase("test with const", nothing, (test_with_const,), [1]),
+        Testcase("while loop", nothing, (while_loop,), collect(1:9)),
         Testcase(
-            "foreigncall tester", (foreigncall_tester, "hi"), [Ptr{UInt8}, Ptr{UInt8}]
+            "foreigncall tester", nothing, (foreigncall_tester, "hi"), [Ptr{UInt8}, Ptr{UInt8}]
         ),
 
         # Failing tests
