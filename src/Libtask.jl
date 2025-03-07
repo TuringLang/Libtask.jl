@@ -15,6 +15,6 @@ using Core.Compiler: Argument, IRCode, ReturnNode
 include("copyable_task.jl")
 include("test_utils.jl")
 
-export TapedTask, consume, produce
+export TapedTask, consume, produce, get_dynamic_scope, set_dynamic_scope!
 
 end
