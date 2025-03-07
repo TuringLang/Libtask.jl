@@ -11,7 +11,6 @@ jobs:
     strategy:
       matrix:
         version:
-          - '1.7'
           - '1.10'
           - '1'
           - 'nightly'
@@ -31,7 +30,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v1
+      - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts
         with:
