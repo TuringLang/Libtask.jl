@@ -1,3 +1,3 @@
 using Documenter, Libtask
 
-makedocs(sitename="Libtask")
+makedocs(; sitename="Libtask")

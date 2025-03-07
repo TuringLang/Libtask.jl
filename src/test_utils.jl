@@ -46,16 +46,25 @@ function test_cases()
         ),
         Testcase("produce old", nothing, (produce_old_value, 5.0), [sin(5.0), sin(5.0)]),
         Testcase("branch on old value l", nothing, (branch_on_old_value, 2.0), [true, 2.0]),
-        Testcase("branch on old value r", nothing, (branch_on_old_value, -1.0), [false, -2.0]),
+        Testcase(
+            "branch on old value r", nothing, (branch_on_old_value, -1.0), [false, -2.0]
+        ),
         Testcase("no produce", nothing, (no_produce_test, 5.0, 4.0), []),
         Testcase("new object", nothing, (new_object_test, 5, 4), [C(5, 4), C(5, 4)]),
-        Testcase("branching test l", nothing, (branching_test, 5.0, 4.0), [string(sin(5.0))]),
-        Testcase("branching test r", nothing, (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]),
+        Testcase(
+            "branching test l", nothing, (branching_test, 5.0, 4.0), [string(sin(5.0))]
+        ),
+        Testcase(
+            "branching test r", nothing, (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]
+        ),
         Testcase("unused argument test", nothing, (unused_argument_test, 3), [1]),
         Testcase("test with const", nothing, (test_with_const,), [1]),
         Testcase("while loop", nothing, (while_loop,), collect(1:9)),
         Testcase(
-            "foreigncall tester", nothing, (foreigncall_tester, "hi"), [Ptr{UInt8}, Ptr{UInt8}]
+            "foreigncall tester",
+            nothing,
+            (foreigncall_tester, "hi"),
+            [Ptr{UInt8}, Ptr{UInt8}],
         ),
         Testcase("dynamic scope 1", 5, (dynamic_scope_tester_1,), [5]),
         Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), [6]),
