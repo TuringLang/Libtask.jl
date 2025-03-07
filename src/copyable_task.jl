@@ -45,6 +45,78 @@ end
 
 Construct a `TapedTask` with the specified `dynamic_scope`, for function `f` and positional
 arguments `args`.
+
+# Extended Help
+
+There are three central features of a `TapedTask`, which we demonstrate via three examples.
+
+## Resumption
+
+```jldoctest tt
+julia> function f()
+           for t in 1:2
+               produce(t)
+               t += 1
+           end
+           return nothing
+       end
+f (generic function with 1 method)
+```
+
+```jldoctest tt
+julia> t = TapedTask(nothing, f);
+
+julia> consume(t)
+1
+```
+
+```jldoctest tt
+julia> consume(t)
+2
+
+julia> consume(t)
+
+```
+
+## Copying
+
+```jldoctest tt
+julia> t2 = TapedTask(nothing, f);
+
+julia> consume(t2)
+1
+```
+
+```jldoctest tt
+julia> t3 = copy(t2);
+
+julia> consume(t3)
+2
+
+julia> consume(t2)
+2
+```
+
+## Scoped Values
+
+```jldoctest
+julia> function f()
+           produce(get_dynamic_scope())
+           produce(get_dynamic_scope())
+           return nothing
+       end
+f (generic function with 1 method)
+
+julia> t = TapedTask(1, f);
+
+julia> consume(t)
+1
+
+julia> set_dynamic_scope!(t, 2)
+
+julia> consume(t)
+2
+```
 """
 function TapedTask(dynamic_scope::Any, fargs...)
     mc, count_ref = build_callable(Base.code_ircode_by_type(typeof(fargs))[1][1])
