@@ -70,7 +70,7 @@ function test_cases()
         Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), [6]),
 
         # Failing tests
-        # Testcase("nested", (nested_outer, ), [true, false]),
+        Testcase("nested", nothing, (nested_outer, ), [true, false]),
     ]
 end
 
@@ -158,21 +158,21 @@ function foreigncall_tester(s::String)
     return nothing
 end
 
+function dynamic_scope_tester_1()
+    produce(Libtask.get_dynamic_scope())
+    return nothing
+end
+
 @noinline function nested_inner()
     produce(true)
     return nothing
 end
 
-might_produce(::Type{Tuple{typeof(nested_inner)}}) = true
+Libtask.might_produce(::Type{Tuple{typeof(nested_inner)}}) = true
 
 function nested_outer()
     nested_inner()
     produce(false)
-    return nothing
-end
-
-function dynamic_scope_tester_1()
-    produce(Libtask.get_dynamic_scope())
     return nothing
 end
 

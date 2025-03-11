@@ -2,7 +2,7 @@ module Libtask
 
 # Need this for BBCode.
 using Mooncake
-using Mooncake: BBCode, BBlock, ID, new_inst, stmt, seed_id!
+using Mooncake: BBCode, BBlock, ID, new_inst, stmt, seed_id!, terminator
 using Mooncake: IDGotoIfNot, IDGotoNode, IDPhiNode, Switch
 
 # We'll emit `MistyClosure`s rather than `OpaqueClosure`s.
