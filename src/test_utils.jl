@@ -70,7 +70,7 @@ function test_cases()
         Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), [6]),
 
         # Failing tests
-        Testcase("nested", nothing, (nested_outer, ), [true, false]),
+        Testcase("nested", nothing, (nested_outer,), [true, false]),
     ]
 end
 

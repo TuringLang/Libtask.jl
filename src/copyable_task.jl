@@ -26,7 +26,7 @@ See also: [`Libtask.consume`](@ref)
 end
 
 function callable_ret_type(sig)
-    return Union{Base.code_ircode_by_type(sig)[1][2], ProducedValue}
+    return Union{Base.code_ircode_by_type(sig)[1][2],ProducedValue}
 end
 
 function build_callable(sig::Type{<:Tuple})
@@ -257,8 +257,6 @@ function stmt_might_produce(x)::Bool
     # return false
 end
 
-get_function(x::Expr) = x.
-
 """
     produce_value(x::Expr)
 
@@ -376,7 +374,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     # 1. Associate an ID to each split in each block, ensuring that the ID for the final
     #   split of each block is the same ID as that of the original block.
     all_split_ids = map(zip(ir.blocks, all_splits)) do (block, splits)
-        return vcat([ID() for _ in splits[1:end-1]], block.id)
+        return vcat([ID() for _ in splits[1:(end - 1)]], block.id)
     end
 
     # 2. Construct a map between the ID of each block and the ID associated to its split.
@@ -485,7 +483,10 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 deref_ids = map(phi_inds) do n
                     id = bb.inst_ids[n]
                     phi_id = phi_ids[n]
-                    push!(inst_pairs, (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id))))
+                    push!(
+                        inst_pairs,
+                        (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id))),
+                    )
                     return id
                 end
 
@@ -502,8 +503,8 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
             # Iterate every statement in the split other than the final one, replacing uses
             # of SSAs with de-referenced `Ref`s, and writing the results of statements to
             # the corresponding `Ref`s.
-            _ids = view(bb.inst_ids, split.start:(split.last - 1))
-            _insts = view(bb.insts, split.start:(split.last - 1))
+            _ids = view(bb.inst_ids, (split.start):(split.last - 1))
+            _insts = view(bb.insts, (split.start):(split.last - 1))
             for (id, inst) in zip(_ids, _insts)
                 stmt = inst.stmt
                 if Meta.isexpr(stmt, :invoke) ||
@@ -515,17 +516,17 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                     # in the `Ref`s that they are associated to.
                     for (n, arg) in enumerate(stmt.args)
                         arg isa ID || continue
-    
+
                         new_id = ID()
                         ref_ind = ssa_id_to_ref_index_map[arg]
                         expr = Expr(:call, get_ref_at, refs_id, ref_ind)
                         push!(inst_pairs, (new_id, new_inst(expr)))
                         stmt.args[n] = new_id
                     end
-    
+
                     # Push the target instruction to the list.
                     push!(inst_pairs, (id, inst))
-    
+
                     # If we know it is not possible for this statement to contain any calls
                     # to produce, then simply write out the result to its `Ref`.
                     out_ind = ssa_id_to_ref_index_map[id]
