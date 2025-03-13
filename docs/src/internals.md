@@ -4,4 +4,6 @@
 Libtask.produce_value
 Libtask.is_produce_stmt
 Libtask.might_produce
+Libtask.stmt_might_produce
+Libtask.LazyCallable
 ```
