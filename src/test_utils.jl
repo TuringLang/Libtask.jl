@@ -87,6 +87,7 @@ function test_cases()
             (dynamic_nested_outer_use_produced, Ref{Any}(nested_inner)),
             [true, 1],
         ),
+        Testcase("callable struct", nothing, (CallableStruct(5), 4), [5, 4, 9]),
     ]
 end
 
@@ -207,6 +208,17 @@ end
 function dynamic_nested_outer_use_produced(f::Ref{Any})
     y = f[]()
     produce(y)
+    return nothing
+end
+
+struct CallableStruct{T}
+    x::T
+end
+
+function (c::CallableStruct)(y)
+    produce(c.x)
+    produce(y)
+    produce(c.x + y)
     return nothing
 end
 

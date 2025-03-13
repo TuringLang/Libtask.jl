@@ -39,9 +39,9 @@ function build_callable(sig::Type{<:Tuple})
     return mc, refs[end]
 end
 
-mutable struct TapedTask{Tdynamic_scope,Targs,Tmc<:MistyClosure}
+mutable struct TapedTask{Tdynamic_scope,Tfargs,Tmc<:MistyClosure}
     dynamic_scope::Tdynamic_scope
-    args::Targs
+    fargs::Tfargs
     const mc::Tmc
     const position::Base.RefValue{Int32}
 end
@@ -165,7 +165,7 @@ julia> consume(t)
 function TapedTask(dynamic_scope::Any, fargs...)
     seed_id!()
     mc, count_ref = build_callable(typeof(fargs))
-    return TapedTask(dynamic_scope, fargs[2:end], mc, count_ref)
+    return TapedTask(dynamic_scope, fargs, mc, count_ref)
 end
 
 """
@@ -199,7 +199,7 @@ called, it start execution from the entry point. If `consume` has previously bee
 `nothing` will be returned.
 """
 @inline function consume(t::TapedTask)
-    v = with(() -> t.mc(t.args...), dynamic_scope => t.dynamic_scope)
+    v = with(() -> t.mc(t.fargs...), dynamic_scope => t.dynamic_scope)
     return v isa ProducedValue ? v[] : nothing
 end
 
@@ -287,11 +287,44 @@ end
 
 @inline Base.getindex(x::ProducedValue) = x.x
 
+"""
+    inc_args(stmt)
+
+Increment by `1` the `n` field of any `Argument`s present in `stmt`.
+Used in `make_ad_stmts!`.
+"""
+inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
+inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
+inc_args(x::IDGotoIfNot) = IDGotoIfNot(__inc(x.cond), x.dest)
+inc_args(x::IDGotoNode) = x
+function inc_args(x::IDPhiNode)
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = __inc(x.values[n])
+        end
+    end
+    return IDPhiNode(x.edges, new_values)
+end
+inc_args(::Nothing) = nothing
+inc_args(x::GlobalRef) = x
+inc_args(x::Core.PiNode) = Core.PiNode(__inc(x.val), __inc(x.typ))
+
+__inc(x::Argument) = Argument(x.n + 1)
+__inc(x) = x
+
 function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
 
     # The location from which all state can be retrieved. Since we're using `OpaqueClosure`s
     # to implement `TapedTask`s, this appears via the first argument.
     refs_id = Argument(1)
+
+    # Increment all arguments by 1.
+    for bb in ir.blocks, (n, inst) in enumerate(bb.insts)
+        bb.insts[n] = CC.NewInstruction(
+            inc_args(inst.stmt), inst.type, inst.info, inst.line, inst.flag
+        )
+    end
 
     # Construct map between SSA IDs and their index in the state data structure and back.
     # Also construct a map from each ref index to its type. We only construct `Ref`s
@@ -778,7 +811,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     # rather than nothing at all.
     new_argtypes = copy(ir.argtypes)
     refs = (_refs..., Ref{Int32}(-1))
-    new_argtypes[1] = typeof(refs)
+    new_argtypes = vcat(typeof(refs), copy(ir.argtypes))
 
     # Return BBCode and the `Ref`s.
     return BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta), refs
@@ -830,7 +863,7 @@ end
 
 function (l::LazyCallable)(args::Vararg{Any,N}) where {N}
     isdefined(l, :mc) || construct_callable!(l)
-    return l.mc(args[2:end]...)
+    return l.mc(args...)
 end
 
 function construct_callable!(l::LazyCallable{sig}) where {sig}
@@ -853,5 +886,5 @@ function (dynamic_callable::DynamicCallable)(args::Vararg{Any,N}) where {N}
         callable = build_callable(sig)
         dynamic_callable.cache[sig] = callable
     end
-    return callable[1](args[2:end]...)
+    return callable[1](args...)
 end
