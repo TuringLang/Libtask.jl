@@ -241,21 +241,33 @@ function is_produce_stmt(x)::Bool
 end
 
 """
-    stmt_might_produce(x)::Bool
+    stmt_might_produce(x, ret_type::Type)::Bool
 
 `true` if `x` might contain a call to `produce`, and `false` otherwise.
 """
-function stmt_might_produce(x)::Bool
+function stmt_might_produce(x, ret_type::Type)::Bool
+
+    # Statement will terminate in an unusual fashion, so don't bother recursing.
+    # This isn't _strictly_ correct (there could be a `produce` statement before the
+    # `throw` call is hit), but this seems unlikely to happen in practice. If it does, the
+    # user should get a sensible error message anyway.
+    ret_type == Union{} && return false
+
+    # Statement will terminate in the usual fashion, so _do_ bother recusing.
     is_produce_stmt(x) && return true
     Meta.isexpr(x, :invoke) && return might_produce(x.args[1].specTypes)
+    if Meta.isexpr(x, :call)
+        # This is a hack -- it's perfectly possible for `DataType` calls to produce in general.
+        f = get_function(x.args[1])
+        _might_produce = !isa(f, Union{Core.IntrinsicFunction,Core.Builtin,DataType})
+        return _might_produce
+    end
     return false
-
-    # # TODO: make this correct
-    # Meta.isexpr(x, :call) &&
-    #     return !isa(x.args[1], Union{Core.IntrinsicFunction,Core.Builtin})
-    # Meta.isexpr(x, :invoke) && return false # todo: make this more accurate
-    # return false
 end
+
+get_function(x) = x
+get_function(x::Expr) = eval(x)
+get_function(x::GlobalRef) = isconst(x) ? getglobal(x.mod, x.name) : x.binding
 
 """
     produce_value(x::Expr)
@@ -347,7 +359,11 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     # in the block at which the corresponding split starts and finishes.
     all_splits = map(ir.blocks) do block
         split_ends = vcat(
-            findall(inst -> stmt_might_produce(inst.stmt), block.insts), length(block)
+            findall(
+                inst -> stmt_might_produce(inst.stmt, CC.widenconst(inst.type)),
+                block.insts,
+            ),
+            length(block),
         )
         return map(enumerate(split_ends)) do (n, split_end)
             return (start=(n == 1 ? 0 : split_ends[n - 1]) + 1, last=split_end)
@@ -654,11 +670,28 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 push!(new_blocks, BBlock(splits_ids[n], inst_pairs))
 
                 # Derive TapedTask for this statement.
-                callable = if Meta.isexpr(stmt, :invoke)
+                (callable, callable_args) = if Meta.isexpr(stmt, :invoke)
                     sig = stmt.args[1].specTypes
-                    LazyCallable{sig,callable_ret_type(sig)}()
+                    (LazyCallable{sig,callable_ret_type(sig)}(), stmt.args[2:end])
+                elseif Meta.isexpr(stmt, :call)
+                    (DynamicCallable(), stmt.args)
                 else
+                    display(stmt)
+                    println()
                     error("unhandled statement which might produce $stmt")
+                end
+
+                # Find any `ID`s and replace them with calls to read whatever is stored
+                # in the `Ref`s that they are associated to.
+                callable_inst_pairs = Mooncake.IDInstPair[]
+                for (n, arg) in enumerate(callable_args)
+                    arg isa ID || continue
+
+                    new_id = ID()
+                    ref_ind = ssa_id_to_ref_index_map[arg]
+                    expr = Expr(:call, get_ref_at, refs_id, ref_ind)
+                    push!(callable_inst_pairs, (new_id, new_inst(expr)))
+                    callable_args[n] = new_id
                 end
 
                 # Allocate a slot in the _refs vector for this callable.
@@ -667,34 +700,32 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
 
                 # Retrieve the callable from the refs.
                 callable_id = ID()
-                callable = Expr(:call, get_ref_at, refs_id, callable_ind)
+                callable_stmt = Expr(:call, get_ref_at, refs_id, callable_ind)
+                push!(callable_inst_pairs, (callable_id, new_inst(callable_stmt)))
 
                 # Call the callable.
-                result = Expr(:call, callable_id, stmt.args[3:end]...)
                 result_id = ID()
+                result_stmt = Expr(:call, callable_id, callable_args...)
+                push!(callable_inst_pairs, (result_id, new_inst(result_stmt)))
 
                 # Determine whether this TapedTask has produced a not-a-`ProducedValue`.
-                not_produced = Expr(:call, not_a_produced, result_id)
                 not_produced_id = ID()
+                not_produced_stmt = Expr(:call, not_a_produced, result_id)
+                push!(callable_inst_pairs, (not_produced_id, new_inst(not_produced_stmt)))
 
                 # Go to a block which just returns the `ProducedValue`, if a
                 # `ProducedValue` is returned, otherwise continue to the next split.
                 is_produced_block_id = ID()
-                next_block_id = splits_ids[n + 1] # safe since the last split ends with a terminator
-                # switch = Switch(Any[not_produced_id], [is_produced_block_id], next_block_id)
-                switch = IDGotoIfNot(not_produced_id, is_produced_block_id)
+                is_not_produced_block_id = ID()
+                switch = Switch(
+                    Any[not_produced_id],
+                    [is_produced_block_id],
+                    is_not_produced_block_id,
+                )
+                push!(callable_inst_pairs, (ID(), new_inst(switch)))
 
-                # Insert a new block to hold the three previous statements.
-                callable_inst_pairs = Mooncake.IDInstPair[
-                    (callable_id, new_inst(callable)),
-                    (result_id, new_inst(result)),
-                    (not_produced_id, new_inst(not_produced)),
-                    (ID(), new_inst(switch)),
-                ]
+                # Push the above statements onto a new block.
                 push!(new_blocks, BBlock(callable_block_id, callable_inst_pairs))
-
-                goto_block = BBlock(ID(), [(ID(), new_inst(IDGotoNode(next_block_id)))])
-                push!(new_blocks, goto_block)
 
                 # Construct block which handles the case that we got a `ProducedValue`. If
                 # this happens, it means that `callable` has more things to produce still.
@@ -709,6 +740,21 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                     (return_id, new_inst(ReturnNode(result_id))),
                 ]
                 push!(new_blocks, BBlock(is_produced_block_id, produced_block_inst_pairs))
+
+                # Construct block which handles the case that we did not get a
+                # `ProducedValue`. In this case, we must first push the result to the `Ref`
+                # associated to the call, and goto the next split.
+                next_block_id = splits_ids[n + 1] # safe since the last split ends with a terminator
+                result_ref_ind = ssa_id_to_ref_index_map[id]
+                set_ref = Expr(:call, set_ref_at!, refs_id, result_ref_ind, result_id)
+                not_produced_block_inst_pairs = Mooncake.IDInstPair[
+                    (ID(), new_inst(set_ref))
+                    (ID(), new_inst(IDGotoNode(next_block_id)))
+                ]
+                push!(
+                    new_blocks,
+                    BBlock(is_not_produced_block_id, not_produced_block_inst_pairs),
+                )
             end
             return new_blocks
         end
@@ -784,7 +830,7 @@ end
 
 function (l::LazyCallable)(args::Vararg{Any,N}) where {N}
     isdefined(l, :mc) || construct_callable!(l)
-    return l.mc(args...)
+    return l.mc(args[2:end]...)
 end
 
 function construct_callable!(l::LazyCallable{sig}) where {sig}
@@ -792,4 +838,20 @@ function construct_callable!(l::LazyCallable{sig}) where {sig}
     l.mc = mc
     l.position = pos
     return nothing
+end
+
+mutable struct DynamicCallable{V}
+    cache::V
+end
+
+DynamicCallable() = DynamicCallable(Dict{Any,Any}())
+
+function (dynamic_callable::DynamicCallable)(args::Vararg{Any,N}) where {N}
+    sig = Mooncake._typeof(args)
+    callable = get(dynamic_callable.cache, sig, nothing)
+    if callable === nothing
+        callable = build_callable(sig)
+        dynamic_callable.cache[sig] = callable
+    end
+    return callable[1](args[2:end]...)
 end

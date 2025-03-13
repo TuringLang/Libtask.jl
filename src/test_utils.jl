@@ -68,9 +68,25 @@ function test_cases()
         ),
         Testcase("dynamic scope 1", 5, (dynamic_scope_tester_1,), [5]),
         Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), [6]),
-
-        # Failing tests
-        Testcase("nested", nothing, (nested_outer,), [true, false]),
+        Testcase("nested (static)", nothing, (static_nested_outer,), [true, false]),
+        Testcase(
+            "nested (static + used)",
+            nothing,
+            (static_nested_outer_use_produced,),
+            [true, 1],
+        ),
+        Testcase(
+            "nested (dynamic)",
+            nothing,
+            (dynamic_nested_outer, Ref{Any}(nested_inner)),
+            [true, false],
+        ),
+        Testcase(
+            "nested (dynamic + used)",
+            nothing,
+            (dynamic_nested_outer_use_produced, Ref{Any}(nested_inner)),
+            [true, 1],
+        ),
     ]
 end
 
@@ -165,14 +181,32 @@ end
 
 @noinline function nested_inner()
     produce(true)
-    return nothing
+    return 1
 end
 
 Libtask.might_produce(::Type{Tuple{typeof(nested_inner)}}) = true
 
-function nested_outer()
+function static_nested_outer()
     nested_inner()
     produce(false)
+    return nothing
+end
+
+function static_nested_outer_use_produced()
+    y = nested_inner()
+    produce(y)
+    return nothing
+end
+
+function dynamic_nested_outer(f::Ref{Any})
+    f[]()
+    produce(false)
+    return nothing
+end
+
+function dynamic_nested_outer_use_produced(f::Ref{Any})
+    y = f[]()
+    produce(y)
     return nothing
 end
 
