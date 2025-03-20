@@ -288,10 +288,14 @@ end
 @inline Base.getindex(x::ProducedValue) = x.x
 
 """
-    inc_args(stmt)
+    inc_args(stmt::T)::T where {T}
 
-Increment by `1` the `n` field of any `Argument`s present in `stmt`.
-Used in `make_ad_stmts!`.
+Returns a new `T` which is equal to `stmt`, except any `Argument`s present in `stmt` are
+incremented by `1`. For example
+```jldoctest
+julia> Libtask.inc_args(Core.ReturnNode(Core.Argument(1)))
+:(return _2)
+```
 """
 inc_args(x::Expr) = Expr(x.head, map(__inc, x.args)...)
 inc_args(x::ReturnNode) = isdefined(x, :val) ? ReturnNode(__inc(x.val)) : x
