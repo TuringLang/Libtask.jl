@@ -130,6 +130,8 @@ function test_cases()
             [],
         ),
         Testcase("kwargs tester 2", nothing, (kwarg_tester, 4.0), (; y=5.0), []),
+        Testcase("default kwarg tester", nothing, (default_kwarg_tester, 4.0), nothing, []),
+        Testcase("default kwarg tester", nothing, (default_kwarg_tester, 4.0), (;), []),
     ]
 end
 
@@ -265,5 +267,7 @@ function (c::CallableStruct)(y)
 end
 
 kwarg_tester(x; y) = x + y
+
+default_kwarg_tester(x; y=5.0) = x * y
 
 end
