@@ -15,6 +15,9 @@ end
 function (case::Testcase)()
     testset = @testset "$(case.name)" begin
 
+        # Display some information.
+        @info "$(case.name)"
+
         # Construct the task.
         if case.kwargs === nothing
             t = TapedTask(case.dynamic_scope, case.fargs...)
@@ -132,6 +135,9 @@ function test_cases()
         Testcase("kwargs tester 2", nothing, (kwarg_tester, 4.0), (; y=5.0), []),
         Testcase("default kwarg tester", nothing, (default_kwarg_tester, 4.0), nothing, []),
         Testcase("default kwarg tester", nothing, (default_kwarg_tester, 4.0), (;), []),
+        Testcase(
+            "final statment produce", nothing, (final_statement_produce,), nothing, [1, 2]
+        ),
     ]
 end
 
@@ -269,5 +275,10 @@ end
 kwarg_tester(x; y) = x + y
 
 default_kwarg_tester(x; y=5.0) = x * y
+
+function final_statement_produce()
+    produce(1)
+    return produce(2)
+end
 
 end

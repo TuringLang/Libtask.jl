@@ -22,7 +22,7 @@ See also: [`Libtask.consume`](@ref)
 """
 @noinline function produce(x)
     global __v = 4 # silly side-effect to prevent this call getting constant-folded away. Should really use the effects system.
-    return ProducedValue(x)
+    return x
 end
 
 function callable_ret_type(sig)
