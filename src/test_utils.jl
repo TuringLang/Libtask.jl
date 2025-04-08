@@ -8,6 +8,7 @@ struct Testcase
     name::String
     dynamic_scope::Any
     fargs::Tuple
+    kwargs::Union{NamedTuple,Nothing}
     expected_iteration_results::Vector
 end
 
@@ -15,7 +16,11 @@ function (case::Testcase)()
     testset = @testset "$(case.name)" begin
 
         # Construct the task.
-        t = TapedTask(case.dynamic_scope, case.fargs...)
+        if case.kwargs === nothing
+            t = TapedTask(case.dynamic_scope, case.fargs...)
+        else
+            t = TapedTask(case.dynamic_scope, case.fargs...; case.kwargs...)
+        end
 
         # Iterate through t. Record the results, and take a copy after each iteration.
         iteration_results = []
@@ -42,52 +47,89 @@ function test_cases()
             "single block",
             nothing,
             (single_block, 5.0),
+            nothing,
             [sin(5.0), sin(sin(5.0)), sin(sin(sin(5.0))), sin(sin(sin(sin(5.0))))],
         ),
-        Testcase("produce old", nothing, (produce_old_value, 5.0), [sin(5.0), sin(5.0)]),
-        Testcase("branch on old value l", nothing, (branch_on_old_value, 2.0), [true, 2.0]),
         Testcase(
-            "branch on old value r", nothing, (branch_on_old_value, -1.0), [false, -2.0]
-        ),
-        Testcase("no produce", nothing, (no_produce_test, 5.0, 4.0), []),
-        Testcase("new object", nothing, (new_object_test, 5, 4), [C(5, 4), C(5, 4)]),
-        Testcase(
-            "branching test l", nothing, (branching_test, 5.0, 4.0), [string(sin(5.0))]
+            "produce old", nothing, (produce_old_value, 5.0), nothing, [sin(5.0), sin(5.0)]
         ),
         Testcase(
-            "branching test r", nothing, (branching_test, 4.0, 5.0), [sin(4.0) * cos(5.0)]
+            "branch on old value l",
+            nothing,
+            (branch_on_old_value, 2.0),
+            nothing,
+            [true, 2.0],
         ),
-        Testcase("unused argument test", nothing, (unused_argument_test, 3), [1]),
-        Testcase("test with const", nothing, (test_with_const,), [1]),
-        Testcase("while loop", nothing, (while_loop,), collect(1:9)),
+        Testcase(
+            "branch on old value r",
+            nothing,
+            (branch_on_old_value, -1.0),
+            nothing,
+            [false, -2.0],
+        ),
+        Testcase("no produce", nothing, (no_produce_test, 5.0, 4.0), nothing, []),
+        Testcase(
+            "new object", nothing, (new_object_test, 5, 4), nothing, [C(5, 4), C(5, 4)]
+        ),
+        Testcase(
+            "branching test l",
+            nothing,
+            (branching_test, 5.0, 4.0),
+            nothing,
+            [string(sin(5.0))],
+        ),
+        Testcase(
+            "branching test r",
+            nothing,
+            (branching_test, 4.0, 5.0),
+            nothing,
+            [sin(4.0) * cos(5.0)],
+        ),
+        Testcase("unused argument test", nothing, (unused_argument_test, 3), nothing, [1]),
+        Testcase("test with const", nothing, (test_with_const,), nothing, [1]),
+        Testcase("while loop", nothing, (while_loop,), nothing, collect(1:9)),
         Testcase(
             "foreigncall tester",
             nothing,
             (foreigncall_tester, "hi"),
+            nothing,
             [Ptr{UInt8}, Ptr{UInt8}],
         ),
-        Testcase("dynamic scope 1", 5, (dynamic_scope_tester_1,), [5]),
-        Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), [6]),
-        Testcase("nested (static)", nothing, (static_nested_outer,), [true, false]),
+        Testcase("dynamic scope 1", 5, (dynamic_scope_tester_1,), nothing, [5]),
+        Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), nothing, [6]),
+        Testcase(
+            "nested (static)", nothing, (static_nested_outer,), nothing, [true, false]
+        ),
         Testcase(
             "nested (static + used)",
             nothing,
             (static_nested_outer_use_produced,),
+            nothing,
             [true, 1],
         ),
         Testcase(
             "nested (dynamic)",
             nothing,
             (dynamic_nested_outer, Ref{Any}(nested_inner)),
+            nothing,
             [true, false],
         ),
         Testcase(
             "nested (dynamic + used)",
             nothing,
             (dynamic_nested_outer_use_produced, Ref{Any}(nested_inner)),
+            nothing,
             [true, 1],
         ),
-        Testcase("callable struct", nothing, (CallableStruct(5), 4), [5, 4, 9]),
+        Testcase("callable struct", nothing, (CallableStruct(5), 4), nothing, [5, 4, 9]),
+        Testcase(
+            "kwarg tester 1",
+            nothing,
+            (Core.kwcall, (; y=5.0), kwarg_tester, 4.0),
+            nothing,
+            [],
+        ),
+        Testcase("kwargs tester 2", nothing, (kwarg_tester, 4.0), (; y=5.0), []),
     ]
 end
 
@@ -221,5 +263,7 @@ function (c::CallableStruct)(y)
     produce(c.x + y)
     return nothing
 end
+
+kwarg_tester(x; y) = x + y
 
 end

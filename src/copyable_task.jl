@@ -47,7 +47,7 @@ mutable struct TapedTask{Tdynamic_scope,Tfargs,Tmc<:MistyClosure}
 end
 
 """
-    TapedTask(dynamic_scope::Any, f, args...)
+    TapedTask(dynamic_scope::Any, f, args...; kwargs...)
 
 Construct a `TapedTask` with the specified `dynamic_scope`, for function `f` and positional
 arguments `args`.
@@ -162,10 +162,11 @@ julia> consume(t)
 `Int`s have been used here, but it is permissible to set the value returned by
 [`Libtask.get_dynamic_scope`](@ref) to anything you like.
 """
-function TapedTask(dynamic_scope::Any, fargs...)
+function TapedTask(dynamic_scope::Any, fargs...; kwargs...)
     seed_id!()
-    mc, count_ref = build_callable(typeof(fargs))
-    return TapedTask(dynamic_scope, fargs, mc, count_ref)
+    all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
+    mc, count_ref = build_callable(typeof(all_args))
+    return TapedTask(dynamic_scope, all_args, mc, count_ref)
 end
 
 """
