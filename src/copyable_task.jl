@@ -1,8 +1,8 @@
 """
     get_taped_globals(T::Type)
 
-Returns the dynamic scope associated to `Libtask`. If called from inside a `TapedTask`, this
-will return whatever is contained in its `taped_globals` field.
+When called from inside a call to a `TapedTask`, this will return whatever is contained in
+its `taped_globals` field.
 
 The type `T` is required for optimal performance. If you know that the result of this
 operation must return a specific type, specific `T`. If you do not know what type it will
@@ -10,7 +10,8 @@ return, pass `Any` -- this will typically yield type instabilities, but will run
 
 See also [`set_taped_globals!`](@ref).
 """
-get_taped_globals(::Type{T}) where {T} = typeassert(task_local_storage(:task_variable), T)
+@noinline get_taped_globals(::Type{T}) where {T} =
+    typeassert(task_local_storage(:task_variable), T)
 
 __v::Int = 5
 
