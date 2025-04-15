@@ -37,13 +37,20 @@ function callable_ret_type(sig, types)
 end
 
 function build_callable(sig::Type{<:Tuple})
-    ir = Base.code_ircode_by_type(sig)[1][1]
-    bb, refs, types = derive_copyable_task_ir(BBCode(ir))
-    unoptimised_ir = IRCode(bb)
-    optimised_ir = Mooncake.optimise_ir!(unoptimised_ir)
-    mc_ret_type = callable_ret_type(sig, types)
-    mc = Mooncake.misty_closure(mc_ret_type, optimised_ir, refs...; do_compile=true)
-    return mc, refs[end]
+    key = CacheKey(Base.get_world_counter(), sig)
+    if haskey(mc_cache, key)
+        v = fresh_copy(mc_cache[key])
+        return v
+    else
+        ir = Base.code_ircode_by_type(sig)[1][1]
+        bb, refs, types = derive_copyable_task_ir(BBCode(ir))
+        unoptimised_ir = IRCode(bb)
+        optimised_ir = Mooncake.optimise_ir!(unoptimised_ir)
+        mc_ret_type = callable_ret_type(sig, types)
+        mc = Mooncake.misty_closure(mc_ret_type, optimised_ir, refs...; do_compile=true)
+        mc_cache[key] = mc
+        return mc, refs[end]
+    end
 end
 
 mutable struct TapedTask{Tdynamic_scope,Tfargs,Tmc<:MistyClosure}
@@ -52,6 +59,13 @@ mutable struct TapedTask{Tdynamic_scope,Tfargs,Tmc<:MistyClosure}
     const mc::Tmc
     const position::Base.RefValue{Int32}
 end
+
+struct CacheKey
+    world_age::UInt
+    key::Any
+end
+
+const mc_cache = Dict{CacheKey,MistyClosure}()
 
 """
     TapedTask(dynamic_scope::Any, f, args...; kwargs...)
@@ -170,10 +184,25 @@ julia> consume(t)
 [`Libtask.get_dynamic_scope`](@ref) to anything you like.
 """
 function TapedTask(dynamic_scope::Any, fargs...; kwargs...)
-    seed_id!()
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
+    seed_id!()
     mc, count_ref = build_callable(typeof(all_args))
     return TapedTask(dynamic_scope, all_args, mc, count_ref)
+end
+
+function fresh_copy(mc::T) where {T<:MistyClosure}
+    new_captures = Mooncake.tuple_map(mc.oc.captures) do r
+        if eltype(r) <: DynamicCallable
+            return Base.RefValue(DynamicCallable())
+        elseif eltype(r) <: LazyCallable
+            return _typeof(r)(eltype(r)())
+        else
+            return _typeof(r)()
+        end
+    end
+    new_position = new_captures[end]
+    new_position[] = -1
+    return Mooncake.replace_captures(mc, new_captures), new_position
 end
 
 """
@@ -335,7 +364,7 @@ const TypeInfo = Tuple{Vector{Any},Dict{ID,Type}}
 Central definition of typeof, which is specific to the use-required in this package.
 """
 _typeof(x) = Base._stable_typeof(x)
-_typeof(x::Tuple) = Tuple{tuple_map(_typeof, x)...}
+_typeof(x::Tuple) = Tuple{map(_typeof, x)...}
 _typeof(x::NamedTuple{names}) where {names} = NamedTuple{names,_typeof(Tuple(x))}
 
 """
@@ -640,6 +669,8 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 elseif Meta.isexpr(stmt, :gc_preserve_begin)
                     push!(inst_pairs, (id, inst))
                 elseif Meta.isexpr(stmt, :gc_preserve_end)
+                    push!(inst_pairs, (id, inst))
+                elseif Meta.isexpr(stmt, :throw_undef_if_not)
                     push!(inst_pairs, (id, inst))
                 elseif stmt isa Nothing
                     push!(inst_pairs, (id, inst))
