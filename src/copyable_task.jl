@@ -9,9 +9,21 @@ operation must return a specific type, specific `T`. If you do not know what typ
 return, pass `Any` -- this will typically yield type instabilities, but will run correctly.
 
 See also [`set_taped_globals!`](@ref).
+
+# Extended Help
+
+
 """
-@noinline get_taped_globals(::Type{T}) where {T} =
-    typeassert(task_local_storage(:task_variable), T)
+@noinline function get_taped_globals(::Type{T}) where {T}
+    # This function is `@noinline`d to ensure that the type-unstable items in here do not
+    # appear in a calling function, and cause allocations.
+    #
+    # The return type of `task_local_storage(:task_variable)` is `Any`. To ensure that this
+    # type instability does not propagate through the rest of the code, we `typeassert` the
+    # result to be `T`. By doing this, callers of this function will (hopefully) think
+    # carefully about how they can figure out what type they have put in global storage.
+    return typeassert(task_local_storage(:task_variable), T)
+end
 
 __v::Int = 5
 
