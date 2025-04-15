@@ -9,4 +9,9 @@ Libtask.LazyCallable
 Libtask.inc_args
 Libtask.get_type
 Libtask._typeof
+Libtask.replace_captures
+Libtask.BasicBlockCode
+Libtask.opaque_closure
+Libtask.misty_closure
+Libtask.optimise_ir!
 ```
