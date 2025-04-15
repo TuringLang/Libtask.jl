@@ -229,4 +229,30 @@
             @test consume(a) == 4
         end
     end
+    @testset "Issue: PR-86 (DynamicPPL.jl/pull/261)" begin
+        function f()
+            t = Array{Int}(undef, 1)
+            t[1] = 0
+            for _ in 1:4000
+                produce(t[1])
+                t[1]
+                t[1] = 1 + t[1]
+            end
+        end
+
+        ttask = TapedTask(nothing, f)
+
+        ex = try
+            for _ in 1:999
+                consume(ttask)
+                consume(ttask)
+                a = copy(ttask)
+                consume(a)
+                consume(a)
+            end
+        catch ex
+            ex
+        end
+        @test ex === nothing
+    end
 end

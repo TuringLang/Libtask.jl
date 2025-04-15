@@ -5,5 +5,4 @@ include("front_matter.jl")
         @test JuliaFormatter.format(Libtask; verbose=false, overwrite=false)
     end
     include("copyable_task.jl")
-    # include("issues.jl")
 end
