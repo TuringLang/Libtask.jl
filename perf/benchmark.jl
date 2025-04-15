@@ -8,7 +8,7 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     x = (x..., nothing)
 
     println("benchmarking $(f_displayname)...")
-    tf = Libtask.TapedFunction(f, x...)
+    tf = Libtask.TapedTask(nothing, f, x...)
 
     print("  Run Original Function:")
     @btime $f($(x)...)
