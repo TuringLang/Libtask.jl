@@ -145,7 +145,7 @@ julia> consume(t2)
 2
 ```
 
-## Scoped Values
+## TapedTask-Specific Globals
 
 It is often desirable to permit a copy of a task and the original to differ in very specific
 ways. For example, in the context of Sequential Monte Carlo, you might want the only
@@ -156,8 +156,8 @@ A generic mechanism is available to achieve this. [`Libtask.get_dynamic_scope`](
 to a given [`Libtask.TapedTask`](@ref). The former can be called inside a function:
 ```jldoctest sv
 julia> function f()
-           produce(get_dynamic_scope())
-           produce(get_dynamic_scope())
+           produce(get_dynamic_scope(Int))
+           produce(get_dynamic_scope(Int))
            return nothing
        end
 f (generic function with 1 method)
