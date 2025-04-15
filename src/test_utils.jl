@@ -139,8 +139,11 @@ function test_cases()
             [Ptr{UInt8}, Ptr{UInt8}],
             allocs,
         ),
-        Testcase("dynamic scope 1", 5, (taped_globals_tester_1,), nothing, [5], allocs),
-        Testcase("dynamic scope 2", 6, (taped_globals_tester_1,), nothing, [6], none),
+        Testcase("globals tester 1", 5, (taped_globals_tester_1,), nothing, [5], allocs),
+        Testcase("globals tester 2", 6, (taped_globals_tester_1,), nothing, [6], none),
+        Testcase(
+            "globals tester 3", 6, (while_loop_with_globals,), nothing, fill(6, 9), allocs
+        ),
         Testcase(
             "nested (static)", nothing, (static_nested_outer,), nothing, [true, false], none
         ),
@@ -288,6 +291,15 @@ end
 
 function taped_globals_tester_1()
     produce(Libtask.get_taped_globals(Int))
+    return nothing
+end
+
+function while_loop_with_globals()
+    t = 1
+    while t < 10
+        produce(get_taped_globals(Int))
+        t = 1 + t
+    end
     return nothing
 end
 
