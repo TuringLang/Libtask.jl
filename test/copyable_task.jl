@@ -2,15 +2,15 @@
     for case in Libtask.TestUtils.test_cases()
         case()
     end
-    @testset "set_dynamic_scope" begin
+    @testset "set_taped_globals!" begin
         function f()
-            produce(Libtask.get_dynamic_scope(Int))
-            produce(Libtask.get_dynamic_scope(Int))
+            produce(Libtask.get_taped_globals(Int))
+            produce(Libtask.get_taped_globals(Int))
             return nothing
         end
         t = TapedTask(5, f)
         @test consume(t) == 5
-        Libtask.set_dynamic_scope!(t, 6)
+        Libtask.set_taped_globals!(t, 6)
         @test consume(t) == 6
         @test consume(t) === nothing
     end

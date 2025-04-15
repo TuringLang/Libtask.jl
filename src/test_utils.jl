@@ -13,7 +13,7 @@ end
 
 struct Testcase
     name::String
-    dynamic_scope::Any
+    taped_globals::Any
     fargs::Tuple
     kwargs::Union{NamedTuple,Nothing}
     expected_iteration_results::Vector
@@ -28,9 +28,9 @@ function (case::Testcase)()
 
         # Construct the task.
         if case.kwargs === nothing
-            t = TapedTask(case.dynamic_scope, case.fargs...)
+            t = TapedTask(case.taped_globals, case.fargs...)
         else
-            t = TapedTask(case.dynamic_scope, case.fargs...; case.kwargs...)
+            t = TapedTask(case.taped_globals, case.fargs...; case.kwargs...)
         end
 
         # Iterate through t. Record the results, and take a copy after each iteration.
@@ -54,9 +54,9 @@ function (case::Testcase)()
 
             # Construct the task.
             if case.kwargs === nothing
-                t = TapedTask(case.dynamic_scope, case.fargs...)
+                t = TapedTask(case.taped_globals, case.fargs...)
             else
-                t = TapedTask(case.dynamic_scope, case.fargs...; case.kwargs...)
+                t = TapedTask(case.taped_globals, case.fargs...; case.kwargs...)
             end
 
             for _ in iteration_results
@@ -139,8 +139,8 @@ function test_cases()
             [Ptr{UInt8}, Ptr{UInt8}],
             allocs,
         ),
-        Testcase("dynamic scope 1", 5, (dynamic_scope_tester_1,), nothing, [5], allocs),
-        Testcase("dynamic scope 2", 6, (dynamic_scope_tester_1,), nothing, [6], none),
+        Testcase("dynamic scope 1", 5, (taped_globals_tester_1,), nothing, [5], allocs),
+        Testcase("dynamic scope 2", 6, (taped_globals_tester_1,), nothing, [6], none),
         Testcase(
             "nested (static)", nothing, (static_nested_outer,), nothing, [true, false], none
         ),
@@ -286,8 +286,8 @@ function foreigncall_tester(s::String)
     return nothing
 end
 
-function dynamic_scope_tester_1()
-    produce(Libtask.get_dynamic_scope(Int))
+function taped_globals_tester_1()
+    produce(Libtask.get_taped_globals(Int))
     return nothing
 end
 

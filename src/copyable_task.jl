@@ -1,16 +1,16 @@
 """
-    get_dynamic_scope(T::Type)
+    get_taped_globals(T::Type)
 
 Returns the dynamic scope associated to `Libtask`. If called from inside a `TapedTask`, this
-will return whatever is contained in its `dynamic_scope` field.
+will return whatever is contained in its `taped_globals` field.
 
 The type `T` is required for optimal performance. If you know that the result of this
 operation must return a specific type, specific `T`. If you do not know what type it will
 return, pass `Any` -- this will typically yield type instabilities, but will run correctly.
 
-See also [`set_dynamic_scope!`](@ref).
+See also [`set_taped_globals!`](@ref).
 """
-get_dynamic_scope(::Type{T}) where {T} = typeassert(task_local_storage(:task_variable), T)
+get_taped_globals(::Type{T}) where {T} = typeassert(task_local_storage(:task_variable), T)
 
 __v::Int = 5
 
@@ -53,8 +53,8 @@ function build_callable(sig::Type{<:Tuple})
     end
 end
 
-mutable struct TapedTask{Tdynamic_scope,Tfargs,Tmc<:MistyClosure}
-    dynamic_scope::Tdynamic_scope
+mutable struct TapedTask{Ttaped_globals,Tfargs,Tmc<:MistyClosure}
+    taped_globals::Ttaped_globals
     const fargs::Tfargs
     const mc::Tmc
     const position::Base.RefValue{Int32}
@@ -68,10 +68,10 @@ end
 const mc_cache = Dict{CacheKey,MistyClosure}()
 
 """
-    TapedTask(dynamic_scope::Any, f, args...; kwargs...)
+    TapedTask(taped_globals::Any, f, args...; kwargs...)
 
-Construct a `TapedTask` with the specified `dynamic_scope`, for function `f` and positional
-arguments `args`.
+Construct a `TapedTask` with the specified `taped_globals`, for function `f`, positional
+arguments `args`, and keyword argument `kwargs`.
 
 # Extended Help
 
@@ -151,20 +151,20 @@ It is often desirable to permit a copy of a task and the original to differ in v
 ways. For example, in the context of Sequential Monte Carlo, you might want the only
 difference between two copies to be their random number generator.
 
-A generic mechanism is available to achieve this. [`Libtask.get_dynamic_scope`](@ref) and
-[`Libtask.set_dynamic_scope!`](@ref) let you set and retrieve a variable which is specific
+A generic mechanism is available to achieve this. [`Libtask.get_taped_globals`](@ref) and
+[`Libtask.set_taped_globals!`](@ref) let you set and retrieve a variable which is specific
 to a given [`Libtask.TapedTask`](@ref). The former can be called inside a function:
 ```jldoctest sv
 julia> function f()
-           produce(get_dynamic_scope(Int))
-           produce(get_dynamic_scope(Int))
+           produce(get_taped_globals(Int))
+           produce(get_taped_globals(Int))
            return nothing
        end
 f (generic function with 1 method)
 ```
 
 The first argument to [`Libtask.TapedTask`](@ref) is the value that
-[`Libtask.get_dynamic_scope`](@ref) will return:
+[`Libtask.get_taped_globals`](@ref) will return:
 ```jldoctest sv
 julia> t = TapedTask(1, f);
 
@@ -174,20 +174,20 @@ julia> consume(t)
 
 The value that it returns can be changed between [`Libtask.consume`](@ref) calls:
 ```jldoctest sv
-julia> set_dynamic_scope!(t, 2)
+julia> set_taped_globals!(t, 2)
 
 julia> consume(t)
 2
 ```
 
 `Int`s have been used here, but it is permissible to set the value returned by
-[`Libtask.get_dynamic_scope`](@ref) to anything you like.
+[`Libtask.get_taped_globals`](@ref) to anything you like.
 """
-function TapedTask(dynamic_scope::Any, fargs...; kwargs...)
+function TapedTask(taped_globals::Any, fargs...; kwargs...)
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
     seed_id!()
     mc, count_ref = build_callable(typeof(all_args))
-    return TapedTask(dynamic_scope, all_args, mc, count_ref)
+    return TapedTask(taped_globals, all_args, mc, count_ref)
 end
 
 function fresh_copy(mc::T) where {T<:MistyClosure}
@@ -206,16 +206,14 @@ function fresh_copy(mc::T) where {T<:MistyClosure}
 end
 
 """
-    set_dynamic_scope!(t::TapedTask, new_dynamic_scope)::Nothing
+    set_taped_globals!(t::TapedTask, new_taped_globals)::Nothing
 
-Set the `dynamic_scope` of `t` to `new_dynamic_scope`. Any references to 
-`LibTask.dynamic_scope` in future calls to `consume(t)` (either directly, or implicitly via
-iteration) will see this new value.
-
-See also: [`get_dynamic_scope`](@ref).
+Set the `taped_globals` of `t` to `new_taped_globals`. Any calls to 
+[`get_taped_globals`](@ref) in future calls to `consume(t)` (either directly, or implicitly
+via iteration) will see this new value.
 """
-function set_dynamic_scope!(t::TapedTask{T}, new_dynamic_scope::T)::Nothing where {T}
-    t.dynamic_scope = new_dynamic_scope
+function set_taped_globals!(t::TapedTask{T}, new_taped_globals::T)::Nothing where {T}
+    t.taped_globals = new_taped_globals
     return nothing
 end
 
@@ -236,7 +234,7 @@ called, it start execution from the entry point. If `consume` has previously bee
 `nothing` will be returned.
 """
 @inline function consume(t::TapedTask)
-    task_local_storage(:task_variable, t.dynamic_scope)
+    task_local_storage(:task_variable, t.taped_globals)
     v = t.mc.oc(t.fargs...)
     return v isa ProducedValue ? v[] : nothing
 end

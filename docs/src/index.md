@@ -14,11 +14,11 @@ First, manipulation of [`TapedTask`](@ref)s:
 ```@docs; canonical=true
 Libtask.consume
 Base.copy(::Libtask.TapedTask)
-Libtask.set_dynamic_scope!
+Libtask.set_taped_globals!
 ```
 
 Functions for use inside a [`TapedTask`](@ref)s are:
 ```@docs; canonical=true
 Libtask.produce
-Libtask.get_dynamic_scope
+Libtask.get_taped_globals
 ```
