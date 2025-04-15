@@ -3,7 +3,7 @@ name: IntegrationTest
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
 
 jobs:
@@ -14,8 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - {user: TuringLang, repo: AdvancedPS.jl, ref: master}
-          - {user: TuringLang, repo: Turing.jl, ref: master}
+          - {user: TuringLang, repo: AdvancedPS.jl, ref: main}
+          - {user: TuringLang, repo: Turing.jl, ref: main}
 
     steps:
       - uses: actions/checkout@v2
