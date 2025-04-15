@@ -4,6 +4,7 @@ module Libtask
 using Mooncake
 using Mooncake: BBCode, BBlock, ID, new_inst, stmt, seed_id!, terminator
 using Mooncake: IDGotoIfNot, IDGotoNode, IDPhiNode, Switch
+using Mooncake.BasicBlockCode: collect_stmts, characterise_used_ids
 
 # We'll emit `MistyClosure`s rather than `OpaqueClosure`s.
 using MistyClosures

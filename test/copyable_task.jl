@@ -4,8 +4,8 @@
     end
     @testset "set_dynamic_scope" begin
         function f()
-            produce(typeassert(Libtask.get_dynamic_scope(), Int))
-            produce(typeassert(Libtask.get_dynamic_scope(), Int))
+            produce(Libtask.get_dynamic_scope(Int))
+            produce(Libtask.get_dynamic_scope(Int))
             return nothing
         end
         t = TapedTask(5, f)

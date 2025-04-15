@@ -1,14 +1,16 @@
-const dynamic_scope = ScopedValue{Any}(0)
-
 """
-    get_dynamic_scope()
+    get_dynamic_scope(T::Type)
 
 Returns the dynamic scope associated to `Libtask`. If called from inside a `TapedTask`, this
 will return whatever is contained in its `dynamic_scope` field.
 
+The type `T` is required for optimal performance. If you know that the result of this
+operation must return a specific type, specific `T`. If you do not know what type it will
+return, pass `Any` -- this will typically yield type instabilities, but will run correctly.
+
 See also [`set_dynamic_scope!`](@ref).
 """
-get_dynamic_scope() = dynamic_scope[]
+get_dynamic_scope(::Type{T}) where {T} = typeassert(task_local_storage(:task_variable), T)
 
 __v::Int = 5
 
@@ -25,16 +27,21 @@ See also: [`Libtask.consume`](@ref)
     return x
 end
 
-function callable_ret_type(sig)
-    return Union{Base.code_ircode_by_type(sig)[1][2],ProducedValue}
+function callable_ret_type(sig, types)
+    produce_type = Union{}
+    for t in types
+        p = isconcretetype(t) ? ProducedValue{t} : ProducedValue{T} where {T<:t}
+        produce_type = CC.tmerge(p, produce_type)
+    end
+    return Union{Base.code_ircode_by_type(sig)[1][2],produce_type}
 end
 
 function build_callable(sig::Type{<:Tuple})
     ir = Base.code_ircode_by_type(sig)[1][1]
-    bb, refs = derive_copyable_task_ir(BBCode(ir))
+    bb, refs, types = derive_copyable_task_ir(BBCode(ir))
     unoptimised_ir = IRCode(bb)
     optimised_ir = Mooncake.optimise_ir!(unoptimised_ir)
-    mc_ret_type = callable_ret_type(sig)
+    mc_ret_type = callable_ret_type(sig, types)
     mc = Mooncake.misty_closure(mc_ret_type, optimised_ir, refs...; do_compile=true)
     return mc, refs[end]
 end
@@ -200,7 +207,8 @@ called, it start execution from the entry point. If `consume` has previously bee
 `nothing` will be returned.
 """
 @inline function consume(t::TapedTask)
-    v = with(() -> t.mc(t.fargs...), dynamic_scope => t.dynamic_scope)
+    task_local_storage(:task_variable, t.dynamic_scope)
+    v = t.mc.oc(t.fargs...)
     return v isa ProducedValue ? v[] : nothing
 end
 
@@ -285,6 +293,7 @@ end
 struct ProducedValue{T}
     x::T
 end
+ProducedValue(::Type{T}) where {T} = ProducedValue{Type{T}}(T)
 
 @inline Base.getindex(x::ProducedValue) = x.x
 
@@ -318,7 +327,35 @@ inc_args(x::Core.PiNode) = Core.PiNode(__inc(x.val), __inc(x.typ))
 __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
 
-function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
+const TypeInfo = Tuple{Vector{Any},Dict{ID,Type}}
+
+"""
+    _typeof(x)
+
+Central definition of typeof, which is specific to the use-required in this package.
+"""
+_typeof(x) = Base._stable_typeof(x)
+_typeof(x::Tuple) = Tuple{tuple_map(_typeof, x)...}
+_typeof(x::NamedTuple{names}) where {names} = NamedTuple{names,_typeof(Tuple(x))}
+
+"""
+    get_type(info::ADInfo, x)
+
+Returns the static / inferred type associated to `x`.
+"""
+get_type(info::TypeInfo, x::Argument) = info[1][x.n - 1]
+get_type(info::TypeInfo, x::ID) = CC.widenconst(info[2][x])
+get_type(::TypeInfo, x::QuoteNode) = _typeof(x.value)
+get_type(::TypeInfo, x) = _typeof(x)
+function get_type(::TypeInfo, x::GlobalRef)
+    return isconst(x) ? _typeof(getglobal(x.mod, x.name)) : x.binding.ty
+end
+function get_type(::TypeInfo, x::Expr)
+    x.head === :boundscheck && return Bool
+    return error("Unrecognised expression $x found in argument slot.")
+end
+
+function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
 
     # The location from which all state can be retrieved. Since we're using `OpaqueClosure`s
     # to implement `TapedTask`s, this appears via the first argument.
@@ -338,13 +375,17 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     ssa_id_to_ref_index_map = Dict{ID,Int}()
     ref_index_to_ssa_id_map = Dict{Int,ID}()
     ref_index_to_type_map = Dict{Int,Type}()
+    id_to_type_map = Dict{ID,Type}()
+    is_used_dict = characterise_used_ids(collect_stmts(ir))
     n = 0
     for bb in ir.blocks
         for (id, stmt) in zip(bb.inst_ids, bb.insts)
+            id_to_type_map[id] = CC.widenconst(stmt.type)
             stmt.stmt isa IDGotoNode && continue
             stmt.stmt isa IDGotoIfNot && continue
             stmt.stmt === nothing && continue
             stmt.stmt isa ReturnNode && continue
+            is_used_dict[id] || continue
             n += 1
             ssa_id_to_ref_index_map[id] = n
             ref_index_to_ssa_id_map[n] = id
@@ -446,6 +487,9 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
 
     # A set of blocks from which we might wish to resume computation.
     resume_block_ids = Vector{ID}()
+
+    # A list onto which we'll push the type of any statement which might produce.
+    possible_produce_types = Any[]
 
     # This where most of the action happens.
     #
@@ -582,10 +626,13 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                     push!(inst_pairs, (id, inst))
 
                     # If we know it is not possible for this statement to contain any calls
-                    # to produce, then simply write out the result to its `Ref`.
-                    out_ind = ssa_id_to_ref_index_map[id]
-                    set_ref = Expr(:call, set_ref_at!, refs_id, out_ind, id)
-                    push!(inst_pairs, (ID(), new_inst(set_ref)))
+                    # to produce, then simply write out the result to its `Ref`. If it is
+                    # never used, then there is no need to store it.
+                    if is_used_dict[id]
+                        out_ind = ssa_id_to_ref_index_map[id]
+                        set_ref = Expr(:call, set_ref_at!, refs_id, out_ind, id)
+                        push!(inst_pairs, (ID(), new_inst(set_ref)))
+                    end
                 elseif Meta.isexpr(stmt, :boundscheck)
                     push!(inst_pairs, (id, inst))
                 elseif Meta.isexpr(stmt, :code_coverage_effect)
@@ -677,6 +724,10 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 # computation is resumed from the statement _after_ this produce statement,
                 # and to return whatever this produce statement returns.
 
+                # Log the result type of this statement.
+                arg = stmt.args[Meta.isexpr(stmt, :invoke) ? 3 : 2]
+                push!(possible_produce_types, get_type((ir.argtypes, id_to_type_map), arg))
+
                 # When this TapedTask is next called, we should resume from the first
                 # statement of the next split.
                 resume_id = splits_ids[n + 1]
@@ -733,6 +784,11 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 # which involves calls that might produce, in order to get a sense of what
                 # the resulting code looks like prior to digging into the code below.
 
+                # At present, we're not able to properly infer the values which might
+                # potentially be produced by a call-which-might-produce. Consequently, we
+                # have to assume they can produce anything.
+                push!(possible_produce_types, Any)
+
                 # Create a new basic block from the existing statements, since all new
                 # statement need to live in their own basic blocks.
                 callable_block_id = ID()
@@ -742,7 +798,8 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 # Derive TapedTask for this statement.
                 (callable, callable_args) = if Meta.isexpr(stmt, :invoke)
                     sig = stmt.args[1].specTypes
-                    (LazyCallable{sig,callable_ret_type(sig)}(), stmt.args[2:end])
+                    v = Any[Any]
+                    (LazyCallable{sig,callable_ret_type(sig, v)}(), stmt.args[2:end])
                 elseif Meta.isexpr(stmt, :call)
                     (DynamicCallable(), stmt.args)
                 else
@@ -815,8 +872,12 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
                 # `ProducedValue`. In this case, we must first push the result to the `Ref`
                 # associated to the call, and goto the next split.
                 next_block_id = splits_ids[n + 1] # safe since the last split ends with a terminator
-                result_ref_ind = ssa_id_to_ref_index_map[id]
-                set_ref = Expr(:call, set_ref_at!, refs_id, result_ref_ind, result_id)
+                if is_used_dict[id]
+                    result_ref_ind = ssa_id_to_ref_index_map[id]
+                    set_ref = Expr(:call, set_ref_at!, refs_id, result_ref_ind, result_id)
+                else
+                    set_ref = nothing
+                end
                 not_produced_block_inst_pairs = Mooncake.IDInstPair[
                     (ID(), new_inst(set_ref))
                     (ID(), new_inst(IDGotoNode(next_block_id)))
@@ -851,13 +912,12 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple}
     new_argtypes = vcat(typeof(refs), copy(ir.argtypes))
 
     # Return BBCode and the `Ref`s.
-    return BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta), refs
+    new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta)
+    return new_ir, refs, possible_produce_types
 end
 
 # Helper used in `derive_copyable_task_ir`.
-@inline function get_ref_at(refs::R, n::Int) where {R<:Tuple}
-    return refs[n][]
-end
+@inline get_ref_at(refs::R, n::Int) where {R<:Tuple} = refs[n][]
 
 # Helper used in `derive_copyable_task_ir`.
 @inline function set_ref_at!(refs::R, n::Int, val) where {R<:Tuple}
