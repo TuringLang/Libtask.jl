@@ -6,15 +6,15 @@ repo = "https://github.com/TuringLang/Libtask.jl.git"
 version = "0.8.8"
 
 [deps]
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 MistyClosures = "dbe65cb8-6be2-42dd-bbc5-4196aaced4f4"
-Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 Aqua = "0.8.11"
+Graphs = "1.12.1"
 JuliaFormatter = "1.0.62"
 MistyClosures = "2.0.0"
-Mooncake = "0.4.99"
 Test = "1"
 julia = "1.10.8"
 

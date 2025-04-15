@@ -45,9 +45,9 @@ function build_callable(sig::Type{<:Tuple})
         ir = Base.code_ircode_by_type(sig)[1][1]
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
         unoptimised_ir = IRCode(bb)
-        optimised_ir = Mooncake.optimise_ir!(unoptimised_ir)
+        optimised_ir = optimise_ir!(unoptimised_ir)
         mc_ret_type = callable_ret_type(sig, types)
-        mc = Mooncake.misty_closure(mc_ret_type, optimised_ir, refs...; do_compile=true)
+        mc = misty_closure(mc_ret_type, optimised_ir, refs...; do_compile=true)
         mc_cache[key] = mc
         return mc, refs[end]
     end
@@ -191,7 +191,7 @@ function TapedTask(taped_globals::Any, fargs...; kwargs...)
 end
 
 function fresh_copy(mc::T) where {T<:MistyClosure}
-    new_captures = Mooncake.tuple_map(mc.oc.captures) do r
+    new_captures = map(mc.oc.captures) do r
         if eltype(r) <: DynamicCallable
             return Base.RefValue(DynamicCallable())
         elseif eltype(r) <: LazyCallable
@@ -202,7 +202,7 @@ function fresh_copy(mc::T) where {T<:MistyClosure}
     end
     new_position = new_captures[end]
     new_position[] = -1
-    return Mooncake.replace_captures(mc, new_captures), new_position
+    return replace_captures(mc, new_captures), new_position
 end
 
 """
@@ -538,7 +538,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     new_bblocks = map(zip(ir.blocks, all_splits, all_split_ids)) do (bb, splits, splits_ids)
         new_blocks = map(enumerate(splits)) do (n, split)
             # We'll push ID-NewInstruction pairs to this as we proceed through the split.
-            inst_pairs = Mooncake.IDInstPair[]
+            inst_pairs = IDInstPair[]
 
             # PhiNodes:
             #
@@ -839,7 +839,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
 
                 # Find any `ID`s and replace them with calls to read whatever is stored
                 # in the `Ref`s that they are associated to.
-                callable_inst_pairs = Mooncake.IDInstPair[]
+                callable_inst_pairs = IDInstPair[]
                 for (n, arg) in enumerate(callable_args)
                     arg isa ID || continue
 
@@ -891,7 +891,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 push!(resume_block_ids, callable_block_id)
                 set_res = Expr(:call, set_resume_block!, refs_id, callable_block_id.id)
                 return_id = ID()
-                produced_block_inst_pairs = Mooncake.IDInstPair[
+                produced_block_inst_pairs = IDInstPair[
                     (ID(), new_inst(set_res)),
                     (return_id, new_inst(ReturnNode(result_id))),
                 ]
@@ -907,7 +907,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 else
                     set_ref = nothing
                 end
-                not_produced_block_inst_pairs = Mooncake.IDInstPair[
+                not_produced_block_inst_pairs = IDInstPair[
                     (ID(), new_inst(set_ref))
                     (ID(), new_inst(IDGotoNode(next_block_id)))
                 ]
@@ -1006,7 +1006,7 @@ end
 DynamicCallable() = DynamicCallable(Dict{Any,Any}())
 
 function (dynamic_callable::DynamicCallable)(args::Vararg{Any,N}) where {N}
-    sig = Mooncake._typeof(args)
+    sig = _typeof(args)
     callable = get(dynamic_callable.cache, sig, nothing)
     if callable === nothing
         callable = build_callable(sig)
