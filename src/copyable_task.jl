@@ -35,6 +35,10 @@ When run inside a [`TapedTask`](@ref), will immediately yield to the caller, ret
 See also: [`Libtask.consume`](@ref)
 """
 @noinline function produce(x)
+    # This function is basically just a placeholder -- it never gets run when a user
+    # `consume`s a `TapedTask`. Rather, it is transformed into other statements during the
+    # IR transformation pass below. Think of it more as being a reserved statement (e.g.
+    # like `return`) rather than a function call.
     global __v = 4 # silly side-effect to prevent this call getting constant-folded away. Should really use the effects system.
     return x
 end
