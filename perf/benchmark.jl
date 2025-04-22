@@ -8,26 +8,21 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     x = (x..., nothing)
 
     println("benchmarking $(f_displayname)...")
-    tf = Libtask.TapedFunction(f, x...)
+    tf = Libtask.TapedTask(nothing, f, x...)
 
     print("  Run Original Function:")
     @btime $f($(x)...)
     GC.gc()
 
-    print("  Run TapedFunction:")
-    @btime $tf($(x)...)
-    GC.gc()
-
-    ctf = Libtask.compile(tf)
-    print("  Run TapedFunction (compiled):")
-    @btime $ctf($(x)...)
-    GC.gc()
+    # print("  Run TapedFunction:")
+    # @btime $tf($(x)...)
+    # GC.gc()
 
     print("  Run TapedTask: ")
     x = (x[1:(end - 1)]..., produce)
     # show the number of produce calls inside `f`
     function f_task(f, x; verbose=false)
-        tt = TapedTask(f, x...)
+        tt = TapedTask(nothing, f, x...)
         c = 0
         while consume(tt) !== nothing
             c += 1
