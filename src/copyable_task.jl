@@ -21,6 +21,9 @@ See also [`set_taped_globals!`](@ref).
     return typeassert(task_local_storage(:task_variable), T)
 end
 
+# A dummy global variable used inside `produce` to ensure that `produce` calls never get
+# inlined away. This doesn't ever actually get run, provided that the `produce` call is made
+# from a `consume` call.
 __v::Int = 5
 
 """
