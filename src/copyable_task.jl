@@ -704,6 +704,8 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     push!(inst_pairs, (ID(), new_inst(set_expr)))
                 elseif stmt isa IDPhiNode
                     # do nothing -- we've already handled any `PhiNode`s.
+                elseif Meta.isexpr(stmt, :loopinfo)
+                    push!(inst_pairs, (id, inst))
                 else
                     throw(error("Unhandled stmt $stmt of type $(typeof(stmt))"))
                 end

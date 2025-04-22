@@ -202,6 +202,14 @@ function test_cases()
             [1, 2],
             allocs,
         ),
+        Testcase(
+            "rosenbrock",
+            nothing,
+            (rosenbrock, rand(100_000), nothing),
+            nothing,
+            [],
+            none,
+        ),
     ]
 end
 
@@ -352,6 +360,15 @@ default_kwarg_tester(x; y=5.0) = x * y
 function final_statement_produce()
     produce(1)
     return produce(2)
+end
+
+# Produces a `:loopinfo` expression.
+function rosenbrock(x, callback=nothing)
+    i = x[2:end]
+    j = x[1:(end - 1)]
+    ret = sum((1 .- j) .^ 2 + 100 * (i - j .^ 2) .^ 2)
+    callback !== nothing && callback(ret)
+    return ret
 end
 
 end
