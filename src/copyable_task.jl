@@ -43,9 +43,20 @@ See also: [`Libtask.consume`](@ref)
     return x
 end
 
-function callable_ret_type(sig, types)
+"""
+    callable_ret_type(sig, produce_types)
+
+Computes the types which might possibly be returned from a `TapedTask`, where `sig` is the
+signature (something of the form `Tuple{...}`) of the function from which the `TapedTask` is
+constructed, and `produce_types` are the possible types which such a call might `produce`.
+
+In general, computing `produce_types` requires analysing the `produce` type of any statment
+in the IR associated to `sig` which might `produce`. See locations where this function is
+called to see where this happens.
+"""
+function callable_ret_type(sig, produce_types)
     produce_type = Union{}
-    for t in types
+    for t in produce_types
         p = isconcretetype(t) ? ProducedValue{t} : ProducedValue{T} where {T<:t}
         produce_type = CC.tmerge(p, produce_type)
     end
