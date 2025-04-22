@@ -9,10 +9,6 @@ operation must return a specific type, specify `T`. If you do not know what type
 return, pass `Any` -- this will typically yield type instabilities, but will run correctly.
 
 See also [`set_taped_globals!`](@ref).
-
-# Extended Help
-
-
 """
 @noinline function get_taped_globals(::Type{T}) where {T}
     # This function is `@noinline`d to ensure that the type-unstable items in here do not
