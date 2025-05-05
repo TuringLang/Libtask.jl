@@ -63,6 +63,14 @@ function callable_ret_type(sig, produce_types)
     return Union{Base.code_ircode_by_type(sig)[1][2],produce_type}
 end
 
+"""
+    build_callable(sig::Type{<:Tuple})
+
+Returns a `MistyClosure` which is used by `TapedTask` to implement the
+`produce`-`consume` interface. If this method has been called using `sig` in
+the current world age, will make a copy of an existing `MistyClosure`. If not,
+will derive it from scratch (derive the IR + compile it etc).
+"""
 function build_callable(sig::Type{<:Tuple})
     key = CacheKey(Base.get_world_counter(), sig)
     if haskey(mc_cache, key)
