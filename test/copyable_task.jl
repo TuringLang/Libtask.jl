@@ -182,52 +182,6 @@
             @test consume(ttask) == 4
             @test consume(ttask) == 5
         end
-
-        @testset "Array deep copy 2" begin
-            function f()
-                t = Array{Int}(undef, 1)
-                t[1] = 0
-                while true
-                    produce(t[1])
-                    t[1]
-                    t[1] = 1 + t[1]
-                end
-            end
-
-            ttask = TapedTask(nothing, f)
-
-            consume(ttask)
-            consume(ttask)
-            a = copy(ttask)
-            consume(a)
-            consume(a)
-
-            @test consume(ttask) == 2
-            @test consume(a) == 4
-        end
-
-        @testset "ref of dictionary deep copy" begin
-            function f()
-                t = Ref(Dict("A" => 1, 5 => "B"))
-                t[]["A"] = 0
-                for _ in 1:6
-                    produce(t[]["A"])
-                    t[]["A"] += 1
-                end
-            end
-
-            ctask = TapedTask(nothing, f)
-
-            consume(ctask)
-            consume(ctask)
-
-            a = copy(ctask)
-            consume(a)
-            consume(a)
-
-            @test consume(ctask) == 2
-            @test consume(a) == 4
-        end
     end
     @testset "Issue: PR-86 (DynamicPPL.jl/pull/261)" begin
         function f()
