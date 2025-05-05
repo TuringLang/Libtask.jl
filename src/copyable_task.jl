@@ -1018,7 +1018,14 @@ Base.IteratorSize(::Type{<:TapedTask}) = Base.SizeUnknown()
 Base.IteratorEltype(::Type{<:TapedTask}) = Base.EltypeUnknown()
 
 """
+    LazyCallable
 
+Used to implement static dispatch, while avoiding the need to construct the
+callable immediately. When constructed, just stores the signature of the
+callable and its return type. Constructs the callable when first called.
+
+All type information is known, so it is possible to make this callable type
+stable provided that the return type is concrete.
 """
 mutable struct LazyCallable{sig<:Tuple,Tret}
     mc::MistyClosure
@@ -1038,6 +1045,12 @@ function construct_callable!(l::LazyCallable{sig}) where {sig}
     return nothing
 end
 
+"""
+    DynamicCallable
+
+Like [`LazyCallable`](@ref), but without any type information. Used to implement
+dynamic dispatch.
+"""
 mutable struct DynamicCallable{V}
     cache::V
 end
