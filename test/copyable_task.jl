@@ -141,7 +141,7 @@
     end
 
     @testset "copying" begin
-        # Test case 1: stack allocated objects are deep copied.
+        # Test case 1: stack allocated objects copied by value.
         @testset "stack allocated objects shallow copy" begin
             function f()
                 t = 0
