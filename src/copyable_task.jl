@@ -87,6 +87,9 @@ function build_callable(sig::Type{<:Tuple})
     end
 end
 
+# Note: `position` must be a const field of this mutable struct, rather than
+# simply being a mutable field because it must alias a `Ref` in the captures
+# field of `mc`. This correspondence is ensured upon construction.
 mutable struct TapedTask{Ttaped_globals,Tfargs,Tmc<:MistyClosure}
     taped_globals::Ttaped_globals
     const fargs::Tfargs
