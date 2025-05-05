@@ -14,10 +14,6 @@ function benchmark_driver!(f, x...; f_displayname=string(f))
     @btime $f($(x)...)
     GC.gc()
 
-    # print("  Run TapedFunction:")
-    # @btime $tf($(x)...)
-    # GC.gc()
-
     print("  Run TapedTask: ")
     x = (x[1:(end - 1)]..., produce)
     # show the number of produce calls inside `f`
@@ -104,21 +100,5 @@ end
 
 xs = (randn(10, 10), randn(10, 10), randn(10), rand(10))
 benchmark_driver!(neural_net, xs...)
-
-####################################################################
-
-println("======= breakdown benchmark =======")
-
-x = rand(100000)
-tf = Libtask.TapedFunction(ackley, x, nothing)
-tf(x, nothing);
-idx = findlast((x) -> isa(x, Libtask.Instruction), tf.tape)
-ins = tf.tape[idx]
-b = ins.input[1]
-
-@show length(ins.input)
-@btime map(x -> Libtask._lookup(tf, x), ins.input)
-@btime Libtask._lookup(tf, b)
-@btime tf.binding_values[b]
 
 println("done")
