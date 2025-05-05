@@ -222,7 +222,7 @@ julia> consume(t)
 """
 function TapedTask(taped_globals::Any, fargs...; kwargs...)
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
-    seed_id!()
+    seed_id!() # a BBCode thing.
     mc, count_ref = build_callable(typeof(all_args))
     return TapedTask(taped_globals, all_args, mc, count_ref)
 end
