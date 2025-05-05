@@ -14,4 +14,5 @@ Libtask.BasicBlockCode
 Libtask.opaque_closure
 Libtask.misty_closure
 Libtask.optimise_ir!
+Libtask.build_callable
 ```

@@ -74,8 +74,7 @@ will derive it from scratch (derive the IR + compile it etc).
 function build_callable(sig::Type{<:Tuple})
     key = CacheKey(Base.get_world_counter(), sig)
     if haskey(mc_cache, key)
-        v = fresh_copy(mc_cache[key])
-        return v
+        return fresh_copy(mc_cache[key])
     else
         ir = Base.code_ircode_by_type(sig)[1][1]
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
