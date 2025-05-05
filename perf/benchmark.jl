@@ -73,8 +73,8 @@ benchmark_driver!(ackley, x)
 function generate_matrix_test(n)
     return (x, callback=nothing) -> begin
         # @assert length(x) == 2n^2 + n
-        a = reshape(x[1:(n ^ 2)], n, n)
-        b = reshape(x[(n ^ 2 + 1):(2n ^ 2)], n, n)
+        a = reshape(x[1:(n^2)], n, n)
+        b = reshape(x[(n^2 + 1):(2n^2)], n, n)
         ret = log.((a * b) + a - b)
         callback !== nothing && callback(ret)
         return ret
@@ -83,7 +83,7 @@ end
 
 n = 100
 matrix_test = generate_matrix_test(n)
-x = collect(1.0:(2n ^ 2 + n))
+x = collect(1.0:(2n^2 + n))
 benchmark_driver!(matrix_test, x; f_displayname="matrix_test")
 
 ####################################################################
