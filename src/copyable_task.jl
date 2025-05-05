@@ -219,6 +219,16 @@ julia> consume(t)
 
 `Int`s have been used here, but it is permissible to set the value returned by
 [`Libtask.get_taped_globals`](@ref) to anything you like.
+
+# Implementation Notes
+
+Under the hood, a `TapedTask` is implemented in terms of a `MistyClosure.` Each SSA value in
+the original IR is replaced with a `Base.RefValue` of the same type. Each statement writes
+to / reads from these SSAs. These refs are stored in the data that the `MistyClosure` closes
+over, meaning that they persist between calls to `consume`. These refs are copied when a
+copy of a `TapedTask` is made -- since they define the entire state of a task, making a
+completely independent copy of them ensures that a completely independent copy of the task
+is made.
 """
 function TapedTask(taped_globals::Any, fargs...; kwargs...)
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
