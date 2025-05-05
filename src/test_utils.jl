@@ -2,7 +2,6 @@ module TestUtils
 
 using ..Libtask
 using Test
-using ..Libtask: TapedTask
 
 # Function barrier to ensure inference in value types.
 function count_allocs(f::F, x::Vararg{Any,N}) where {F,N}
@@ -203,12 +202,7 @@ function test_cases()
             allocs,
         ),
         Testcase(
-            "rosenbrock",
-            nothing,
-            (rosenbrock, rand(100_000), nothing),
-            nothing,
-            [],
-            none,
+            "rosenbrock", nothing, (rosenbrock, rand(100_000), nothing), nothing, [], none
         ),
     ]
 end
