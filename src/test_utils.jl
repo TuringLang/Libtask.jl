@@ -238,8 +238,6 @@ function no_produce_test(x, y)
     return (; c, x, y)
 end
 
-# Old test case without any produce statements used to test TapedFunction. Since this
-# doesn't exist as a distinct entity anymore, not clear that this test case is useful.
 mutable struct C
     i::Int
     C(x, y) = new(x + y)
