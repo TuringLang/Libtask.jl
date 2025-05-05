@@ -592,7 +592,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
             #   ID(%2) = deref_phi(refs, ID(%1))
             #            set_ref_at!(refs, ref_ind_for_ID(%1), ID(%2))
             #
-            # where `deref_phi` retrives the value in position `ref_ind_for_ID(%n)` if
+            # where `deref_phi` retrieves the value in position `ref_ind_for_ID(%n)` if
             # ID(%1) is a `TupleRef`, and `1` otherwise, and `set_ref_at!` sets the `Ref`
             # at position `ref_ind_for_ID(%1)` to the value of `ID(%2)`. See the actual
             # implementations below.
