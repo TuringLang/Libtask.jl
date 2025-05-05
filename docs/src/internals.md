@@ -5,7 +5,6 @@ Libtask.produce_value
 Libtask.is_produce_stmt
 Libtask.might_produce
 Libtask.stmt_might_produce
-Libtask.LazyCallable
 Libtask.inc_args
 Libtask.get_type
 Libtask._typeof
@@ -17,4 +16,5 @@ Libtask.optimise_ir!
 Libtask.build_callable
 Libtask.LazyCallable
 Libtask.DynamicCallable
+Libtask.callable_ret_type
 ```
