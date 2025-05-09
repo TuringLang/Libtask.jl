@@ -244,7 +244,7 @@ the transformed IR would be something like
 ```julia
 %5 = ref_for_%3[]
 %6 = f(%5, _1)
-     ref_for_%5[] = %6
+ref_for_%5[] = %6
 ```
 Setting things up in this manner ensures that an independent copy is made by simply copying
 all of the refs. A `deepcopy` is required for correctness as, while the refs do not alias
