@@ -231,7 +231,7 @@ There are two main considerations when transforming the `IRCode`. The first is t
 that the "state" of a `TapedTask` can be copied, so that a `TapedTask` can be copied, and
 resumed later. The complete state of a `TapedTask` is given by its arguments, and the value
 associated to each ssa (these are initially undefined).
-To make it possible to copy the state of the ssa values, we place a `Base.RefValue{T}`s into
+To make it possible to copy the state of the ssa values, we place `Base.RefValue{T}`s into
 the captures of the `MistyClosure` which implements the `TapedTask`, one for each ssa in the
 IR (`T` is the type inferred for that ssa). A call is replaced by reading in values of ssas
 from these refs, applying the original operation, and writing the result to the ref
