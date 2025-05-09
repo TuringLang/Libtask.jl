@@ -257,11 +257,12 @@ modified to ensure that whenever a `produce` call in encountered, the `MistyClos
 the argument to `produce`, and that subsequent calls resume computation immediately after
 the `produce` statement. This resumption is achieved by setting the value of a counter
 prior to returning following a `produce` statement -- a sequence of comparisons against this
-counter, and `goto-if-not` statement are inserted at the top of the IR. These are used to
-jump to the point in the code from which computation should resume. These are set up such
-that, when the `TapedTask` is first run, computation start froms the first statement.
-Observe that this is also facilitated by the ref mechanism
-discussed above, as it ensures that the state persists between calls to a `MistyClosure`.
+counter, and [`GotoIfNot`](https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form)
+statement are inserted at the top of the IR. These are used to jump to the point in the code
+from which computation should resume. These are set up such that, when the `TapedTask` is
+first run, computation start froms the first statement. Observe that this is also
+facilitated by the ref mechanism discussed above, as it ensures that the state persists
+between calls to a `MistyClosure`.
 
 The above gives the broad outline of how `TapedTask`s are implemented. We refer interested
 readers to the code, which is extensively commented to explain implementation details.
