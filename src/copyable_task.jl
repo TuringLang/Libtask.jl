@@ -247,7 +247,7 @@ the transformed IR would be something like
      ref_for_%5[] = %6
 ```
 Setting things up in this manner ensures that an independent copy is made by simply copying
-all of the refs. A `deepcopy` is required for correctness as, while the refs to not alias
+all of the refs. A `deepcopy` is required for correctness as, while the refs do not alias
 one another (by construction), their contents might. For example, two refs may contain the
 same `Array`, and in general the behaviour of a function depends on this relationship.
 
@@ -931,7 +931,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 # This `Any` only affects the return type of the function being derived
                 # here. Importantly, it does not affect the type stability of subsequent
                 # statements in this function. As a result, the impact ought to be
-                # reasoanbly limited.
+                # reasonably limited.
                 push!(possible_produce_types, Any)
 
                 # Create a new basic block from the existing statements, since all new
