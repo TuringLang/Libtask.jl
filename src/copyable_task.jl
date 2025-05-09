@@ -423,6 +423,15 @@ const TypeInfo = Tuple{Vector{Any},Dict{ID,Type}}
     _typeof(x)
 
 Central definition of typeof, which is specific to the use-required in this package.
+Largely the same as `Base._stable_typeof`, differing only in a handful of
+situations, for example:
+```jldoctest
+julia> Base._stable_typeof((Float64,))
+Tuple{DataType}
+
+julia> Libtask._typeof((Float64,))
+Tuple{Type{Float64}}
+```
 """
 _typeof(x) = Base._stable_typeof(x)
 _typeof(x::Tuple) = Tuple{map(_typeof, x)...}
@@ -881,6 +890,11 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 # At present, we're not able to properly infer the values which might
                 # potentially be produced by a call-which-might-produce. Consequently, we
                 # have to assume they can produce anything.
+                #
+                # This `Any` only affects the return type of the function being derived
+                # here. Importantly, it does not affect the type stability of subsequent
+                # statements in this function. As a result, the impact ought to be
+                # reasoanbly limited.
                 push!(possible_produce_types, Any)
 
                 # Create a new basic block from the existing statements, since all new

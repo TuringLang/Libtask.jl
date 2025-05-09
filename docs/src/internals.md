@@ -17,4 +17,5 @@ Libtask.build_callable
 Libtask.LazyCallable
 Libtask.DynamicCallable
 Libtask.callable_ret_type
+Libtask.fresh_copy
 ```
