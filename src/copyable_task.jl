@@ -222,13 +222,44 @@ julia> consume(t)
 
 # Implementation Notes
 
-Under the hood, a `TapedTask` is implemented in terms of a `MistyClosure.` Each SSA value in
-the original IR is replaced with a `Base.RefValue` of the same type. Each statement writes
-to / reads from these SSAs. These refs are stored in the data that the `MistyClosure` closes
-over, meaning that they persist between calls to `consume`. These refs are copied when a
-copy of a `TapedTask` is made -- since they define the entire state of a task, making a
-completely independent copy of them ensures that a completely independent copy of the task
-is made.
+Under the hood, we implement a `TapedTask` by obtaining the `IRCode` associated to the
+original function, transforming it so that it implements the semantics required by the
+`produce` / `consume` interface, and placing it inside a `MistyClosure` to make it possible
+to execute.
+
+There are two main considerations when transforming the `IRCode`. The first is to ensure
+that the "state" of a `TapedTask` can be copied, so that a `TapedTask` can be copied, and
+resumed later. The complete state of a `TapedTask` is given by its arguments, and the value
+associated to each ssa (these are initially undefined).
+To make it possible to copy the state of the ssa values, we place a `Base.RefValue{T}`s into
+the captures of the `MistyClosure` which implements the `TapedTask`, one for each ssa in the
+IR (`T` is the type inferred for that ssa). A call is replaced by reading in values of ssas
+from these refs, applying the original operation, and writing the result to the ref
+associated to the instruction. For example, if the original snippet of `IRCode` is something
+like
+```julia
+%5 = f(%3, _1)
+```
+the transformed IR would be something like
+```julia
+%5 = ref_for_%3[]
+%6 = f(%5, _1)
+     ref_for_%5[] = %6
+```
+Setting things up in this manner ensures that an independent copy is made by simply copying
+all of the refs. A `deepcopy` is required for correctness as, while the refs to not alias
+one another (by construction), their contents might. For example, two refs may contain the
+same `Array`, and in general the behaviour of a function depends on this relationship.
+
+The second component of the transformation is implementing the `produce` mechanism, and the
+ability to resume computation from where we produced. Roughly speaking, the `IRCode` must be
+modified to ensure that whenever a `produce` call in encountered, the `MistyClosure` returns
+the argument to `produce`, and that subsequent calls resume computation immediately after
+the `produce` statement. Observe that this is also facilitated by the ref mechanism
+discussed above, as it ensures that the state persists between calls to a `MistyClosure`.
+
+The above gives the broad outline of how `TapedTask`s are implemented. We refer interested
+readers to the code, which is extensively commented to explain implementation details.
 """
 function TapedTask(taped_globals::Any, fargs...; kwargs...)
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
