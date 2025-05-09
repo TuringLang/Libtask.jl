@@ -1,26 +1,21 @@
 module Libtask
 
-using FunctionWrappers: FunctionWrapper
-using LRUCache
+# We'll emit `MistyClosure`s rather than `OpaqueClosure`s.
+using MistyClosures
 
-export TapedTask, consume, produce
+# Import some names from the compiler.
+const CC = Core.Compiler
+using Core: OpaqueClosure
+using Core.Compiler: Argument, IRCode, ReturnNode
 
-export TArray, tzeros, tfill, TRef # legacy types back compat
+# IR-related functionality from Mooncake.
+include("utils.jl")
+include("bbcode.jl")
+using .BasicBlockCode
 
+include("copyable_task.jl")
+include("test_utils.jl")
 
-@static if isdefined(Core, :TypedSlot) || isdefined(Core.Compiler, :TypedSlot)
-    # Julia v1.10 moved Core.TypedSlot to Core.Compiler
-    # Julia v1.11 removed Core.Compiler.TypedSlot
-    const TypedSlot = @static if isdefined(Core, :TypedSlot)
-        Core.TypedSlot
-    else
-        Core.Compiler.TypedSlot
-    end
-else
-    struct TypedSlot end # Dummy
-end
-
-include("tapedfunction.jl")
-include("tapedtask.jl")
+export TapedTask, consume, produce, get_taped_globals, set_taped_globals!
 
 end

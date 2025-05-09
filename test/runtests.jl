@@ -1,11 +1,8 @@
-using Libtask
-using Test
-
-include("tf.jl")
-include("tapedtask.jl")
-include("tape_copy.jl")
-include("issues.jl")
-
-if haskey(ENV, "BENCHMARK")
-    include("benchmarks.jl")
+include("front_matter.jl")
+@testset "Libtask" begin
+    @testset "quality" begin
+        Aqua.test_all(Libtask)
+        @test JuliaFormatter.format(Libtask; verbose=false, overwrite=false)
+    end
+    include("copyable_task.jl")
 end

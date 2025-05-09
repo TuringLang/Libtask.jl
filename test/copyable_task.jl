@@ -1,20 +1,19 @@
-@testset "tapedtask" begin
-    @testset "construction" begin
-        function f()
-            t = 1
-            while true
-                produce(t)
-                t = 1 + t
-            end
-        end
-
-        ttask = TapedTask(f)
-        @test consume(ttask) == 1
-
-        ttask = TapedTask((f, Union{}))
-        @test consume(ttask) == 1
+@testset "copyable_task" begin
+    for case in Libtask.TestUtils.test_cases()
+        case()
     end
-
+    @testset "set_taped_globals!" begin
+        function f()
+            produce(Libtask.get_taped_globals(Int))
+            produce(Libtask.get_taped_globals(Int))
+            return nothing
+        end
+        t = TapedTask(5, f)
+        @test consume(t) == 5
+        Libtask.set_taped_globals!(t, 6)
+        @test consume(t) == 6
+        @test consume(t) === nothing
+    end
     @testset "iteration" begin
         function f()
             t = 1
@@ -24,7 +23,7 @@
             end
         end
 
-        ttask = TapedTask(f)
+        ttask = TapedTask(nothing, f)
 
         next = iterate(ttask)
         @test next === (1, nothing)
@@ -54,14 +53,11 @@
                 end
             end
 
-            ttask = TapedTask(f)
+            ttask = TapedTask(nothing, f)
             try
                 consume(ttask)
             catch ex
                 @test ex isa MethodError
-            end
-            if VERSION >= v"1.5"
-                @test ttask.task.exception isa MethodError
             end
         end
 
@@ -75,14 +71,11 @@
                 end
             end
 
-            ttask = TapedTask(f)
+            ttask = TapedTask(nothing, f)
             try
                 consume(ttask)
             catch ex
                 @test ex isa ErrorException
-            end
-            if VERSION >= v"1.5"
-                @test ttask.task.exception isa ErrorException
             end
         end
 
@@ -97,14 +90,11 @@
                 end
             end
 
-            ttask = TapedTask(f)
+            ttask = TapedTask(nothing, f)
             try
                 consume(ttask)
             catch ex
                 @test ex isa BoundsError
-            end
-            if VERSION >= v"1.5"
-                @test ttask.task.exception isa BoundsError
             end
         end
 
@@ -119,15 +109,12 @@
                 end
             end
 
-            ttask = TapedTask(f)
+            ttask = TapedTask(nothing, f)
             @test consume(ttask) == 2
             try
                 consume(ttask)
             catch ex
                 @test ex isa BoundsError
-            end
-            if VERSION >= v"1.5"
-                @test ttask.task.exception isa BoundsError
             end
         end
 
@@ -142,7 +129,7 @@
                 end
             end
 
-            ttask = TapedTask(f)
+            ttask = TapedTask(nothing, f)
             @test consume(ttask) == 2
             ttask2 = copy(ttask)
             try
@@ -150,10 +137,76 @@
             catch ex
                 @test ex isa BoundsError
             end
-            @test ttask.task.exception === nothing
-            if VERSION >= v"1.5"
-                @test ttask2.task.exception isa BoundsError
+        end
+    end
+
+    @testset "copying" begin
+        # Test case 1: stack allocated objects copied by value.
+        @testset "stack allocated objects shallow copy" begin
+            function f()
+                t = 0
+                while true
+                    produce(t)
+                    t = 1 + t
+                end
+            end
+
+            ttask = TapedTask(nothing, f)
+            @test consume(ttask) == 0
+            @test consume(ttask) == 1
+            a = copy(ttask)
+            @test consume(a) == 2
+            @test consume(a) == 3
+            @test consume(ttask) == 2
+            @test consume(ttask) == 3
+        end
+
+        # Test case 2: Array objects are deeply copied.
+        @testset "Array objects deep copy" begin
+            function f()
+                t = [0 1 2]
+                while true
+                    produce(t[1])
+                    t[1] = 1 + t[1]
+                end
+            end
+
+            ttask = TapedTask(nothing, f)
+            @test consume(ttask) == 0
+            @test consume(ttask) == 1
+            a = copy(ttask)
+            @test consume(a) == 2
+            @test consume(a) == 3
+            @test consume(ttask) == 2
+            @test consume(ttask) == 3
+            @test consume(ttask) == 4
+            @test consume(ttask) == 5
+        end
+    end
+    @testset "Issue: PR-86 (DynamicPPL.jl/pull/261)" begin
+        function f()
+            t = Array{Int}(undef, 1)
+            t[1] = 0
+            for _ in 1:4000
+                produce(t[1])
+                t[1]
+                t[1] = 1 + t[1]
             end
         end
+
+        ttask = TapedTask(nothing, f)
+
+        ex = try
+            for _ in 1:999
+                consume(ttask)
+                consume(ttask)
+                a = copy(ttask)
+                consume(a)
+                consume(a)
+            end
+        catch ex
+            ex
+        end
+        @test ex === nothing
     end
 end
