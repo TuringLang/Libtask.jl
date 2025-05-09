@@ -237,6 +237,22 @@ function TapedTask(taped_globals::Any, fargs...; kwargs...)
     return TapedTask(taped_globals, all_args, mc, count_ref)
 end
 
+"""
+    fresh_copy(mc::T) where {T<:MistyClosure}
+
+Creates an independent copy of `mc` by (carefully) replacing the `Ref`s it
+contains it its `captures`. The resuting `MistyClosure` is safe to run.
+
+This is achieved by replacing most `Ref`s with new `Ref`s of the same (el)type,
+but with nothing stored in them -- values will be stored in them when the
+new `MistyClosure` is called. The only exception are `DynamicCallable`s and
+`LazyCallable`s -- these are constructed when the `MistyClosure`s IR is derived,
+so fresh instances of them are placed in the associated `Ref`.
+
+The position counter is reset to `-1` (indicating that execution should proceed
+from the start of the IR, rather than eg. jumping to a line following a
+`produce` statement.
+"""
 function fresh_copy(mc::T) where {T<:MistyClosure}
     new_captures = map(mc.oc.captures) do r
         if eltype(r) <: DynamicCallable
