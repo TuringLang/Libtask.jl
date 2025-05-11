@@ -9,3 +9,5 @@ Resumable and copyable functions in Julia, with optional function-specific globa
 See the docs for example usage.
 
 Used in the [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming language to implement various particle-based inference methods, for example those in [AdvancedPS.jl](https://github.com/TuringLang/AdvancedPS.jl/).
+
+Related: [ResumableFunctions.jl](https://github.com/JuliaDynamics/ResumableFunctions.jl)
