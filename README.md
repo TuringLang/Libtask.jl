@@ -5,9 +5,10 @@
 [![Libtask Testing](https://github.com/TuringLang/Libtask.jl/workflows/Libtask%20Testing/badge.svg)](https://github.com/TuringLang/Libtask.jl/actions?branch=main)
 
 
-Resumable and copyable functions in Julia, with optional function-specific globals.
-See the docs for example usage.
+Resumable and copyable functions (a.k.a. coroutines) for Julia, with optional function-specific globals.
+See the [docs](https://turinglang.github.io/Libtask.jl/dev) for example usage.
 
 Used in the [Turing](https://github.com/TuringLang/Turing.jl) probabilistic programming language to implement various particle-based inference methods, for example those in [AdvancedPS.jl](https://github.com/TuringLang/AdvancedPS.jl/).
 
-Related: [ResumableFunctions.jl](https://github.com/JuliaDynamics/ResumableFunctions.jl)
+## Related: 
+- [ResumableFunctions.jl](https://github.com/JuliaDynamics/ResumableFunctions.jl)
