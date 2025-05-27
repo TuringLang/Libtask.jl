@@ -15,6 +15,7 @@ First, manipulation of [`TapedTask`](@ref)s:
 Libtask.consume
 Base.copy(::Libtask.TapedTask)
 Libtask.set_taped_globals!
+Libtask.might_produce(::Type{<:Tuple})
 ```
 
 Functions for use inside a [`TapedTask`](@ref)s are:
