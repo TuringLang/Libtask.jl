@@ -18,14 +18,14 @@ Base.copy(::Libtask.TapedTask)
 Libtask.set_taped_globals!
 ```
 
-An opt-in mechanism marks functions that might contain `Libtask.produce` statements. 
-
-```@docs; canonical=true
-Libtask.might_produce(::Type{<:Tuple})
-```
-
 ## Functions for use inside a [`TapedTask`](@ref)s:
 ```@docs; canonical=true
 Libtask.produce
 Libtask.get_taped_globals
+```
+
+An opt-in mechanism marks functions that might contain `Libtask.produce` statements. 
+
+```@docs; canonical=true
+Libtask.might_produce(::Type{<:Tuple})
 ```
