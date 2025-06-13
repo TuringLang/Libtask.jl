@@ -374,8 +374,8 @@ get_value(x) = x
 expression, otherwise `false`.
 """
 function is_produce_stmt(x)::Bool
-    if Meta.isexpr(x, :invoke) && length(x.args) == 3
-        return get_value(x.args[2]) === produce
+    if Meta.isexpr(x, :invoke) && length(x.args) == 3 && x.args[1] isa Core.MethodInstance
+        return x.args[1].specTypes <: Tuple{typeof(produce),Any}
     elseif Meta.isexpr(x, :call) && length(x.args) == 2
         return get_value(x.args[1]) === produce
     else
