@@ -72,6 +72,13 @@ the current world age, will make a copy of an existing `MistyClosure`. If not,
 will derive it from scratch (derive the IR + compile it etc).
 """
 function build_callable(sig::Type{<:Tuple})
+    if sig <: Tuple{typeof(produce),Any}
+        msg = """
+            Can not construct a TapedTask for a 'naked' call to `produce`.
+             Please wrap the call to `produce` in a function, and construct a
+             TapedTask from that function."""
+        throw(ArgumentError(msg))
+    end
     key = CacheKey(Base.get_world_counter(), sig)
     if haskey(mc_cache, key)
         return fresh_copy(mc_cache[key])
