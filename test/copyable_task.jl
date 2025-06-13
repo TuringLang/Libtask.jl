@@ -138,6 +138,12 @@
                 @test ex isa BoundsError
             end
         end
+
+        @testset "Naked produce" begin
+            @test_throws "wrap the call to `produce` in a function" Libtask.consume(
+                Libtask.TapedTask(nothing, Libtask.produce, 0)
+            )
+        end
     end
 
     @testset "copying" begin
@@ -208,5 +214,17 @@
             ex
         end
         @test ex === nothing
+    end
+
+    @testset "Issue #185" begin
+        function g(x)
+            if x > 0
+                x = 2
+            else
+                x = 0.1
+            end
+            return produce(x)
+        end
+        @test Libtask.consume(Libtask.TapedTask(nothing, g, 1.0)) == 2
     end
 end
