@@ -217,14 +217,7 @@
     end
 
     @testset "Issue #185" begin
-        function g(x)
-            if x > 0
-                x = 2
-            else
-                x = 0.1
-            end
-            return produce(x)
-        end
-        @test Libtask.consume(Libtask.TapedTask(nothing, g, 1.0)) == 2
+        g() = produce(randn() > 0 ? 2 : 0.1)
+        @test Libtask.consume(Libtask.TapedTask(nothing, g)) == 2
     end
 end
