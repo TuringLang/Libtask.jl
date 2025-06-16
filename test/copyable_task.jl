@@ -217,7 +217,7 @@
     end
 
     @testset "Issue #185" begin
-        g() = produce(randn() > 0 ? 2 : 0.1)
+        g() = produce(rand() > -1.0 ? 2 : 0.1)
         @test Libtask.consume(Libtask.TapedTask(nothing, g)) == 2
     end
 end
