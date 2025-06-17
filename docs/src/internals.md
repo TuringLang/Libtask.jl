@@ -9,6 +9,7 @@ Libtask.get_type
 Libtask._typeof
 Libtask.replace_captures
 Libtask.BasicBlockCode
+Libtask.check_varargs
 Libtask.opaque_closure
 Libtask.misty_closure
 Libtask.optimise_ir!
