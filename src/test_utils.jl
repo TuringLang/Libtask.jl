@@ -171,6 +171,38 @@ function test_cases()
             none,
         ),
         Testcase(
+            "nested with args (static)",
+            nothing,
+            (static_nested_outer_args,),
+            nothing,
+            [:a, :b, false],
+            none,
+        ),
+        Testcase(
+            "nested with args (static + used)",
+            nothing,
+            (static_nested_outer_use_produced_args,),
+            nothing,
+            [:a, :b, 1],
+            none,
+        ),
+        Testcase(
+            "nested with args (dynamic)",
+            nothing,
+            (dynamic_nested_outer_args, Ref{Any}(nested_inner_args)),
+            nothing,
+            [:a, :b, false],
+            none,
+        ),
+        Testcase(
+            "nested with args (dynamic + used)",
+            nothing,
+            (dynamic_nested_outer_use_produced_args, Ref{Any}(nested_inner_args)),
+            nothing,
+            [:a, :b, 1],
+            none,
+        ),
+        Testcase(
             "callable struct", nothing, (CallableStruct(5), 4), nothing, [5, 4, 9], allocs
         ),
         Testcase(
@@ -330,6 +362,40 @@ end
 
 function dynamic_nested_outer_use_produced(f::Ref{Any})
     y = f[]()
+    produce(y)
+    return nothing
+end
+
+@noinline function nested_inner_args(xs...)
+    for x in xs
+        produce(x)
+    end
+    return 1
+end
+
+Libtask.might_produce(::Type{<:Tuple{typeof(nested_inner_args),Any}}) = true
+Libtask.might_produce(::Type{<:Tuple{typeof(nested_inner_args),Any,Vararg}}) = true
+
+function static_nested_outer_args()
+    nested_inner_args(:a, :b)
+    produce(false)
+    return nothing
+end
+
+function static_nested_outer_use_produced_args()
+    y = nested_inner_args(:a, :b)
+    produce(y)
+    return nothing
+end
+
+function dynamic_nested_outer_args(f::Ref{Any})
+    f[](:a, :b)
+    produce(false)
+    return nothing
+end
+
+function dynamic_nested_outer_use_produced_args(f::Ref{Any})
+    y = f[](:a, :b)
     produce(y)
     return nothing
 end
