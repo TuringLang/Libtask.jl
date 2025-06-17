@@ -64,31 +64,6 @@ function callable_ret_type(sig, produce_types)
 end
 
 """
-    check_varargs(sig, ir)
-
-For a call signature `sig` and the IR code for it, check whether this is a Varargs call.
-
-The need for this arises because the output of `Base.code_ircode_by_type` does not
-distinguish between varargs and tuples, see https://github.com/JuliaLang/julia/issues/58753. Thus we have to go back to the signature that created the IR to check. There are two cases
-that signal that this is indeed a varargs call:
-1. The last argument in `sig` is a `Vararg` object.
-2. The last argument of `ir` is a `Tuple` of the types of the last arguments of `sig`. For
-instance `sig` may end in `Symbol, Tuple{Int, Int}` and the last argument of `ir` would be
-`Tuple{Symbol, Tuple{Int, Int}}`.
-
-That there are these two cases, and only these two cases, is not based on a good
-understanding of anything, but rather on observing which cases arise in our test suite. This solution is thus a hack and should be rewritten by someone who actually understands how IR
-handles `Varargs`.
-"""
-function check_varargs(sig, ir)
-    sig.parameters[end] isa Core.TypeofVararg && return true
-    (ir.argtypes[end] isa Type && ir.argtypes[end] <: Tuple) || return false
-    ir_last_arg_types = ir.argtypes[end].parameters
-    sig_last_arg_types = sig.parameters[(end - length(ir_last_arg_types) + 1):end]
-    return sig_last_arg_types == ir_last_arg_types
-end
-
-"""
     build_callable(sig::Type{<:Tuple})
 
 Returns a `MistyClosure` which is used by `TapedTask` to implement the
@@ -109,7 +84,8 @@ function build_callable(sig::Type{<:Tuple})
         return fresh_copy(mc_cache[key])
     else
         ir = Base.code_ircode_by_type(sig)[1][1]
-        isva = check_varargs(sig, ir)
+        # Check whether this is a varargs call.
+        isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
         unoptimised_ir = IRCode(bb)
         optimised_ir = optimise_ir!(unoptimised_ir)
