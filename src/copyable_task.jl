@@ -84,11 +84,13 @@ function build_callable(sig::Type{<:Tuple})
         return fresh_copy(mc_cache[key])
     else
         ir = Base.code_ircode_by_type(sig)[1][1]
+        # Check whether this is a varargs call.
+        isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
         unoptimised_ir = IRCode(bb)
         optimised_ir = optimise_ir!(unoptimised_ir)
         mc_ret_type = callable_ret_type(sig, types)
-        mc = misty_closure(mc_ret_type, optimised_ir, refs...; do_compile=true)
+        mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
         mc_cache[key] = mc
         return mc, refs[end]
     end
@@ -315,7 +317,7 @@ end
 """
     set_taped_globals!(t::TapedTask, new_taped_globals)::Nothing
 
-Set the `taped_globals` of `t` to `new_taped_globals`. Any calls to 
+Set the `taped_globals` of `t` to `new_taped_globals`. Any calls to
 [`get_taped_globals`](@ref) in future calls to `consume(t)` (either directly, or implicitly
 via iteration) will see this new value.
 """
@@ -573,7 +575,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # We enforced above the condition that the final statement in a basic block must not
     # produce. This ensures that the final split does not produce. While not strictly
     # necessary, this simplifies the implementation (see below).
-    # 
+    #
     # As a result of the above, a basic block will be associated to exactly one split if it
     # does not contain any statements which may produce.
     #
@@ -595,7 +597,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # Owing to splitting blocks up, we will need to re-label some `GotoNode`s and
     # `GotoIfNot`s. To understand this, consider the following block, whose original `ID`
     # we assume to be `ID(old_id)`.
-    # ID(new_id) - %1 = φ(ID(3) => ...) 
+    # ID(new_id) - %1 = φ(ID(3) => ...)
     # ID(new_id) - %3 = call_which_must_not_produce(...)
     # ID(new_id) - %4 = produce(%3)
     # ID(old_id) - GotoNode(ID(5))
