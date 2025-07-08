@@ -287,7 +287,7 @@ end
     fresh_copy(mc::T) where {T<:MistyClosure}
 
 Creates an independent copy of `mc` by (carefully) replacing the `Ref`s it
-contains in its `captures`. The resuting `MistyClosure` is safe to run.
+contains in its `captures`. The resulting `MistyClosure` is safe to run.
 
 This is achieved by replacing most `Ref`s with new `Ref`s of the same (el)type,
 but with nothing stored in them -- values will be stored in them when the
