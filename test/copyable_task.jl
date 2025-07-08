@@ -220,4 +220,16 @@
         g() = produce(rand() > -1.0 ? 2 : 0.1)
         @test Libtask.consume(Libtask.TapedTask(nothing, g)) == 2
     end
+
+    @testset "Return produce" begin
+        # Test calling a function that does something with the return value of `produce`.
+        # In this case it just returns it. This used to error, see
+        # https://github.com/TuringLang/Libtask.jl/issues/190.
+        produce_wrapper(x) = Libtask.produce(x)
+        Libtask.might_produce(::Type{<:Tuple{typeof(produce_wrapper),Any}}) = true
+        f(obs) = produce_wrapper(obs)
+        tt = Libtask.TapedTask(nothing, f, :a)
+        @test Libtask.consume(tt) === :a
+        @test Libtask.consume(tt) === nothing
+    end
 end
