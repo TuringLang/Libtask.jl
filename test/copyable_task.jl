@@ -220,4 +220,27 @@
         g() = produce(rand() > -1.0 ? 2 : 0.1)
         @test Libtask.consume(Libtask.TapedTask(nothing, g)) == 2
     end
+
+    @testset "Indirect produce in a loop" begin
+        # Test that we can wrap a `produce` call in another function, and call that function
+        # in a loop. This used to only produce some of the values, see
+        # https://github.com/TuringLang/Libtask.jl/issues/190.
+        produce_wrapper(x) = (Libtask.produce(x); return nothing)
+        Libtask.might_produce(::Type{<:Tuple{typeof(produce_wrapper),Any}}) = true
+        function f(obs)
+            for o in obs
+                produce_wrapper(o)
+            end
+            return nothing
+        end
+
+        # That the eltype of vals is Any is significant for reproducing the original bug.
+        # Unclear why.
+        vals = Any[:a, :b, :c]
+        tt = Libtask.TapedTask(nothing, f, vals)
+        @test Libtask.consume(tt) === :a
+        @test Libtask.consume(tt) === :b
+        @test Libtask.consume(tt) === :c
+        @test Libtask.consume(tt) === nothing
+    end
 end

@@ -287,7 +287,7 @@ end
     fresh_copy(mc::T) where {T<:MistyClosure}
 
 Creates an independent copy of `mc` by (carefully) replacing the `Ref`s it
-contains it its `captures`. The resuting `MistyClosure` is safe to run.
+contains in its `captures`. The resuting `MistyClosure` is safe to run.
 
 This is achieved by replacing most `Ref`s with new `Ref`s of the same (el)type,
 but with nothing stored in them -- values will be stored in them when the
@@ -830,6 +830,10 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 # terminator. We handle this in a similar way to the statements above.
 
                 if stmt isa ReturnNode
+                    # Reset the position counter to `-1`, so that if this function gets
+                    # called again, execution starts from the beginning.
+                    expr = Expr(:call, set_resume_block!, refs_id, Int32(-1))
+                    push!(inst_pairs, (ID(), new_inst(expr)))
                     # If returning an SSA, it might be one whose value was restored from
                     # before. Therefore, grab it out of storage, rather than assuming that
                     # it is def-ed.
