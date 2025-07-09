@@ -902,6 +902,15 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     prod_val = deref_id
                 end
 
+                # Set the ref for this statement, as we would for any other call or invoke.
+                # The TapedTask may need to read this ref when it resumes, if the return
+                # value of `produce` is used within the original function.
+                if is_used_dict[id]
+                    out_ind = ssa_id_to_ref_index_map[id]
+                    set_ref = Expr(:call, set_ref_at!, refs_id, out_ind, prod_val)
+                    push!(inst_pairs, (ID(), new_inst(set_ref)))
+                end
+
                 # Construct a `ProducedValue`.
                 val_id = ID()
                 push!(inst_pairs, (val_id, new_inst(Expr(:call, ProducedValue, prod_val))))
