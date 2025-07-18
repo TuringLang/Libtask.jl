@@ -234,7 +234,7 @@ function _control_flow_graph(blks::Vector{BBlock})::Core.Compiler.CFG
     succs = map(id -> sort(map(s -> id_to_num[s], succs_ids[id])), block_ids)
 
     # Predecessor of entry block is `0`. This needs to be added in manually.
-    @static if VERSION >= v"1.11"
+    @static if VERSION >= v"1.11.6"
         push!(preds[1], 0)
     end
 
