@@ -140,22 +140,44 @@ end
 
 collect_stmts(bb::BBlock)::Vector{IDInstPair} = collect(zip(bb.inst_ids, bb.insts))
 
-struct BBCode
-    blocks::Vector{BBlock}
-    argtypes::Vector{Any}
-    sptypes::Vector{CC.VarState}
-    linetable::Vector{Core.LineInfoNode}
-    meta::Vector{Expr}
-end
+@static if VERSION >= v"1.12-"
+    struct BBCode
+        blocks::Vector{BBlock}
+        argtypes::Vector{Any}
+        sptypes::Vector{CC.VarState}
+        debuginfo::CC.DebugInfoStream
+        meta::Vector{Expr}
+        valid_worlds::CC.WorldRange
+    end
 
-function BBCode(ir::Union{IRCode,BBCode}, new_blocks::Vector{BBlock})
-    return BBCode(
-        new_blocks,
-        CC.copy(ir.argtypes),
-        CC.copy(ir.sptypes),
-        CC.copy(ir.linetable),
-        CC.copy(ir.meta),
-    )
+    function BBCode(ir::Union{IRCode,BBCode}, new_blocks::Vector{BBlock})
+        return BBCode(
+            new_blocks,
+            CC.copy(ir.argtypes),
+            CC.copy(ir.sptypes),
+            CC.copy(ir.debuginfo),
+            CC.copy(ir.meta),
+            ir.valid_worlds,
+        )
+    end
+else
+    struct BBCode
+        blocks::Vector{BBlock}
+        argtypes::Vector{Any}
+        sptypes::Vector{CC.VarState}
+        linetable::Vector{Core.LineInfoNode}
+        meta::Vector{Expr}
+    end
+
+    function BBCode(ir::Union{IRCode,BBCode}, new_blocks::Vector{BBlock})
+        return BBCode(
+            new_blocks,
+            CC.copy(ir.argtypes),
+            CC.copy(ir.sptypes),
+            CC.copy(ir.linetable),
+            CC.copy(ir.meta),
+        )
+    end
 end
 
 # Makes use of the above outer constructor for `BBCode`.
@@ -346,20 +368,42 @@ function CC.IRCode(bb_code::BBCode)
     insts = _ids_to_line_numbers(bb_code)
     cfg = control_flow_graph(bb_code)
     insts = _lines_to_blocks(insts, cfg)
-    return IRCode(
-        CC.InstructionStream(
-            map(x -> x.stmt, insts),
-            map(x -> x.type, insts),
-            map(x -> x.info, insts),
-            map(x -> x.line, insts),
-            map(x -> x.flag, insts),
-        ),
-        cfg,
-        CC.copy(bb_code.linetable),
-        CC.copy(bb_code.argtypes),
-        CC.copy(bb_code.meta),
-        CC.copy(bb_code.sptypes),
-    )
+    @static if VERSION >= v"1.12-"
+        # See e.g. here for how the NTuple{3,Int}s get flattened for InstructionStream:
+        # https://github.com/JuliaLang/julia/blob/16a2bf0a3b106b03dda23b8c9478aab90ffda5e1/Compiler/src/ssair/ir.jl#L299
+        lines = map(x -> x.line, insts)
+        lines = collect(Iterators.flatten(lines))
+        return IRCode(
+            CC.InstructionStream(
+                map(x -> x.stmt, insts),
+                collect(Any, map(x -> x.type, insts)),
+                collect(CC.CallInfo, map(x -> x.info, insts)),
+                lines,
+                map(x -> x.flag, insts),
+            ),
+            cfg,
+            CC.copy(bb_code.debuginfo),
+            CC.copy(bb_code.argtypes),
+            CC.copy(bb_code.meta),
+            CC.copy(bb_code.sptypes),
+            bb_code.valid_worlds,
+        )
+    else
+        return IRCode(
+            CC.InstructionStream(
+                map(x -> x.stmt, insts),
+                map(x -> x.type, insts),
+                map(x -> x.info, insts),
+                map(x -> x.line, insts),
+                map(x -> x.flag, insts),
+            ),
+            cfg,
+            CC.copy(bb_code.linetable),
+            CC.copy(bb_code.argtypes),
+            CC.copy(bb_code.meta),
+            CC.copy(bb_code.sptypes),
+        )
+    end
 end
 
 function _lower_switch_statements(bb_code::BBCode)

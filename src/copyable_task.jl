@@ -377,7 +377,11 @@ expression, otherwise `false`.
 """
 function is_produce_stmt(x)::Bool
     if Meta.isexpr(x, :invoke) && length(x.args) == 3 && x.args[1] isa Core.MethodInstance
+        # This branch is hit on Julia 1.11 and earlier.
         return x.args[1].specTypes <: Tuple{typeof(produce),Any}
+    elseif Meta.isexpr(x, :invoke) && length(x.args) == 3 && x.args[1] isa Core.CodeInstance
+        # This branch is hit on Julia 1.12.
+        return x.args[1].def.specTypes <: Tuple{typeof(produce),Any}
     elseif Meta.isexpr(x, :call) && length(x.args) == 2
         return get_value(x.args[1]) === produce
     else
@@ -400,7 +404,13 @@ function stmt_might_produce(x, ret_type::Type)::Bool
 
     # Statement will terminate in the usual fashion, so _do_ bother recusing.
     is_produce_stmt(x) && return true
-    Meta.isexpr(x, :invoke) && return might_produce(x.args[1].specTypes)
+    @static if VERSION >= v"1.12-"
+        # On Julia 1.12 x.args has CodeInstances rather than MethodInstances. We use .def
+        # to get the MethodInstances.
+        Meta.isexpr(x, :invoke) && return might_produce(x.args[1].def.specTypes)
+    else
+        Meta.isexpr(x, :invoke) && return might_produce(x.args[1].specTypes)
+    end
     if Meta.isexpr(x, :call)
         # This is a hack -- it's perfectly possible for `DataType` calls to produce in general.
         f = get_function(x.args[1])
@@ -964,7 +974,13 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
 
                 # Derive TapedTask for this statement.
                 (callable, callable_args) = if Meta.isexpr(stmt, :invoke)
-                    sig = stmt.args[1].specTypes
+                    @static if VERSION >= v"1.12-"
+                        # On Julia 1.12 stmt.args has CodeInstances rather than
+                        # MethodInstances. We use .def to get the MethodInstances.
+                        sig = stmt.args[1].def.specTypes
+                    else
+                        sig = stmt.args[1].specTypes
+                    end
                     v = Any[Any]
                     (LazyCallable{sig,callable_ret_type(sig, v)}(), stmt.args[2:end])
                 elseif Meta.isexpr(stmt, :call)
@@ -1079,7 +1095,13 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     new_argtypes = vcat(typeof(refs), copy(ir.argtypes))
 
     # Return BBCode and the `Ref`s.
-    new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta)
+    @static if VERSION >= v"1.12-"
+        new_ir = BBCode(
+            new_bblocks, new_argtypes, ir.sptypes, ir.debuginfo, ir.meta, ir.valid_worlds
+        )
+    else
+        new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetables, ir.meta)
+    end
     return new_ir, refs, possible_produce_types
 end
 

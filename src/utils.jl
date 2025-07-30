@@ -68,7 +68,11 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
 
     ir = CC.compact!(ir)
     # CC.verify_ir(ir, true, false, CC.optimizer_lattice(local_interp))
-    CC.verify_linetable(ir.linetable, true)
+    @static if VERSION >= v"1.12-"
+        CC.verify_linetable(ir.debuginfo, div(length(ir.debuginfo.codelocs), 3), true)
+    else
+        CC.verify_linetable(ir.linetable, true)
+    end
     if show_ir
         println("Post-optimization")
         display(ir)
@@ -96,13 +100,29 @@ end
 # Run type inference and constant propagation on the ir. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
-    method_info = CC.MethodInfo(true, nothing) #=propagate_inbounds=#
-    min_world = world = get_inference_world(interp)
-    max_world = Base.get_world_counter()
-    irsv = CC.IRInterpretationState(
-        interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
-    )
-    rt = CC._ir_abstract_constant_propagation(interp, irsv)
+    # TODO(mhauru) Why is this line here? This function is no longer defined in 1.12
+    @static if VERSION >= v"1.12-"
+        nargs = length(ir.argtypes) - 1
+        # TODO(mhauru) How do we figure out isva? I don't think it's in ir or mi, see above
+        # prints.
+        isva = false
+        propagate_inbounds = true
+        spec_info = CC.SpecInfo(nargs, isva, propagate_inbounds, nothing)
+        min_world = world = get_inference_world(interp)
+        max_world = Base.get_world_counter()
+        irsv = CC.IRInterpretationState(
+            interp, spec_info, ir, mi, ir.argtypes, world, min_world, max_world
+        )
+        rt = CC.ir_abstract_constant_propagation(interp, irsv)
+    else
+        method_info = CC.MethodInfo(true, nothing) #=propagate_inbounds=#
+        min_world = world = get_inference_world(interp)
+        max_world = Base.get_world_counter()
+        irsv = CC.IRInterpretationState(
+            interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
+        )
+        rt = CC._ir_abstract_constant_propagation(interp, irsv)
+    end
     return ir
 end
 
@@ -168,13 +188,24 @@ function opaque_closure(
 )
     # This implementation is copied over directly from `Core.OpaqueClosure`.
     ir = CC.copy(ir)
+    @static if VERSION >= v"1.12-"
+        # On v1.12 OpaqueClosure expects the first arg to be the environment.
+        ir.argtypes[1] = typeof(env)
+    end
     nargs = length(ir.argtypes) - 1
-    sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
+    @static if VERSION >= v"1.12-"
+        sig = CC.compute_oc_signature(ir, nargs, isva)
+    else
+        sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
+    end
     src = ccall(:jl_new_code_info_uninit, Ref{CC.CodeInfo}, ())
     src.slotnames = fill(:none, nargs + 1)
     src.slotflags = fill(zero(UInt8), length(ir.argtypes))
     src.slottypes = copy(ir.argtypes)
     src.rettype = ret_type
+    @static if VERSION >= v"1.12-"
+        src.nargs = UInt(nargs + 1)
+    end
     src = CC.ir_to_codeinf!(src, ir)
     return Base.Experimental.generate_opaque_closure(
         sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
