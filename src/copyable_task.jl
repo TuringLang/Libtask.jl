@@ -1100,7 +1100,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
             new_bblocks, new_argtypes, ir.sptypes, ir.debuginfo, ir.meta, ir.valid_worlds
         )
     else
-        new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetables, ir.meta)
+        new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta)
     end
     return new_ir, refs, possible_produce_types
 end
