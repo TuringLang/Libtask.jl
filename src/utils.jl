@@ -189,21 +189,25 @@ function opaque_closure(
     # This implementation is copied over directly from `Core.OpaqueClosure`.
     ir = CC.copy(ir)
     @static if VERSION >= v"1.12-"
+        ir.debuginfo.def === nothing &&
+            (ir.debuginfo.def = :var"generated IR for OpaqueClosure")
         # On v1.12 OpaqueClosure expects the first arg to be the environment.
         ir.argtypes[1] = typeof(env)
     end
-    nargs = length(ir.argtypes) - 1
+    nargtypes = length(ir.argtypes)
+    nargs = nargtypes - 1
     @static if VERSION >= v"1.12-"
         sig = CC.compute_oc_signature(ir, nargs, isva)
     else
         sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
     end
     src = ccall(:jl_new_code_info_uninit, Ref{CC.CodeInfo}, ())
-    src.slotnames = fill(:none, nargs + 1)
-    src.slotflags = fill(zero(UInt8), length(ir.argtypes))
+    src.slotnames = fill(:none, nargtypes)
+    src.slotflags = fill(zero(UInt8), nargtypes)
     src.slottypes = copy(ir.argtypes)
     src.rettype = ret_type
     @static if VERSION >= v"1.12-"
+        src.isva = isva
         src.nargs = UInt(nargs + 1)
     end
     src = CC.ir_to_codeinf!(src, ir)
