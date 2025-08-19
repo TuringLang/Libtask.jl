@@ -1,15 +1,3 @@
-module Functions
-using Libtask: produce
-@noinline g3(x) = produce(x)
-@noinline g3(x, y; z) = produce(x + y + z)
-@noinline g3(x, y, z; p, q) = produce(x + y + z + p + q)
-function f3(x)
-    g3(x)
-    g3(x, 1; z=2)
-    return g3(x, 1, 2; p=3, q=4)
-end
-end
-
 @testset "copyable_task" begin
     for case in Libtask.TestUtils.test_cases()
         case()
@@ -290,16 +278,23 @@ end
         @test Libtask.consume(tt) === nothing
 
         # A function with multiple methods.
-        # Note: f3 and g3 are defined in the module at the top of this file. If
-        # they are defined directly in this testset, for reasons that are
-        # unclear, the `produce` calls are picked up even without using the
-        # `@might_produce` macro, meaning that it's impossible to test that the
-        # macro is having the intended behaviour.
-        tt = Libtask.TapedTask(nothing, Functions.f3, 0)
+        # The function reference is used to ensure that it really doesn't get inlined
+        # (otherwise, for reasons that are yet unknown, these functions do get inlined when
+        # inside a testset)
+        @noinline g3(x) = produce(x)
+        @noinline g3(x, y; z) = produce(x + y + z)
+        @noinline g3(x, y, z; p, q) = produce(x + y + z + p + q)
+        function f3(x, fref)
+            fref[](x)
+            fref[](x, 1; z=2)
+            fref[](x, 1, 2; p=3, q=4)
+            return nothing
+        end
+        tt = Libtask.TapedTask(nothing, f3, 0, Ref(g3))
         @test Libtask.consume(tt) === nothing
         # Now marking it
-        Libtask.@might_produce(Functions.g3)
-        tt = Libtask.TapedTask(nothing, Functions.f3, 0)
+        Libtask.@might_produce(g3)
+        tt = Libtask.TapedTask(nothing, f3, 0, Ref(g3))
         @test Libtask.consume(tt) === 0
         @test Libtask.consume(tt) === 3
         @test Libtask.consume(tt) === 10
