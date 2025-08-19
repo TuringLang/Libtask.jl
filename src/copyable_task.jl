@@ -396,11 +396,19 @@ macro might_produce_kwargs(f)
             # `$(might_produce)` or $(Libtask.might_produce) seem more natural but both of
             # those cause the entire `Libtask.might_produce` to be treated as a single
             # symbol. See https://discourse.julialang.org/t/128613
-            $(Libtask).might_produce(::Type{<:Tuple{typeof(Core.kwcall),<:NamedTuple,typeof($(esc(f))),Vararg}}) = true
+            function $(Libtask).might_produce(
+                ::Type{<:Tuple{typeof(Core.kwcall),<:NamedTuple,typeof($(esc(f))),Vararg}}
+            )
+                return true
+            end
             for n in possible_n_kwargs
                 # We only need `Any` and not `<:Any` because tuples are covariant.
                 kwarg_types = fill(Any, n)
-                $(Libtask).might_produce(::Type{<:Tuple{<:Function,kwarg_types...,typeof($(esc(f))),Vararg}}) = true
+                function $(Libtask).might_produce(
+                    ::Type{<:Tuple{<:Function,kwarg_types...,typeof($(esc(f))),Vararg}}
+                )
+                    return true
+                end
             end
         end
     end
