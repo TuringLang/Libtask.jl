@@ -367,7 +367,7 @@ will generate the appropriate methods needed to ensure that `Libtask.might_produ
 `true` for all relevant signatures of `f`. This works even if `f` has methods with keyword
 arguments.
 
-```jldoctest kwargs
+```jldoctest might_produce_macro
 julia> # For this demonstration we need to mark `g` as not being inlineable.
        @noinline function g(x; y, z=0)
            produce(x + y + z)
