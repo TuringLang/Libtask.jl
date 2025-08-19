@@ -6,7 +6,7 @@ using Libtask: produce
 function f3(x)
     g3(x)
     g3(x, 1; z=2)
-    g3(x, 1, 2; p=3, q=4)
+    return g3(x, 1, 2; p=3, q=4)
 end
 end
 
