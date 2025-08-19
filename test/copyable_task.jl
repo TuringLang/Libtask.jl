@@ -1,3 +1,15 @@
+module Functions
+using Libtask: produce
+@noinline g3(x) = produce(x)
+@noinline g3(x, y; z) = produce(x + y + z)
+@noinline g3(x, y, z; p, q) = produce(x + y + z + p + q)
+function f3(x)
+    g3(x)
+    g3(x, 1; z=2)
+    g3(x, 1, 2; p=3, q=4)
+end
+end
+
 @testset "copyable_task" begin
     for case in Libtask.TestUtils.test_cases()
         case()
@@ -249,6 +261,48 @@
         f(obs) = produce(obs)
         tt = Libtask.TapedTask(nothing, f, :a)
         @test Libtask.consume(tt) === :a
+        @test Libtask.consume(tt) === nothing
+    end
+
+    @testset "@might_produce macro" begin
+        # Positional arguments only
+        @noinline g1(x) = produce(x)
+        f1(x) = g1(x)
+        # Without marking it as might_produce
+        tt = Libtask.TapedTask(nothing, f1, 0)
+        @test Libtask.consume(tt) === nothing
+        # Now marking it
+        Libtask.@might_produce(g1)
+        tt = Libtask.TapedTask(nothing, f1, 0)
+        @test Libtask.consume(tt) === 0
+        @test Libtask.consume(tt) === nothing
+
+        # Keyword arguments only
+        @noinline g2(x; y=1, z=2) = produce(x + y + z)
+        f2(x) = g2(x)
+        # Without marking it as might_produce
+        tt = Libtask.TapedTask(nothing, f2, 0)
+        @test Libtask.consume(tt) === nothing
+        # Now marking it
+        Libtask.@might_produce(g2)
+        tt = Libtask.TapedTask(nothing, f2, 0)
+        @test Libtask.consume(tt) === 3
+        @test Libtask.consume(tt) === nothing
+
+        # A function with multiple methods.
+        # Note: f3 and g3 are defined in the module at the top of this file. If
+        # they are defined directly in this testset, for reasons that are
+        # unclear, the `produce` calls are picked up even without using the
+        # `@might_produce` macro, meaning that it's impossible to test that the
+        # macro is having the intended behaviour.
+        tt = Libtask.TapedTask(nothing, Functions.f3, 0)
+        @test Libtask.consume(tt) === nothing
+        # Now marking it
+        Libtask.@might_produce(Functions.g3)
+        tt = Libtask.TapedTask(nothing, Functions.f3, 0)
+        @test Libtask.consume(tt) === 0
+        @test Libtask.consume(tt) === 3
+        @test Libtask.consume(tt) === 10
         @test Libtask.consume(tt) === nothing
     end
 end

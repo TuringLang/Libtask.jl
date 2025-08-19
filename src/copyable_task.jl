@@ -360,11 +360,12 @@ that, by default, we assume that calls do not contain `Libtask.produce` statemen
 might_produce(::Type{<:Tuple}) = false
 
 """
-    @might_produce_kwargs(f)
+    @might_produce(f)
 
-If `f` is a function that has keyword arguments and may call `Libtask.produce` inside it,
-then `@might_produce_kwargs(f)` will generate the appropriate methods needed to ensure that
-`Libtask.might_produce` returns `true` for the relevant signatures of `f`.
+If `f` is a function that may call `Libtask.produce` inside it, then `@might_produce(f)`
+will generate the appropriate methods needed to ensure that `Libtask.might_produce` returns
+`true` for all relevant signatures of `f`. This works even if `f` has methods with keyword
+arguments.
 
 ```jldoctest kwargs
 julia> # For this demonstration we need to mark `g` as not being inlineable.
@@ -381,15 +382,18 @@ f (generic function with 1 method)
 julia> # This returns nothing because `g` isn't yet marked as being able to `produce`.
        consume(Libtask.TapedTask(nothing, f))
 
-julia> Libtask.@might_produce_kwargs(g)
+julia> Libtask.@might_produce(g)
 
 julia> # Now it works!
        consume(Libtask.TapedTask(nothing, f))
 6
 """
-macro might_produce_kwargs(f)
+macro might_produce(f)
     # See https://github.com/TuringLang/Libtask.jl/issues/197 for discussion of this macro.
     quote
+        function $(Libtask).might_produce(::Type{<:Tuple{typeof($(esc(f))),Vararg}})
+            return true
+        end
         possible_n_kwargs = unique(map(length ∘ Base.kwarg_decl, methods($(esc(f)))))
         if possible_n_kwargs != [0]
             # Oddly we need to interpolate the module and not the function: either
