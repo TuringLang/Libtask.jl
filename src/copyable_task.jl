@@ -364,8 +364,14 @@ might_produce(::Type{<:Tuple}) = false
 
 If `f` is a function that may call `Libtask.produce` inside it, then `@might_produce(f)`
 will generate the appropriate methods needed to ensure that `Libtask.might_produce` returns
-`true` for all relevant signatures of `f`. This works even if `f` has methods with keyword
-arguments.
+`true` for **all** relevant signatures of `f`. This works even if `f` has methods with
+keyword arguments.
+
+!!! note
+    Because `@might_produce f` is applied to all possible signatures, there may be
+    performance penalties associated with marking `f` as produceable if it is only
+    applicable to a specific method signature. If performance is critical, please use the
+    [`might_produce`](@ref) function directly.
 
 ```jldoctest might_produce_macro
 julia> # For this demonstration we need to mark `g` as not being inlineable.

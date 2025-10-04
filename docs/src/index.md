@@ -11,14 +11,14 @@ They divide neatly into two kinds of functions: those which are used to manipula
 [`TapedTask`](@ref)s, and those which are intended to be used _inside_ a
 [`TapedTask`](@ref).
 
-## Manipulation of [`TapedTask`](@ref)s:
+## Manipulation of [`TapedTask`](@ref)s
 ```@docs; canonical=true
 Libtask.consume
 Base.copy(::Libtask.TapedTask)
 Libtask.set_taped_globals!
 ```
 
-## Functions for use inside a [`TapedTask`](@ref)s:
+## Functions for use inside a [`TapedTask`](@ref)s
 ```@docs; canonical=true
 Libtask.produce
 Libtask.get_taped_globals
