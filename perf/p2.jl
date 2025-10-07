@@ -52,7 +52,7 @@ Random.seed!(rng, 2)
 iterations = 500
 model_fun = infiniteGMM(data)
 
-m = Turing.Core.TracedModel(model_fun, Sampler(SMC(50)), VarInfo(), rng)
+m = Turing.Inference.TracedModel(model_fun, Sampler(SMC(50)), VarInfo(), rng)
 f = m.evaluator[1]
 args = m.evaluator[2:end]
 
