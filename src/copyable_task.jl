@@ -368,9 +368,9 @@ will generate the appropriate methods needed to ensure that `Libtask.might_produ
 keyword arguments.
 
 !!! note
-    Because `@might_produce f` is applied to all possible signatures, there may be
-    performance penalties associated with marking `f` as produceable if it is only
-    applicable to a specific method signature. If performance is critical, please use the
+    Because `@might_produce f` is applied to all possible signatures, there are performance
+    penalties associated with marking all methods of `f` as produceable if only one method
+    can actually call `produce`. If performance is critical, please use the
     [`might_produce`](@ref) function directly.
 
 ```jldoctest might_produce_macro
