@@ -192,7 +192,11 @@ function opaque_closure(
         ir.debuginfo.def === nothing &&
             (ir.debuginfo.def = :var"generated IR for OpaqueClosure")
         # On v1.12 OpaqueClosure expects the first arg to be the environment.
-        ir.argtypes[1] = typeof(env)
+        # ir.argtypes[1] = typeof(env)
+        # TODO(mhauru) However, there was a bug in this new treatment of argtypes
+        # (https://github.com/JuliaLang/julia/issues/59222) the fix for which did not make
+        # it to v1.12.0, so for now we need to use the below workaround.
+        ir.argtypes[1] = Tuple
     end
     nargtypes = length(ir.argtypes)
     nargs = nargtypes - 1
