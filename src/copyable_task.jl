@@ -354,10 +354,75 @@ end
 `true` if a call to method with signature `sig` is permitted to contain
 `Libtask.produce` statements.
 
-This is an opt-in mechanism. the fallback method of this function returns `false` indicating
+This is an opt-in mechanism. The fallback method of this function returns `false` indicating
 that, by default, we assume that calls do not contain `Libtask.produce` statements.
 """
 might_produce(::Type{<:Tuple}) = false
+
+"""
+    @might_produce(f)
+
+If `f` is a function that may call `Libtask.produce` inside it, then `@might_produce(f)`
+will generate the appropriate methods needed to ensure that `Libtask.might_produce` returns
+`true` for **all** relevant signatures of `f`. This works even if `f` has methods with
+keyword arguments.
+
+!!! note
+    Because `@might_produce f` is applied to all possible signatures, there are performance
+    penalties associated with marking all methods of `f` as produceable if only one method
+    can actually call `produce`. If performance is critical, please use the
+    [`might_produce`](@ref) function directly.
+
+```jldoctest might_produce_macro
+julia> # For this demonstration we need to mark `g` as not being inlineable.
+       @noinline function g(x; y, z=0)
+           produce(x + y + z)
+       end
+g (generic function with 1 method)
+
+julia> function f()
+           g(1; y=2, z=3)
+       end
+f (generic function with 1 method)
+
+julia> # This returns nothing because `g` isn't yet marked as being able to `produce`.
+       consume(Libtask.TapedTask(nothing, f))
+
+julia> Libtask.@might_produce(g)
+
+julia> # Now it works!
+       consume(Libtask.TapedTask(nothing, f))
+6
+"""
+macro might_produce(f)
+    # See https://github.com/TuringLang/Libtask.jl/issues/197 for discussion of this macro.
+    quote
+        function $(Libtask).might_produce(::Type{<:Tuple{typeof($(esc(f))),Vararg}})
+            return true
+        end
+        possible_n_kwargs = unique(map(length ∘ Base.kwarg_decl, methods($(esc(f)))))
+        if possible_n_kwargs != [0]
+            # Oddly we need to interpolate the module and not the function: either
+            # `$(might_produce)` or $(Libtask.might_produce) seem more natural but both of
+            # those cause the entire `Libtask.might_produce` to be treated as a single
+            # symbol. See https://discourse.julialang.org/t/128613
+            function $(Libtask).might_produce(
+                ::Type{<:Tuple{typeof(Core.kwcall),<:NamedTuple,typeof($(esc(f))),Vararg}}
+            )
+                return true
+            end
+            for n in possible_n_kwargs
+                # We only need `Any` and not `<:Any` because tuples are covariant.
+                kwarg_types = fill(Any, n)
+                function $(Libtask).might_produce(
+                    ::Type{<:Tuple{<:Function,kwarg_types...,typeof($(esc(f))),Vararg}}
+                )
+                    return true
+                end
+            end
+        end
+    end
+end
 
 # Helper struct used in `derive_copyable_task_ir`.
 struct TupleRef

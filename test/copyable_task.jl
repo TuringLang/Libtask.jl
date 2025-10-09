@@ -251,4 +251,53 @@
         @test Libtask.consume(tt) === :a
         @test Libtask.consume(tt) === nothing
     end
+
+    @testset "@might_produce macro" begin
+        # Positional arguments only
+        @noinline g1(x) = produce(x)
+        f1(x) = g1(x)
+        # Without marking it as might_produce
+        tt = Libtask.TapedTask(nothing, f1, 0)
+        @test Libtask.consume(tt) === nothing
+        # Now marking it
+        Libtask.@might_produce(g1)
+        tt = Libtask.TapedTask(nothing, f1, 0)
+        @test Libtask.consume(tt) === 0
+        @test Libtask.consume(tt) === nothing
+
+        # Keyword arguments only
+        @noinline g2(x; y=1, z=2) = produce(x + y + z)
+        f2(x) = g2(x)
+        # Without marking it as might_produce
+        tt = Libtask.TapedTask(nothing, f2, 0)
+        @test Libtask.consume(tt) === nothing
+        # Now marking it
+        Libtask.@might_produce(g2)
+        tt = Libtask.TapedTask(nothing, f2, 0)
+        @test Libtask.consume(tt) === 3
+        @test Libtask.consume(tt) === nothing
+
+        # A function with multiple methods.
+        # The function reference is used to ensure that it really doesn't get inlined
+        # (otherwise, for reasons that are yet unknown, these functions do get inlined when
+        # inside a testset)
+        @noinline g3(x) = produce(x)
+        @noinline g3(x, y; z) = produce(x + y + z)
+        @noinline g3(x, y, z; p, q) = produce(x + y + z + p + q)
+        function f3(x, fref)
+            fref[](x)
+            fref[](x, 1; z=2)
+            fref[](x, 1, 2; p=3, q=4)
+            return nothing
+        end
+        tt = Libtask.TapedTask(nothing, f3, 0, Ref(g3))
+        @test Libtask.consume(tt) === nothing
+        # Now marking it
+        Libtask.@might_produce(g3)
+        tt = Libtask.TapedTask(nothing, f3, 0, Ref(g3))
+        @test Libtask.consume(tt) === 0
+        @test Libtask.consume(tt) === 3
+        @test Libtask.consume(tt) === 10
+        @test Libtask.consume(tt) === nothing
+    end
 end
