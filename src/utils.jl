@@ -104,11 +104,9 @@ end
 # Run type inference and constant propagation on the ir. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
-    # TODO(mhauru) Why is this line here? This function is no longer defined in 1.12
     @static if VERSION >= v"1.12-"
         nargs = length(ir.argtypes) - 1
-        # TODO(mhauru) How do we figure out isva? I don't think it's in ir or mi, see above
-        # prints.
+        # TODO(mhauru) How should we figure out isva? I don't think it's in ir or mi.
         isva = false
         propagate_inbounds = true
         spec_info = CC.SpecInfo(nargs, isva, propagate_inbounds, nothing)
