@@ -59,11 +59,7 @@ function (case::Testcase)()
             end
 
             for _ in iteration_results
-                # TODO(mhauru) We seem to be causing more allocations than expected on
-                # v1.12, needs investigating.
-                @static if VERSION < v"1.12-"
-                    @test count_allocs(consume, t) == 0
-                end
+                @test count_allocs(consume, t) == 0
             end
         end
     end
