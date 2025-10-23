@@ -90,7 +90,9 @@ function build_callable(sig::Type{<:Tuple})
         unoptimised_ir = IRCode(bb)
         optimised_ir = optimise_ir!(unoptimised_ir)
         mc_ret_type = callable_ret_type(sig, types)
-        mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
+        mc = optimized_misty_closure(
+            mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true
+        )
         mc_cache[key] = mc
         return mc, refs[end]
     end

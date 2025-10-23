@@ -1,3 +1,7 @@
+function get_mi(ci::Core.CodeInstance)
+    @static isdefined(CC, :get_ci_mi) ? CC.get_ci_mi(ci) : ci.def
+end
+get_mi(mi::Core.MethodInstance) = mi
 
 """
     replace_captures(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
@@ -218,6 +222,55 @@ function opaque_closure(
     )::Core.OpaqueClosure{sig,ret_type}
 end
 
+function optimized_opaque_closure(rtype, ir::IRCode, env...; kwargs...)
+    oc = opaque_closure(rtype, ir, env...; kwargs...)
+    world = UInt(oc.world)
+    set_world_bounds_for_optimization!(oc)
+    optimized_oc = optimize_opaque_closure(oc, rtype, env...; kwargs...)
+    return optimized_oc
+end
+
+function optimize_opaque_closure(oc::Core.OpaqueClosure, rtype, env...; kwargs...)
+    method = oc.source
+    ci = method.specializations.cache
+    world = UInt(oc.world)
+    ir = reinfer_and_inline(ci, world)
+    ir === nothing && return oc # nothing to optimize
+    return opaque_closure(rtype, ir, env...; kwargs...)
+end
+
+# Allows optimization to make assumptions about binding access,
+# enabling inlining and other optimizations.
+function set_world_bounds_for_optimization!(oc::Core.OpaqueClosure)
+    ci = oc.source.specializations.cache
+    ci.inferred === nothing && return nothing
+    ci.inferred.min_world = oc.world
+    return ci.inferred.max_world = oc.world
+end
+
+function reinfer_and_inline(ci::Core.CodeInstance, world::UInt)
+    interp = CC.NativeInterpreter(world)
+    mi = get_mi(ci)
+    argtypes = collect(Any, mi.specTypes.parameters)
+    irsv = CC.IRInterpretationState(interp, ci, mi, argtypes, world)
+    irsv === nothing && return nothing
+    for stmt in irsv.ir.stmts
+        inst = stmt[:inst]
+        if Meta.isexpr(inst, :loopinfo) ||
+            Meta.isexpr(inst, :pop_exception) ||
+            isa(inst, CC.GotoIfNot) ||
+            isa(inst, CC.GotoNode) ||
+            Meta.isexpr(inst, :copyast)
+            continue
+        end
+        stmt[:flag] |= CC.IR_FLAG_REFINED
+    end
+    CC.ir_abstract_constant_propagation(interp, irsv)
+    state = CC.InliningState(interp)
+    ir = CC.ssa_inlining_pass!(irsv.ir, state, CC.propagate_inbounds(irsv))
+    return ir
+end
+
 """
     misty_closure(
         ret_type::Type,
@@ -238,4 +291,16 @@ function misty_closure(
     do_compile::Bool=true,
 )
     return MistyClosure(opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir))
+end
+
+function optimized_misty_closure(
+    ret_type::Type,
+    ir::IRCode,
+    @nospecialize env...;
+    isva::Bool=false,
+    do_compile::Bool=true,
+)
+    return MistyClosure(
+        optimized_opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir)
+    )
 end
