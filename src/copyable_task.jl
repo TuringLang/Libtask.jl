@@ -1033,13 +1033,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
 
                 # Derive TapedTask for this statement.
                 (callable, callable_args) = if Meta.isexpr(stmt, :invoke)
-                    @static if VERSION >= v"1.12-"
-                        # On Julia 1.12 stmt.args has CodeInstances rather than
-                        # MethodInstances. We use .def to get the MethodInstances.
-                        sig = stmt.args[1].def.specTypes
-                    else
-                        sig = stmt.args[1].specTypes
-                    end
+                    sig = get_mi(stmt.args[1]).specTypes
                     v = Any[Any]
                     (LazyCallable{sig,callable_ret_type(sig, v)}(), stmt.args[2:end])
                 elseif Meta.isexpr(stmt, :call)
