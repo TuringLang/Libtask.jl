@@ -279,6 +279,13 @@ The above gives the broad outline of how `TapedTask`s are implemented. We refer 
 readers to the code, which is extensively commented to explain implementation details.
 """
 function TapedTask(taped_globals::Any, fargs...; kwargs...)
+    @static if v"1.12.1" > VERSION >= v"1.12.0-"
+        @warn """
+            Libtask.jl does not work correctly on Julia v1.12.0 and may crash your Julia
+             session. Please upgrade to at least v1.12.1. See
+             https://github.com/JuliaLang/julia/issues/59222 for the bug in question.
+            """
+    end
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
     seed_id!() # a BBCode thing.
     mc, count_ref = build_callable(typeof(all_args))
