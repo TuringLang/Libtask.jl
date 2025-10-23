@@ -189,14 +189,8 @@ function opaque_closure(
     # This implementation is copied over directly from `Core.OpaqueClosure`.
     ir = CC.copy(ir)
     @static if VERSION >= v"1.12-"
-        ir.debuginfo.def === nothing &&
-            (ir.debuginfo.def = :var"generated IR for OpaqueClosure")
         # On v1.12 OpaqueClosure expects the first arg to be the environment.
-        # ir.argtypes[1] = typeof(env)
-        # TODO(mhauru) However, there was a bug in this new treatment of argtypes
-        # (https://github.com/JuliaLang/julia/issues/59222) the fix for which did not make
-        # it to v1.12.0, so for now we need to use the below workaround.
-        ir.argtypes[1] = Tuple
+        ir.argtypes[1] = typeof(env)
     end
     nargtypes = length(ir.argtypes)
     nargs = nargtypes - 1
@@ -206,15 +200,19 @@ function opaque_closure(
         sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
     end
     src = ccall(:jl_new_code_info_uninit, Ref{CC.CodeInfo}, ())
-    src.slotnames = fill(:none, nargtypes)
+    src.slotnames = [Symbol(:_, i) for i in 1:nargtypes]
     src.slotflags = fill(zero(UInt8), nargtypes)
     src.slottypes = copy(ir.argtypes)
-    src.rettype = ret_type
-    @static if VERSION >= v"1.12-"
+    @static if VERSION > v"1.12-"
+        ir.debuginfo.def === nothing &&
+            (ir.debuginfo.def = :var"generated IR for OpaqueClosure")
+        src.min_world = ir.valid_worlds.min_world
+        src.max_world = ir.valid_worlds.max_world
         src.isva = isva
-        src.nargs = UInt(nargs + 1)
+        src.nargs = nargtypes
     end
     src = CC.ir_to_codeinf!(src, ir)
+    src.rettype = ret_type
     return Base.Experimental.generate_opaque_closure(
         sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
     )::Core.OpaqueClosure{sig,ret_type}
