@@ -1,3 +1,7 @@
+function get_mi(ci::Core.CodeInstance)
+    @static isdefined(CC, :get_ci_mi) ? CC.get_ci_mi(ci) : ci.def
+end
+get_mi(mi::Core.MethodInstance) = mi
 
 """
     replace_captures(oc::Toc, new_captures) where {Toc<:OpaqueClosure}
@@ -68,7 +72,11 @@ function optimise_ir!(ir::IRCode; show_ir=false, do_inline=true)
 
     ir = CC.compact!(ir)
     # CC.verify_ir(ir, true, false, CC.optimizer_lattice(local_interp))
-    CC.verify_linetable(ir.linetable, true)
+    @static if VERSION >= v"1.12-"
+        CC.verify_linetable(ir.debuginfo, div(length(ir.debuginfo.codelocs), 3), true)
+    else
+        CC.verify_linetable(ir.linetable, true)
+    end
     if show_ir
         println("Post-optimization")
         display(ir)
@@ -96,13 +104,27 @@ end
 # Run type inference and constant propagation on the ir. Credit to @oxinabox:
 # https://gist.github.com/oxinabox/cdcffc1392f91a2f6d80b2524726d802#file-example-jl-L54
 function __infer_ir!(ir, interp::CC.AbstractInterpreter, mi::CC.MethodInstance)
-    method_info = CC.MethodInfo(true, nothing) #=propagate_inbounds=#
-    min_world = world = get_inference_world(interp)
-    max_world = Base.get_world_counter()
-    irsv = CC.IRInterpretationState(
-        interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
-    )
-    rt = CC._ir_abstract_constant_propagation(interp, irsv)
+    @static if VERSION >= v"1.12-"
+        nargs = length(ir.argtypes) - 1
+        # TODO(mhauru) How should we figure out isva? I don't think it's in ir or mi.
+        isva = false
+        propagate_inbounds = true
+        spec_info = CC.SpecInfo(nargs, isva, propagate_inbounds, nothing)
+        min_world = world = get_inference_world(interp)
+        max_world = Base.get_world_counter()
+        irsv = CC.IRInterpretationState(
+            interp, spec_info, ir, mi, ir.argtypes, world, min_world, max_world
+        )
+        rt = CC.ir_abstract_constant_propagation(interp, irsv)
+    else
+        method_info = CC.MethodInfo(true, nothing) #=propagate_inbounds=#
+        min_world = world = get_inference_world(interp)
+        max_world = Base.get_world_counter()
+        irsv = CC.IRInterpretationState(
+            interp, method_info, ir, mi, ir.argtypes, world, min_world, max_world
+        )
+        rt = CC._ir_abstract_constant_propagation(interp, irsv)
+    end
     return ir
 end
 
@@ -168,17 +190,83 @@ function opaque_closure(
 )
     # This implementation is copied over directly from `Core.OpaqueClosure`.
     ir = CC.copy(ir)
-    nargs = length(ir.argtypes) - 1
-    sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
+    @static if VERSION >= v"1.12-"
+        # On v1.12 OpaqueClosure expects the first arg to be the environment.
+        ir.argtypes[1] = typeof(env)
+    end
+    nargtypes = length(ir.argtypes)
+    nargs = nargtypes - 1
+    @static if VERSION >= v"1.12-"
+        sig = CC.compute_oc_signature(ir, nargs, isva)
+    else
+        sig = Base.Experimental.compute_oc_signature(ir, nargs, isva)
+    end
     src = ccall(:jl_new_code_info_uninit, Ref{CC.CodeInfo}, ())
-    src.slotnames = fill(:none, nargs + 1)
-    src.slotflags = fill(zero(UInt8), length(ir.argtypes))
+    src.slotnames = [Symbol(:_, i) for i in 1:nargtypes]
+    src.slotflags = fill(zero(UInt8), nargtypes)
     src.slottypes = copy(ir.argtypes)
-    src.rettype = ret_type
+    @static if VERSION > v"1.12-"
+        ir.debuginfo.def === nothing &&
+            (ir.debuginfo.def = :var"generated IR for OpaqueClosure")
+        src.min_world = ir.valid_worlds.min_world
+        src.max_world = ir.valid_worlds.max_world
+        src.isva = isva
+        src.nargs = nargtypes
+    end
     src = CC.ir_to_codeinf!(src, ir)
+    src.rettype = ret_type
     return Base.Experimental.generate_opaque_closure(
         sig, Union{}, ret_type, src, nargs, isva, env...; do_compile
     )::Core.OpaqueClosure{sig,ret_type}
+end
+
+function optimized_opaque_closure(rtype, ir::IRCode, env...; kwargs...)
+    oc = opaque_closure(rtype, ir, env...; kwargs...)
+    world = UInt(oc.world)
+    set_world_bounds_for_optimization!(oc)
+    optimized_oc = optimize_opaque_closure(oc, rtype, env...; kwargs...)
+    return optimized_oc
+end
+
+function optimize_opaque_closure(oc::Core.OpaqueClosure, rtype, env...; kwargs...)
+    method = oc.source
+    ci = method.specializations.cache
+    world = UInt(oc.world)
+    ir = reinfer_and_inline(ci, world)
+    ir === nothing && return oc # nothing to optimize
+    return opaque_closure(rtype, ir, env...; kwargs...)
+end
+
+# Allows optimization to make assumptions about binding access,
+# enabling inlining and other optimizations.
+function set_world_bounds_for_optimization!(oc::Core.OpaqueClosure)
+    ci = oc.source.specializations.cache
+    ci.inferred === nothing && return nothing
+    ci.inferred.min_world = oc.world
+    return ci.inferred.max_world = oc.world
+end
+
+function reinfer_and_inline(ci::Core.CodeInstance, world::UInt)
+    interp = CC.NativeInterpreter(world)
+    mi = get_mi(ci)
+    argtypes = collect(Any, mi.specTypes.parameters)
+    irsv = CC.IRInterpretationState(interp, ci, mi, argtypes, world)
+    irsv === nothing && return nothing
+    for stmt in irsv.ir.stmts
+        inst = stmt[:inst]
+        if Meta.isexpr(inst, :loopinfo) ||
+            Meta.isexpr(inst, :pop_exception) ||
+            isa(inst, CC.GotoIfNot) ||
+            isa(inst, CC.GotoNode) ||
+            Meta.isexpr(inst, :copyast)
+            continue
+        end
+        stmt[:flag] |= CC.IR_FLAG_REFINED
+    end
+    CC.ir_abstract_constant_propagation(interp, irsv)
+    state = CC.InliningState(interp)
+    ir = CC.ssa_inlining_pass!(irsv.ir, state, CC.propagate_inbounds(irsv))
+    return ir
 end
 
 """
@@ -201,4 +289,16 @@ function misty_closure(
     do_compile::Bool=true,
 )
     return MistyClosure(opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir))
+end
+
+function optimized_misty_closure(
+    ret_type::Type,
+    ir::IRCode,
+    @nospecialize env...;
+    isva::Bool=false,
+    do_compile::Bool=true,
+)
+    return MistyClosure(
+        optimized_opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir)
+    )
 end

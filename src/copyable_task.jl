@@ -90,7 +90,9 @@ function build_callable(sig::Type{<:Tuple})
         unoptimised_ir = IRCode(bb)
         optimised_ir = optimise_ir!(unoptimised_ir)
         mc_ret_type = callable_ret_type(sig, types)
-        mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
+        mc = optimized_misty_closure(
+            mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true
+        )
         mc_cache[key] = mc
         return mc, refs[end]
     end
@@ -277,6 +279,13 @@ The above gives the broad outline of how `TapedTask`s are implemented. We refer 
 readers to the code, which is extensively commented to explain implementation details.
 """
 function TapedTask(taped_globals::Any, fargs...; kwargs...)
+    @static if v"1.12.1" > VERSION >= v"1.12.0-"
+        @warn """
+            Libtask.jl does not work correctly on Julia v1.12.0 and may crash your Julia
+             session. Please upgrade to at least v1.12.1. See
+             https://github.com/JuliaLang/julia/issues/59222 for the bug in question.
+            """
+    end
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
     seed_id!() # a BBCode thing.
     mc, count_ref = build_callable(typeof(all_args))
@@ -441,8 +450,10 @@ get_value(x) = x
 expression, otherwise `false`.
 """
 function is_produce_stmt(x)::Bool
-    if Meta.isexpr(x, :invoke) && length(x.args) == 3 && x.args[1] isa Core.MethodInstance
-        return x.args[1].specTypes <: Tuple{typeof(produce),Any}
+    if Meta.isexpr(x, :invoke) &&
+        length(x.args) == 3 &&
+        x.args[1] isa Union{Core.MethodInstance,Core.CodeInstance}
+        return get_mi(x.args[1]).specTypes <: Tuple{typeof(produce),Any}
     elseif Meta.isexpr(x, :call) && length(x.args) == 2
         return get_value(x.args[1]) === produce
     else
@@ -465,7 +476,7 @@ function stmt_might_produce(x, ret_type::Type)::Bool
 
     # Statement will terminate in the usual fashion, so _do_ bother recusing.
     is_produce_stmt(x) && return true
-    Meta.isexpr(x, :invoke) && return might_produce(x.args[1].specTypes)
+    Meta.isexpr(x, :invoke) && return might_produce(get_mi(x.args[1]).specTypes)
     if Meta.isexpr(x, :call)
         # This is a hack -- it's perfectly possible for `DataType` calls to produce in general.
         f = get_function(x.args[1])
@@ -1029,7 +1040,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
 
                 # Derive TapedTask for this statement.
                 (callable, callable_args) = if Meta.isexpr(stmt, :invoke)
-                    sig = stmt.args[1].specTypes
+                    sig = get_mi(stmt.args[1]).specTypes
                     v = Any[Any]
                     (LazyCallable{sig,callable_ret_type(sig, v)}(), stmt.args[2:end])
                 elseif Meta.isexpr(stmt, :call)
@@ -1144,7 +1155,13 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     new_argtypes = vcat(typeof(refs), copy(ir.argtypes))
 
     # Return BBCode and the `Ref`s.
-    new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta)
+    @static if VERSION >= v"1.12-"
+        new_ir = BBCode(
+            new_bblocks, new_argtypes, ir.sptypes, ir.debuginfo, ir.meta, ir.valid_worlds
+        )
+    else
+        new_ir = BBCode(new_bblocks, new_argtypes, ir.sptypes, ir.linetable, ir.meta)
+    end
     return new_ir, refs, possible_produce_types
 end
 

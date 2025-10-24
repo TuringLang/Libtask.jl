@@ -11,9 +11,10 @@ jobs:
     strategy:
       matrix:
         version:
-          - '1.10'
+          - 'min'
           - '1'
-          - 'pre'
+          # TODO(mhauru) Reenable the below once there is a 'pre' version different from '1'.
+          # - 'pre'
         os:
           - ubuntu-latest
           - windows-latest
