@@ -113,7 +113,18 @@ struct CacheKey
     key::Any
 end
 
-const mc_cache = Dict{CacheKey,MistyClosure}()
+struct GlobalMCCache
+    cache::Dict{CacheKey,MistyClosure}
+    lock::ReentrantLock
+
+    GlobalMCCache() = new(Dict{CacheKey,MistyClosure}(), ReentrantLock())
+end
+
+Base.haskey(c::GlobalMCCache, key) = haskey(c.cache, key)
+Base.getindex(c::GlobalMCCache, key) = getindex(c.cache, key)
+Base.setindex!(c::GlobalMCCache, val, key) = @lock c.lock setindex!(c.cache, val, key)
+
+const mc_cache = GlobalMCCache()
 
 """
     TapedTask(taped_globals::Any, f, args...; kwargs...)
