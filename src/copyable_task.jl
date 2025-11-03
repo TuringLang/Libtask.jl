@@ -113,6 +113,17 @@ struct CacheKey
     key::Any
 end
 
+"""
+    GlobalMCCache
+
+A cache for holding MistyClosures, keyed by CacheKey.
+
+The reason to have a type for this, rather than just a global const
+Dict{CacheKey,MistyClosure}, is thread-safety. The global cache is written to when new
+TapedTasks are compiled, and if multiple threads are doing this concurrently races might
+occur. This type uses a ReentrantLock to ensure that any `setindex!` operations are atomic,
+solving the problem.
+"""
 struct GlobalMCCache
     cache::Dict{CacheKey,MistyClosure}
     lock::ReentrantLock
