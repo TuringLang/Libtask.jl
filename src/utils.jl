@@ -220,55 +220,6 @@ function opaque_closure(
     )::Core.OpaqueClosure{sig,ret_type}
 end
 
-function optimized_opaque_closure(rtype, ir::IRCode, env...; kwargs...)
-    oc = opaque_closure(rtype, ir, env...; kwargs...)
-    world = UInt(oc.world)
-    set_world_bounds_for_optimization!(oc)
-    optimized_oc = optimize_opaque_closure(oc, rtype, env...; kwargs...)
-    return optimized_oc
-end
-
-function optimize_opaque_closure(oc::Core.OpaqueClosure, rtype, env...; kwargs...)
-    method = oc.source
-    ci = method.specializations.cache
-    world = UInt(oc.world)
-    ir = reinfer_and_inline(ci, world)
-    ir === nothing && return oc # nothing to optimize
-    return opaque_closure(rtype, ir, env...; kwargs...)
-end
-
-# Allows optimization to make assumptions about binding access,
-# enabling inlining and other optimizations.
-function set_world_bounds_for_optimization!(oc::Core.OpaqueClosure)
-    ci = oc.source.specializations.cache
-    ci.inferred === nothing && return nothing
-    ci.inferred.min_world = oc.world
-    return ci.inferred.max_world = oc.world
-end
-
-function reinfer_and_inline(ci::Core.CodeInstance, world::UInt)
-    interp = CC.NativeInterpreter(world)
-    mi = get_mi(ci)
-    argtypes = collect(Any, mi.specTypes.parameters)
-    irsv = CC.IRInterpretationState(interp, ci, mi, argtypes, world)
-    irsv === nothing && return nothing
-    for stmt in irsv.ir.stmts
-        inst = stmt[:inst]
-        if Meta.isexpr(inst, :loopinfo) ||
-            Meta.isexpr(inst, :pop_exception) ||
-            isa(inst, CC.GotoIfNot) ||
-            isa(inst, CC.GotoNode) ||
-            Meta.isexpr(inst, :copyast)
-            continue
-        end
-        stmt[:flag] |= CC.IR_FLAG_REFINED
-    end
-    CC.ir_abstract_constant_propagation(interp, irsv)
-    state = CC.InliningState(interp)
-    ir = CC.ssa_inlining_pass!(irsv.ir, state, CC.propagate_inbounds(irsv))
-    return ir
-end
-
 """
     misty_closure(
         ret_type::Type,
@@ -291,14 +242,33 @@ function misty_closure(
     return MistyClosure(opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir))
 end
 
-function optimized_misty_closure(
-    ret_type::Type,
-    ir::IRCode,
-    @nospecialize env...;
-    isva::Bool=false,
-    do_compile::Bool=true,
-)
-    return MistyClosure(
-        optimized_opaque_closure(ret_type, ir, env...; isva, do_compile), Ref(ir)
-    )
+@static if VERSION > v"1.12-"
+    """
+        set_valid_world!(ir::IRCode, world::UInt)::IRCode
+
+    (1.12+ only)
+    Create a shallow copy of the given IR code, with its `valid_worlds` field updated
+    to a single valid world. This allows the compiler to perform more inlining.
+
+    In particular, if the IR comes from say a function `f` which makes a call to another
+    function `g` which only got defined after `f`, then at the min_world when `f` was
+    defined, `g` was not available yet. If we restrict the IR to a world where `g` is
+    available then `g` can be inlined.
+
+    Will error if `world` is not in the existing `valid_worlds` of `ir`.
+    """
+    function set_valid_world!(ir::IRCode, world::UInt)
+        if world ∉ ir.valid_worlds
+            error("World $world is not valid for this IRCode: $(ir.valid_worlds).")
+        end
+        return CC.IRCode(
+            ir.stmts,
+            ir.cfg,
+            ir.debuginfo,
+            ir.argtypes,
+            ir.meta,
+            ir.sptypes,
+            CC.WorldRange(world, world),
+        )
+    end
 end

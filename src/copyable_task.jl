@@ -79,7 +79,8 @@ function build_callable(sig::Type{<:Tuple})
              TapedTask from that function."""
         throw(ArgumentError(msg))
     end
-    key = CacheKey(Base.get_world_counter(), sig)
+    world_age = Base.get_world_counter()
+    key = CacheKey(world_age, sig)
     if haskey(mc_cache, key)
         return fresh_copy(mc_cache[key])
     else
@@ -88,11 +89,12 @@ function build_callable(sig::Type{<:Tuple})
         isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
         unoptimised_ir = IRCode(bb)
+        @static if VERSION > v"1.12-"
+            unoptimised_ir = set_valid_world!(unoptimised_ir, world_age)
+        end
         optimised_ir = optimise_ir!(unoptimised_ir)
         mc_ret_type = callable_ret_type(sig, types)
-        mc = optimized_misty_closure(
-            mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true
-        )
+        mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
         mc_cache[key] = mc
         return mc, refs[end]
     end
