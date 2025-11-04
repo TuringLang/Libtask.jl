@@ -1,3 +1,7 @@
+# 0.9.7
+
+Fix a concurrency bug, where Libtask would sometimes crash with a "Multiple concurrent writes to Dict detected!" error when TapedTasks were being executed concurrently.
+
 # 0.9.6
 
 Add support for Julia v1.12.
