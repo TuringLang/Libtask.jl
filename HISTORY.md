@@ -1,6 +1,10 @@
-# 0.9.8
+# 0.9.9
 
 Remove manual opaque closure optimisation functions in favour of setting the world age and letting the compiler do more work for us, and providing it with some more type information. This changes no functionality, and shouldn't change performance either, but simplifies code.
+
+# 0.9.8
+
+Enables built docs for the current release version of Libtask.
 
 # 0.9.7
 

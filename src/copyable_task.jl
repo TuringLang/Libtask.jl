@@ -424,6 +424,7 @@ julia> Libtask.@might_produce(g)
 julia> # Now it works!
        consume(Libtask.TapedTask(nothing, f))
 6
+```
 """
 macro might_produce(f)
     # See https://github.com/TuringLang/Libtask.jl/issues/197 for discussion of this macro.
