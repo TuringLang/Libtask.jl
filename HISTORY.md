@@ -1,3 +1,7 @@
+# 0.9.8
+
+Remove manual opaque closure optimisation functions in favour of setting the world age and letting the compiler do more work for us, and providing it with some more type information. This changes no functionality, and shouldn't change performance either, but simplifies code.
+
 # 0.9.7
 
 Fix a concurrency bug, where Libtask would sometimes crash with a "Multiple concurrent writes to Dict detected!" error when TapedTasks were being executed concurrently.
