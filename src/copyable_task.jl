@@ -90,6 +90,9 @@ function build_callable(sig::Type{<:Tuple})
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
         unoptimised_ir = IRCode(bb)
         @static if VERSION > v"1.12-"
+            # This is a performance optimisation, copied over from Mooncake, where setting
+            # the valid world age to be very strictly just the current age allows the
+            # compiler to do more inlining and other optimisation.
             unoptimised_ir = set_valid_world!(unoptimised_ir, world_age)
         end
         optimised_ir = optimise_ir!(unoptimised_ir)
