@@ -827,6 +827,12 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     ref_ind = ssa_id_to_ref_index_map[id]
                     push!(
                         inst_pairs,
+                        # The last argument, ref_index_to_type_map[ref_ind], is a
+                        # performance optimisation. The idea is that we know the inferred
+                        # type of the PhiNode from the original IR, and by passing it to
+                        # deref_phi we can type annotate the element type of the Ref
+                        # that it's being dereferenced, resulting in more concrete types
+                        # in the generated IR.
                         (
                             id,
                             new_inst(
