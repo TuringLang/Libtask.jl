@@ -827,7 +827,18 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     ref_ind = ssa_id_to_ref_index_map[id]
                     push!(
                         inst_pairs,
-                        (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id, ref_index_to_type_map[ref_ind]))),
+                        (
+                            id,
+                            new_inst(
+                                Expr(
+                                    :call,
+                                    deref_phi,
+                                    refs_id,
+                                    phi_id,
+                                    ref_index_to_type_map[ref_ind],
+                                ),
+                            ),
+                        ),
                     )
                     return id
                 end
