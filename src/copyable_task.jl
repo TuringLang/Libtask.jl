@@ -824,9 +824,10 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 deref_ids = map(phi_inds) do n
                     id = bb.inst_ids[n]
                     phi_id = phi_ids[n]
+                    ref_ind = ssa_id_to_ref_index_map[id]
                     push!(
                         inst_pairs,
-                        (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id))),
+                        (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id, ref_index_to_type_map[ref_ind]))),
                     )
                     return id
                 end
@@ -1206,8 +1207,11 @@ end
 @inline resume_block_is(refs::R, id::Int32) where {R<:Tuple} = !(refs[end][] === id)
 
 # Helper used in `derive_copyable_task_ir`.
-@inline deref_phi(refs::R, n::TupleRef) where {R<:Tuple} = refs[n.n][]
-@inline deref_phi(::R, x) where {R<:Tuple} = x
+@inline function deref_phi(refs::R, n::TupleRef, ::Type{T}) where {R<:Tuple,T}
+    ref = refs[n.n]::Base.RefValue{T}
+    return ref[]
+end
+@inline deref_phi(::R, x, t::Type) where {R<:Tuple} = x
 
 # Helper used in `derived_copyable_task_ir`.
 @inline not_a_produced(x) = !(isa(x, ProducedValue))
