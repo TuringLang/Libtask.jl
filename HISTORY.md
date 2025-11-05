@@ -1,3 +1,7 @@
+# 0.9.8
+
+Enables built docs for the current release version of Libtask.
+
 # 0.9.7
 
 Fix a concurrency bug, where Libtask would sometimes crash with a "Multiple concurrent writes to Dict detected!" error when TapedTasks were being executed concurrently.
