@@ -79,7 +79,8 @@ function build_callable(sig::Type{<:Tuple})
              TapedTask from that function."""
         throw(ArgumentError(msg))
     end
-    key = CacheKey(Base.get_world_counter(), sig)
+    world_age = Base.get_world_counter()
+    key = CacheKey(world_age, sig)
     if haskey(mc_cache, key)
         return fresh_copy(mc_cache[key])
     else
@@ -88,11 +89,15 @@ function build_callable(sig::Type{<:Tuple})
         isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
         unoptimised_ir = IRCode(bb)
+        @static if VERSION > v"1.12-"
+            # This is a performance optimisation, copied over from Mooncake, where setting
+            # the valid world age to be very strictly just the current age allows the
+            # compiler to do more inlining and other optimisation.
+            unoptimised_ir = set_valid_world!(unoptimised_ir, world_age)
+        end
         optimised_ir = optimise_ir!(unoptimised_ir)
         mc_ret_type = callable_ret_type(sig, types)
-        mc = optimized_misty_closure(
-            mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true
-        )
+        mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
         mc_cache[key] = mc
         return mc, refs[end]
     end
@@ -820,9 +825,27 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 deref_ids = map(phi_inds) do n
                     id = bb.inst_ids[n]
                     phi_id = phi_ids[n]
+                    ref_ind = ssa_id_to_ref_index_map[id]
                     push!(
                         inst_pairs,
-                        (id, new_inst(Expr(:call, deref_phi, refs_id, phi_id))),
+                        # The last argument, ref_index_to_type_map[ref_ind], is a
+                        # performance optimisation. The idea is that we know the inferred
+                        # type of the PhiNode from the original IR, and by passing it to
+                        # deref_phi we can type annotate the element type of the Ref
+                        # that it's being dereferenced, resulting in more concrete types
+                        # in the generated IR.
+                        (
+                            id,
+                            new_inst(
+                                Expr(
+                                    :call,
+                                    deref_phi,
+                                    refs_id,
+                                    phi_id,
+                                    ref_index_to_type_map[ref_ind],
+                                ),
+                            ),
+                        ),
                     )
                     return id
                 end
@@ -1202,8 +1225,11 @@ end
 @inline resume_block_is(refs::R, id::Int32) where {R<:Tuple} = !(refs[end][] === id)
 
 # Helper used in `derive_copyable_task_ir`.
-@inline deref_phi(refs::R, n::TupleRef) where {R<:Tuple} = refs[n.n][]
-@inline deref_phi(::R, x) where {R<:Tuple} = x
+@inline function deref_phi(refs::R, n::TupleRef, ::Type{T}) where {R<:Tuple,T}
+    ref = refs[n.n]::Base.RefValue{T}
+    return ref[]
+end
+@inline deref_phi(::R, x, t::Type) where {R<:Tuple} = x
 
 # Helper used in `derived_copyable_task_ir`.
 @inline not_a_produced(x) = !(isa(x, ProducedValue))
