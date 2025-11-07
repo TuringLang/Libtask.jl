@@ -300,4 +300,31 @@
         @test Libtask.consume(tt) === 10
         @test Libtask.consume(tt) === nothing
     end
+
+    # Regression test against https://github.com/TuringLang/Libtask.jl/issues/207
+    @testset "Union deferencing" begin
+        function g(i::Int)
+            produce(1)
+            return i
+        end
+        function g(s::String)
+            produce(2)
+            return s
+        end
+        Libtask.@might_produce g
+
+        h(i::Int)::Int = i
+        h(s::String)::Int = length(s)
+
+        function f(x, g)
+            i_or_s = x > 0 ? 3 : "libtask"
+            gres = g(i_or_s)
+            return h(gres)
+        end
+
+        t = TapedTask(nothing, f, 1, g)
+        consume(t)
+        # This used to error
+        @test (consume(t); true)
+    end
 end

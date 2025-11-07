@@ -1226,8 +1226,8 @@ end
 
 # Helper used in `derive_copyable_task_ir`.
 @inline function deref_phi(refs::R, n::TupleRef, ::Type{T}) where {R<:Tuple,T}
-    ref = refs[n.n]::Base.RefValue{T}
-    return ref[]
+    ref = refs[n.n]
+    return ref[]::T
 end
 @inline deref_phi(::R, x, t::Type) where {R<:Tuple} = x
 
