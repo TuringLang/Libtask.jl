@@ -1,3 +1,7 @@
+# 0.9.10
+
+Fix a bug introduced in 0.9.9 that made certain phi nodes with Union types fail a type assertion.
+
 # 0.9.9
 
 Remove manual opaque closure optimisation functions in favour of setting the world age and letting the compiler do more work for us, and providing it with some more type information. This changes no functionality, and shouldn't change performance either, but simplifies code.
