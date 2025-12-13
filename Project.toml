@@ -2,8 +2,8 @@ name = "Libtask"
 uuid = "6f1fad26-d15e-5dc8-ae53-837a1d7b8c9f"
 license = "MIT"
 desc = "Tape based task copying in Turing"
-repo = "https://github.com/TuringLang/Libtask.jl.git"
 version = "0.9.10"
+repo = "https://github.com/TuringLang/Libtask.jl.git"
 
 [deps]
 MistyClosures = "dbe65cb8-6be2-42dd-bbc5-4196aaced4f4"
@@ -11,7 +11,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 Aqua = "0.8.11"
-JuliaFormatter = "1.0.62"
+JuliaFormatter = "1.0.62, 2"
 MistyClosures = "2.0.0"
 Test = "1"
 julia = "~1.10.8, 1.11.6"
