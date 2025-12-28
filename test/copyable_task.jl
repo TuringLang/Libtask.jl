@@ -1,3 +1,8 @@
+module CopyableTaskTests
+
+using Libtask
+using Test
+
 @testset "copyable_task" begin
     for case in Libtask.TestUtils.test_cases()
         case()
@@ -328,3 +333,5 @@
         @test (consume(t); true)
     end
 end
+
+end # module
