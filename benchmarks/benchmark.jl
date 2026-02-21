@@ -33,11 +33,12 @@ function benchmark(f, x...)
     ratio = round(taped.time / baseline.time; digits=1)
     println(rpad("ratio", length(label)), "  ", "$(ratio)x")
     println()
+    return nothing
 end
 
 function rosenbrock(x, maybe_produce=identity)
     i = x[2:end]
-    j = x[1:(end-1)]
+    j = x[1:(end - 1)]
     ret = sum((1 .- j) .^ 2 + 100 * (i - j .^ 2) .^ 2)
     maybe_produce(ret)
     return ret
@@ -54,19 +55,21 @@ function ackley(x::AbstractVector, maybe_produce=identity)
         sum_sqrs += i^2
         maybe_produce(sum_sqrs)
     end
-    return -a * exp(b * sqrt(len_recip * sum_sqrs)) - exp(len_recip * sum_cos) + a + MathConstants.e
+    return -a * exp(b * sqrt(len_recip * sum_sqrs)) - exp(len_recip * sum_cos) +
+           a +
+           MathConstants.e
 end
 benchmark(ackley, rand(100_000))
 
 function matrix_test(x, maybe_produce=identity)
     n = 100
     a = reshape(x[1:(n^2)], n, n)
-    b = reshape(x[(n^2+1):(2n^2)], n, n)
+    b = reshape(x[(n^2 + 1):(2n^2)], n, n)
     ret = log.((a * b) + a - b)
     maybe_produce(ret)
     return ret
 end
-benchmark(matrix_test, collect(1.0:(2*100^2+100)))
+benchmark(matrix_test, collect(1.0:(2 * 100^2 + 100)))
 
 relu(x) = log.(1.0 .+ exp.(x))
 sigmoid(n) = 1.0 / (1.0 + exp(-n))
