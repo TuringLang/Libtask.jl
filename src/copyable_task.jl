@@ -84,7 +84,12 @@ function build_callable(sig::Type{<:Tuple})
     if haskey(mc_cache, key)
         return fresh_copy(mc_cache[key])
     else
-        ir = Base.code_ircode_by_type(sig)[1][1]
+        ir = try
+            Base.code_ircode_by_type(sig)[1][1]
+        catch
+            @show sig
+            rethrow()
+        end
         # Check whether this is a varargs call.
         isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
