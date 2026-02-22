@@ -149,6 +149,35 @@ using Test
                 Libtask.TapedTask(nothing, Libtask.produce, 0)
             )
         end
+
+        @testset "No matching method (#183)" begin
+            f_int_only(a::Int) = produce(a)
+            # Wrong arity
+            @test_throws ArgumentError TapedTask(nothing, f_int_only)
+            @test_throws "Failed to generate IR" TapedTask(nothing, f_int_only)
+            # Wrong argument type
+            @test_throws ArgumentError TapedTask(nothing, f_int_only, 0.1)
+            @test_throws "Failed to generate IR" TapedTask(nothing, f_int_only, 0.1)
+
+            # try with a callable struct too
+            struct NotActuallyCallable end
+            @test_throws ArgumentError TapedTask(nothing, NotActuallyCallable())
+            @test_throws "Failed to generate IR" TapedTask(nothing, NotActuallyCallable())
+
+            struct IsCallable end
+            (::IsCallable)(x::Int) = produce(x)
+            @test_throws ArgumentError TapedTask(nothing, IsCallable())
+            @test_throws "Failed to generate IR" TapedTask(nothing, IsCallable())
+            @test_throws ArgumentError TapedTask(nothing, IsCallable(), 0.1)
+            @test_throws "Failed to generate IR" TapedTask(nothing, IsCallable(), 0.1)
+        end
+
+        @testset "Ambiguous method (#199)" begin
+            f_ambig(x::Int, y) = produce(x)
+            f_ambig(x, y::Int) = produce(y)
+            @test_throws ArgumentError TapedTask(nothing, f_ambig, 1, 1)
+            @test_throws "Failed to generate IR" TapedTask(nothing, f_ambig, 1, 1)
+        end
     end
 
     @testset "copying" begin
