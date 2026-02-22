@@ -23,6 +23,7 @@ Libtask.set_taped_globals!
 ```@docs; canonical=true
 Libtask.produce
 Libtask.get_taped_globals(::Type{T}) where {T}
+Libtask.NotInTapedTaskError
 ```
 
 An opt-in mechanism marks functions that might contain `Libtask.produce` statements.
