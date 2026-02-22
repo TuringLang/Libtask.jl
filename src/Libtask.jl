@@ -16,6 +16,7 @@ using .BasicBlockCode
 include("copyable_task.jl")
 include("test_utils.jl")
 
-export TapedTask, consume, produce, get_taped_globals, set_taped_globals!, NotInTapedTaskError
+export TapedTask,
+    consume, produce, get_taped_globals, set_taped_globals!, NotInTapedTaskError
 
 end
