@@ -1,3 +1,11 @@
+# 0.9.13
+
+Fix a bug where SSA registers in `throw_undef_if_not` expressions were not being correctly handled.
+This affected `TapedTask`s where the underlying function had variables that were conditionally defined.
+
+Also adds an internal function, `Libtask._generate_ir`, which is useful for debugging.
+This is not part of the public API; however if you are developing Libtask it is a useful function for quickly inspecting the IR that Libtask generates, both pre- and post-optimisation.
+
 # 0.9.12
 
 Added a new method, `Libtask.get_taped_globals(tt::TapedTask)`.
