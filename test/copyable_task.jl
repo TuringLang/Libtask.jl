@@ -377,7 +377,7 @@ using Test
     # Regression test for https://github.com/TuringLang/Libtask.jl/issues/204
     @testset "throw_undef_if_not handling" begin
         function tuin_g(y)
-            produce(y + 1)
+            return produce(y + 1)
         end
         Libtask.might_produce(::Type{Tuple{typeof(tuin_g),Int}}) = true
 

@@ -963,7 +963,7 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 if Meta.isexpr(stmt, :invoke) ||
                     Meta.isexpr(stmt, :call) ||
                     Meta.isexpr(stmt, :new) ||
-                    Meta.isexpr(stmt, :foreigncall)|| 
+                    Meta.isexpr(stmt, :foreigncall) ||
                     Meta.isexpr(stmt, :throw_undef_if_not)
 
                     # Find any `ID`s and replace them with calls to read whatever is stored
