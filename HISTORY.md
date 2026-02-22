@@ -1,3 +1,7 @@
+# 0.9.11
+
+When constructing a `TapedTask` with a method that will error when run (e.g. method doesn't exist, or is ambiguous) a more helpful error is shown.
+
 # 0.9.10
 
 Fix a bug introduced in 0.9.9 that made certain phi nodes with Union types fail a type assertion.
