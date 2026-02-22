@@ -9,7 +9,10 @@ outside a `TapedTask`.
 """
 struct NotInTapedTaskError <: Exception end
 function Base.showerror(io::IO, ::NotInTapedTaskError)
-    print(io, "Libtask.NotInTapedTaskError: The method `get_taped_globals(::Type)` can only be called from inside a TapedTask.")
+    return print(
+        io,
+        "Libtask.NotInTapedTaskError: The method `get_taped_globals(::Type)` can only be called from inside a TapedTask.",
+    )
 end
 
 const TASK_VARIABLE_KEY = :task_variable
