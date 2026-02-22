@@ -100,7 +100,7 @@ function _throw_ir_error(@nospecialize(sig::Type{<:Tuple}))
 end
 
 """
-    _generate_ir(optimise::Bool, f, args...; kwargs...)
+    generate_ir(optimise::Bool, f, args...; kwargs...)
 
 Returns `(original_ir, transformed_ir)` for the call `f(args...; kwargs...)`.
 
@@ -115,7 +115,7 @@ also perform verification, and will error if the IR is malformed.
 
 This is intended purely as a debugging tool, and is not exported.
 """
-function _generate_ir(optimise::Bool, fargs...; kwargs...)
+function generate_ir(optimise::Bool, fargs...; kwargs...)
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
     sig = typeof(all_args)
     ir_results = Base.code_ircode_by_type(sig)
