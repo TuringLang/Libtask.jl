@@ -1,4 +1,20 @@
 """
+    Libtask.NotInTapedTaskError <: Exception
+
+This error is thrown when attempting to call `Libtask.get_taped_globals(::Type{T}) where
+{T}` from outside of a `TapedTask`.
+
+Note that the other method, `Libtask.get_taped_globals(t::TapedTask)`, can be called from
+outside a `TapedTask`.
+"""
+struct NotInTapedTaskError <: Exception end
+function Base.showerror(io::IO, ::NotInTapedTaskError)
+    print(io, "Libtask.NotInTapedTaskError: The method `get_taped_globals(::Type)` can only be called from inside a TapedTask.")
+end
+
+const TASK_VARIABLE_KEY = :task_variable
+
+"""
     get_taped_globals(T::Type)
 
 When this method is called from **inside a `TapedTask`**, this will return whatever is
@@ -12,11 +28,15 @@ return, pass `Any` -- this will typically yield type instabilities, but will run
     # This function is `@noinline`d to ensure that the type-unstable items in here do not
     # appear in a calling function, and cause allocations.
     #
-    # The return type of `task_local_storage(:task_variable)` is `Any`. To ensure that this
-    # type instability does not propagate through the rest of the code, we `typeassert` the
-    # result to be `T`. By doing this, callers of this function will (hopefully) think
+    # The return type of `task_local_storage(TASK_VARIABLE_KEY)` is `Any`. To ensure that
+    # this type instability does not propagate through the rest of the code, we `typeassert`
+    # the result to be `T`. By doing this, callers of this function will (hopefully) think
     # carefully about how they can figure out what type they have put in global storage.
-    return typeassert(task_local_storage(:task_variable), T)
+    tls = task_local_storage()
+    if !haskey(tls, TASK_VARIABLE_KEY)
+        throw(NotInTapedTaskError())
+    end
+    return typeassert(tls[TASK_VARIABLE_KEY], T)
 end
 
 # A dummy global variable used inside `produce` to ensure that `produce` calls never get
@@ -410,7 +430,7 @@ called, it starts execution from the entry point. If `consume` has previously be
 `nothing` will be returned.
 """
 @inline function consume(t::TapedTask)
-    task_local_storage(:task_variable, t.taped_globals)
+    task_local_storage(TASK_VARIABLE_KEY, t.taped_globals)
     v = t.mc.oc(t.fargs...)
     return v isa ProducedValue ? v[] : nothing
 end
