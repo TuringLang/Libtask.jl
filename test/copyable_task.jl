@@ -4,6 +4,12 @@ using Libtask
 using Test
 
 @testset "copyable_task" begin
+    @testset "get_taped_globals outside of a task" begin
+        # This testset must come first because subsequent calls to get_taped_globals /
+        # set_taped_globals! will affect the TLS of the task running the tests.
+        @test_throws Libtask.NotInTapedTaskError Libtask.get_taped_globals(Any)
+    end
+
     for case in Libtask.TestUtils.test_cases()
         case()
     end
