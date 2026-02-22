@@ -1,3 +1,11 @@
+# 0.9.12
+
+Added a new method, `Libtask.get_taped_globals(tt::TapedTask)`.
+This method extracts the taped globals stored inside `tt`.
+
+Note that this is distinct from the existing method `Libtask.get_taped_globals(::Type{T}) where {T}`.
+That method is meant for being called *inside* a TapedTask, and it extracts the taped globals from the task that it is currently inside.
+
 # 0.9.11
 
 When constructing a `TapedTask` with a method that will error when run (e.g. method doesn't exist, or is ambiguous) a more helpful error is shown.

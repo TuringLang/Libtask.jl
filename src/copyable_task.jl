@@ -1,14 +1,12 @@
 """
     get_taped_globals(T::Type)
 
-When called from inside a call to a `TapedTask`, this will return whatever is contained in
-its `taped_globals` field.
+When this method is called from **inside a `TapedTask`**, this will return whatever is
+contained in its `taped_globals` field.
 
 The type `T` is required for optimal performance. If you know that the result of this
 operation must return a specific type, specify `T`. If you do not know what type it will
 return, pass `Any` -- this will typically yield type instabilities, but will run correctly.
-
-See also [`set_taped_globals!`](@ref).
 """
 @noinline function get_taped_globals(::Type{T}) where {T}
     # This function is `@noinline`d to ensure that the type-unstable items in here do not
@@ -20,6 +18,18 @@ See also [`set_taped_globals!`](@ref).
     # carefully about how they can figure out what type they have put in global storage.
     return typeassert(task_local_storage(:task_variable), T)
 end
+
+"""
+    get_taped_globals(tt::TapedTask)
+
+Extract the `taped_globals` field from a `TapedTask`.
+
+This is the same as the value that will be returned by [`get_taped_globals`](@ref) when
+called from *inside* `tt`. However, this method can be called from outside `tt`.
+
+See also [`set_taped_globals!`](@ref).
+"""
+get_taped_globals(t::TapedTask) = t.taped_globals
 
 # A dummy global variable used inside `produce` to ensure that `produce` calls never get
 # inlined away. This doesn't ever actually get run, provided that the `produce` call is made
