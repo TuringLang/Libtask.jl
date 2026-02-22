@@ -100,6 +100,40 @@ function _throw_ir_error(@nospecialize(sig::Type{<:Tuple}))
 end
 
 """
+    _generate_ir(optimise::Bool, f, args...; kwargs...)
+
+Returns `(original_ir, transformed_ir)` for the call `f(args...; kwargs...)`.
+
+The first element is the original `IRCode` that Julia generates for the call. The second is
+the transformed `IRCode` that Libtask would use to implement the `produce`/`consume`
+interface in a `TapedTask`.
+
+`optimise` by default is `true`; it controls whether the transformed IR (i.e. for the
+`TapedTask`) is optimised or not. Apart from inspecting the effects of optimisation, setting
+`optimise` to `false` can also be useful for debugging, because the optimisation pass will
+also perform verification, and will error if the IR is malformed.
+
+This is intended purely as a debugging tool, and is not exported.
+"""
+function _generate_ir(optimise::Bool, fargs...; kwargs...)
+    all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
+    sig = typeof(all_args)
+    ir_results = Base.code_ircode_by_type(sig)
+    if isempty(ir_results)
+        _throw_ir_error(sig)
+    end
+    original_ir = ir_results[1][1]
+    seed_id!()
+    bb, _, _ = derive_copyable_task_ir(BBCode(original_ir))
+    transformed_ir = if optimise
+        optimise_ir!(IRCode(bb))
+    else
+        IRCode(bb)
+    end
+    return original_ir, transformed_ir
+end
+
+"""
     build_callable(sig::Type{<:Tuple})
 
 Returns a `MistyClosure` which is used by `TapedTask` to implement the
@@ -929,7 +963,8 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 if Meta.isexpr(stmt, :invoke) ||
                     Meta.isexpr(stmt, :call) ||
                     Meta.isexpr(stmt, :new) ||
-                    Meta.isexpr(stmt, :foreigncall)
+                    Meta.isexpr(stmt, :foreigncall)|| 
+                    Meta.isexpr(stmt, :throw_undef_if_not)
 
                     # Find any `ID`s and replace them with calls to read whatever is stored
                     # in the `Ref`s that they are associated to.
@@ -961,8 +996,6 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                 elseif Meta.isexpr(stmt, :gc_preserve_begin)
                     push!(inst_pairs, (id, inst))
                 elseif Meta.isexpr(stmt, :gc_preserve_end)
-                    push!(inst_pairs, (id, inst))
-                elseif Meta.isexpr(stmt, :throw_undef_if_not)
                     push!(inst_pairs, (id, inst))
                 elseif stmt isa Nothing
                     push!(inst_pairs, (id, inst))

@@ -373,6 +373,36 @@ using Test
         # This used to error
         @test (consume(t); true)
     end
+
+    # Regression test for https://github.com/TuringLang/Libtask.jl/issues/204
+    @testset "throw_undef_if_not handling" begin
+        function tuin_g(y)
+            produce(y + 1)
+        end
+        Libtask.might_produce(::Type{Tuple{typeof(tuin_g),Int}}) = true
+
+        function tuin_f(x)
+            if x == 1
+                y = 2
+            end
+            # `g` must produce.
+            # Also, there must be at least two calls to `produce` in the function.
+            tuin_g(y)
+            tuin_g(y)
+            return 1
+        end
+
+        # TapedTask construction used to error.
+        t = TapedTask(nothing, tuin_f, 1)
+        # Check that it returns the right things.
+        @test consume(t) == 3
+        @test consume(t) == 3
+        @test consume(t) === nothing
+
+        # This is bogus, but we should check that it has the right behaviour.
+        t = TapedTask(nothing, tuin_f, 2)
+        @test_throws UndefVarError consume(t)
+    end
 end
 
 end # module
