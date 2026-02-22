@@ -19,8 +19,8 @@ concurrency:
 jobs:
   turing:
     runs-on: ${{ matrix.os }}
-    fail-fast: false
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest

@@ -8,8 +8,8 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    fail-fast: false
     strategy:
+      fail-fast: false
       matrix:
         version:
           - 'min'
