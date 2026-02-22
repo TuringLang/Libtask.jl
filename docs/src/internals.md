@@ -1,6 +1,7 @@
 # Internals
 
 ```@docs; canonical=true
+Libtask._generate_ir
 Libtask.produce_value
 Libtask.is_produce_stmt
 Libtask.stmt_might_produce
