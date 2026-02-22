@@ -15,13 +15,14 @@ They divide neatly into two kinds of functions: those which are used to manipula
 ```@docs; canonical=true
 Libtask.consume
 Base.copy(::Libtask.TapedTask)
+Libtask.get_taped_globals(::Libtask.TapedTask)
 Libtask.set_taped_globals!
 ```
 
 ## Functions for use inside a [`TapedTask`](@ref)s
 ```@docs; canonical=true
 Libtask.produce
-Libtask.get_taped_globals
+Libtask.get_taped_globals(::Type{T}) where {T}
 ```
 
 An opt-in mechanism marks functions that might contain `Libtask.produce` statements.
