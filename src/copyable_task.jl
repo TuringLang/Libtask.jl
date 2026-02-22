@@ -19,18 +19,6 @@ return, pass `Any` -- this will typically yield type instabilities, but will run
     return typeassert(task_local_storage(:task_variable), T)
 end
 
-"""
-    get_taped_globals(tt::TapedTask)
-
-Extract the `taped_globals` field from a `TapedTask`.
-
-This is the same as the value that will be returned by [`get_taped_globals`](@ref) when
-called from *inside* `tt`. However, this method can be called from outside `tt`.
-
-See also [`set_taped_globals!`](@ref).
-"""
-get_taped_globals(t::TapedTask) = t.taped_globals
-
 # A dummy global variable used inside `produce` to ensure that `produce` calls never get
 # inlined away. This doesn't ever actually get run, provided that the `produce` call is made
 # from a `consume` call.
@@ -252,7 +240,12 @@ difference between two copies to be their random number generator.
 
 A generic mechanism is available to achieve this. [`Libtask.get_taped_globals`](@ref) and
 [`Libtask.set_taped_globals!`](@ref) let you set and retrieve a variable which is specific
-to a given [`Libtask.TapedTask`](@ref). The former can be called inside a function:
+to a given [`Libtask.TapedTask`](@ref). These functions can be called from *outside* a
+`TapedTask`, in order to get or set its taped globals.
+
+However, [`Libtask.get_taped_globals`](@ref) can also be called from inside a `TapedTask`
+itself:
+
 ```jldoctest sv
 julia> function f()
            produce(get_taped_globals(Int))
@@ -262,8 +255,9 @@ julia> function f()
 f (generic function with 1 method)
 ```
 
-The first argument to [`Libtask.TapedTask`](@ref) is the value that
+When constructing a [`Libtask.TapedTask`](@ref), the first argument is the value that
 [`Libtask.get_taped_globals`](@ref) will return:
+
 ```jldoctest sv
 julia> t = TapedTask(1, f);
 
@@ -272,6 +266,7 @@ julia> consume(t)
 ```
 
 The value that it returns can be changed between [`Libtask.consume`](@ref) calls:
+
 ```jldoctest sv
 julia> set_taped_globals!(t, 2)
 
@@ -373,6 +368,18 @@ function fresh_copy(mc::T) where {T<:MistyClosure}
     new_position[] = -1
     return replace_captures(mc, new_captures), new_position
 end
+
+"""
+    get_taped_globals(tt::TapedTask)
+
+Extract the `taped_globals` field from a `TapedTask`.
+
+This is the same as the value that will be returned by [`get_taped_globals`](@ref) when
+called from *inside* `tt`. However, this method can be called from outside `tt`.
+
+See also [`set_taped_globals!`](@ref).
+"""
+get_taped_globals(t::TapedTask) = t.taped_globals
 
 """
     set_taped_globals!(t::TapedTask, new_taped_globals)::Nothing

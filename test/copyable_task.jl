@@ -7,18 +7,24 @@ using Test
     for case in Libtask.TestUtils.test_cases()
         case()
     end
-    @testset "set_taped_globals!" begin
+
+    @testset "get_ and set_taped_globals!" begin
+        # Note that this testset tests both methods of get_taped_globals, the one inside the
+        # task itself, and the one outside.
         function f()
             produce(Libtask.get_taped_globals(Int))
             produce(Libtask.get_taped_globals(Int))
             return nothing
         end
         t = TapedTask(5, f)
+        @test Libtask.get_taped_globals(t) == 5
         @test consume(t) == 5
         Libtask.set_taped_globals!(t, 6)
+        @test Libtask.get_taped_globals(t) == 6
         @test consume(t) == 6
         @test consume(t) === nothing
     end
+
     @testset "iteration" begin
         function f()
             t = 1
