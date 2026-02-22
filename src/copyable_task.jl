@@ -63,6 +63,21 @@ function callable_ret_type(sig, produce_types)
     return Union{Base.code_ircode_by_type(sig)[1][2],produce_type}
 end
 
+function _throw_ir_error(@nospecialize(sig::Type{<:Tuple}))
+    F = fieldtype(sig, 1)
+    f_name = F <: Function ? nameof(F.instance) : F
+    arg_types = fieldtypes(sig)[2:end]
+    msg = """
+        Failed to generate IR for signature $sig.
+
+        This typically means that either:
+
+        1. No method matches `$f_name` with argument types $arg_types.
+           Check that you're passing the right number and types of arguments.
+        2. Multiple methods match and the call is ambiguous.\n"""
+    throw(ArgumentError(msg))
+end
+
 """
     build_callable(sig::Type{<:Tuple})
 
@@ -84,7 +99,11 @@ function build_callable(sig::Type{<:Tuple})
     if haskey(mc_cache, key)
         return fresh_copy(mc_cache[key])
     else
-        ir = Base.code_ircode_by_type(sig)[1][1]
+        ir_results = Base.code_ircode_by_type(sig)
+        if isempty(ir_results)
+            _throw_ir_error(sig)
+        end
+        ir = ir_results[1][1]
         # Check whether this is a varargs call.
         isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
