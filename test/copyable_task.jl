@@ -158,6 +158,18 @@ using Test
             # Wrong argument type
             @test_throws ArgumentError TapedTask(nothing, f_int_only, 0.1)
             @test_throws "Failed to generate IR" TapedTask(nothing, f_int_only, 0.1)
+
+            # try with a callable struct too
+            struct NotActuallyCallable end
+            @test_throws ArgumentError TapedTask(nothing, NotActuallyCallable())
+            @test_throws "Failed to generate IR" TapedTask(nothing, NotActuallyCallable())
+
+            struct IsCallable end
+            (::IsCallable)(x::Int) = produce(x)
+            @test_throws ArgumentError TapedTask(nothing, IsCallable())
+            @test_throws "Failed to generate IR" TapedTask(nothing, IsCallable())
+            @test_throws ArgumentError TapedTask(nothing, IsCallable(), 0.1)
+            @test_throws "Failed to generate IR" TapedTask(nothing, IsCallable(), 0.1)
         end
 
         @testset "Ambiguous method (#199)" begin
