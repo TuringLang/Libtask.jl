@@ -108,10 +108,11 @@ The first element is the original `IRCode` that Julia generates for the call. Th
 the transformed `IRCode` that Libtask would use to implement the `produce`/`consume`
 interface in a `TapedTask`.
 
-`optimise` by default is `true`; it controls whether the transformed IR (i.e. for the
-`TapedTask`) is optimised or not. Apart from inspecting the effects of optimisation, setting
-`optimise` to `false` can also be useful for debugging, because the optimisation pass will
-also perform verification, and will error if the IR is malformed.
+`optimise` controls whether the transformed IR (i.e. for the `TapedTask`) is optimised or
+not. Apart from inspecting the effects of optimisation, setting `optimise` to `false` can
+also be useful for debugging, because the optimisation pass will also perform verification,
+and will error if the IR is malformed (which can happen if Libtask's transformation pass has
+bugs).
 
 This is intended purely as a debugging tool, and is not exported.
 """
