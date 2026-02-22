@@ -1,0 +1,7 @@
+[deps]
+Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
+Libtask = "6f1fad26-d15e-5dc8-ae53-837a1d7b8c9f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[sources]
+Libtask = {path = "../"}
