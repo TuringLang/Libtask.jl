@@ -1,24 +1,45 @@
 """
+    Libtask.NotInTapedTaskError <: Exception
+
+This error is thrown when attempting to call `Libtask.get_taped_globals(::Type{T}) where
+{T}` from outside of a `TapedTask`.
+
+Note that the other method, `Libtask.get_taped_globals(t::TapedTask)`, can be called from
+outside a `TapedTask`.
+"""
+struct NotInTapedTaskError <: Exception end
+function Base.showerror(io::IO, ::NotInTapedTaskError)
+    return print(
+        io,
+        "Libtask.NotInTapedTaskError: The method `get_taped_globals(::Type)` can only be called from inside a TapedTask.",
+    )
+end
+
+const TASK_VARIABLE_KEY = :task_variable
+
+"""
     get_taped_globals(T::Type)
 
-When called from inside a call to a `TapedTask`, this will return whatever is contained in
-its `taped_globals` field.
+When this method is called from **inside a `TapedTask`**, this will return whatever is
+contained in its `taped_globals` field.
 
 The type `T` is required for optimal performance. If you know that the result of this
 operation must return a specific type, specify `T`. If you do not know what type it will
 return, pass `Any` -- this will typically yield type instabilities, but will run correctly.
-
-See also [`set_taped_globals!`](@ref).
 """
 @noinline function get_taped_globals(::Type{T}) where {T}
     # This function is `@noinline`d to ensure that the type-unstable items in here do not
     # appear in a calling function, and cause allocations.
     #
-    # The return type of `task_local_storage(:task_variable)` is `Any`. To ensure that this
-    # type instability does not propagate through the rest of the code, we `typeassert` the
-    # result to be `T`. By doing this, callers of this function will (hopefully) think
+    # The return type of `task_local_storage(TASK_VARIABLE_KEY)` is `Any`. To ensure that
+    # this type instability does not propagate through the rest of the code, we `typeassert`
+    # the result to be `T`. By doing this, callers of this function will (hopefully) think
     # carefully about how they can figure out what type they have put in global storage.
-    return typeassert(task_local_storage(:task_variable), T)
+    tls = task_local_storage()
+    if !haskey(tls, TASK_VARIABLE_KEY)
+        throw(NotInTapedTaskError())
+    end
+    return typeassert(tls[TASK_VARIABLE_KEY], T)
 end
 
 # A dummy global variable used inside `produce` to ensure that `produce` calls never get
@@ -242,7 +263,12 @@ difference between two copies to be their random number generator.
 
 A generic mechanism is available to achieve this. [`Libtask.get_taped_globals`](@ref) and
 [`Libtask.set_taped_globals!`](@ref) let you set and retrieve a variable which is specific
-to a given [`Libtask.TapedTask`](@ref). The former can be called inside a function:
+to a given [`Libtask.TapedTask`](@ref). These functions can be called from *outside* a
+`TapedTask`, in order to get or set its taped globals.
+
+However, [`Libtask.get_taped_globals`](@ref) can also be called from inside a `TapedTask`
+itself:
+
 ```jldoctest sv
 julia> function f()
            produce(get_taped_globals(Int))
@@ -252,8 +278,9 @@ julia> function f()
 f (generic function with 1 method)
 ```
 
-The first argument to [`Libtask.TapedTask`](@ref) is the value that
+When constructing a [`Libtask.TapedTask`](@ref), the first argument is the value that
 [`Libtask.get_taped_globals`](@ref) will return:
+
 ```jldoctest sv
 julia> t = TapedTask(1, f);
 
@@ -262,6 +289,7 @@ julia> consume(t)
 ```
 
 The value that it returns can be changed between [`Libtask.consume`](@ref) calls:
+
 ```jldoctest sv
 julia> set_taped_globals!(t, 2)
 
@@ -365,6 +393,18 @@ function fresh_copy(mc::T) where {T<:MistyClosure}
 end
 
 """
+    get_taped_globals(tt::TapedTask)
+
+Extract the `taped_globals` field from a `TapedTask`.
+
+This is the same as the value that will be returned by [`get_taped_globals`](@ref) when
+called from *inside* `tt`. However, this method can be called from outside `tt`.
+
+See also [`set_taped_globals!`](@ref).
+"""
+get_taped_globals(t::TapedTask) = t.taped_globals
+
+"""
     set_taped_globals!(t::TapedTask, new_taped_globals)::Nothing
 
 Set the `taped_globals` of `t` to `new_taped_globals`. Any calls to
@@ -393,7 +433,7 @@ called, it starts execution from the entry point. If `consume` has previously be
 `nothing` will be returned.
 """
 @inline function consume(t::TapedTask)
-    task_local_storage(:task_variable, t.taped_globals)
+    task_local_storage(TASK_VARIABLE_KEY, t.taped_globals)
     v = t.mc.oc(t.fargs...)
     return v isa ProducedValue ? v[] : nothing
 end
