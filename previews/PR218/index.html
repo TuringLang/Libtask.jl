@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Libtask · Libtask</title><meta name="title" content="Libtask · Libtask"/><meta property="og:title" content="Libtask · Libtask"/><meta property="twitter:title" content="Libtask · Libtask"/><meta name="description" content="Documentation for Libtask."/><meta property="og:description" content="Documentation for Libtask."/><meta property="twitter:description" content="Documentation for Libtask."/><script data-outdated-warner src="assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="search_index.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body>
+<!-- NAVBAR START -->
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro&display=swap');
+
+    /* Documenter.jl CSS Overrides */
+    html {
+        scroll-padding-top: calc(var(--navbar-height) + 1rem);
+    }
+    .docs-sidebar, #documenter {
+        margin-top: var(--navbar-height);
+    }
+    .docs-version-selector {
+        margin-bottom: 60px !important;
+    }
+    @media screen and (max-width: 1056px) {
+        .docs-version-selector {
+            margin-bottom: 60px !important;
+        }
+        .docs-sidebar {
+            margin-top: 0 !important;
+        }
+    }
+    /* End of Documenter.jl Tweaks */
+
+    /* Color and Font Variables */
+    :root {
+        --heading-color: #6c757d;
+        --item-color: rgb(165, 165, 165);
+        --primary-bg: white;
+        --hover-color: #8faad2;
+        --deprecated-bg: #ff4d4d;
+        --deprecated-text: white;
+        --icon-color: #6c757d;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+        --dropdown-hover-bg: #e9ecef;
+        
+        /* Typography */
+        --font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        --nav-link-font-size: 1.0625rem;
+        --turing-title-font-size: 21.25px;
+        --icon-font-size: 1.25rem;
+        --dropdown-arrow-font-size: 0.6875rem;
+        --badge-font-size: 0.75rem;
+
+        /* Sizing and Spacing */
+        --navbar-height: 3.75rem;
+        --logo-height: 31px;
+        --logo-width: auto;
+        --logo-padding-top: 7px;
+        --logo-margin-left: 0.8rem;
+        --title-margin-left: 0.4px;
+        --title-nav-spacing: 1.1rem;
+        --nav-item-margin-left: 1.3rem;
+        --icon-margin-left: 1rem;
+        --dropdown-padding: 1.875rem;
+        --dropdown-item-width: 12.5rem;
+        --dropdown-subitem-width: 15.625rem;
+        --dropdown-subitem-padding: 0.125rem 0.625rem;
+    }
+
+    /* Dark Theme Variable Overrides */
+    html.theme--documenter-dark {
+        --heading-color: #e0e0e0;
+        --item-color: #bdbdbd;
+        --primary-bg: #1f2424;
+        --hover-color: #ffffff;
+        --icon-color: #e0e0e0;
+        --shadow-color: rgba(255, 255, 255, 0.1);
+        --dropdown-hover-bg: #424242;
+    }
+
+    /* Catppuccin Theme Overrides */
+    html.theme--catppuccin-latte {
+        --heading-color: #4c4f69;
+        --primary-bg: #eff1f5;
+        --icon-color: #4c4f69;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+        --dropdown-hover-bg: #e6e9ef;
+    }
+    html.theme--catppuccin-frappe {
+        --heading-color: #c6d0f5;
+        --primary-bg: #303446;
+        --icon-color: #c6d0f5;
+        --shadow-color: rgba(255, 255, 255, 0.1);
+        --dropdown-hover-bg: #51576d;
+    }
+    html.theme--catppuccin-macchiato {
+        --heading-color: #cad3f5;
+        --primary-bg: #24273a;
+        --icon-color: #cad3f5;
+        --shadow-color: rgba(255, 255, 255, 0.1);
+        --dropdown-hover-bg: #494d64;
+    }
+    html.theme--catppuccin-mocha {
+        --heading-color: #cad3f5;
+        --primary-bg: #1e1e2e;
+        --icon-color: #cad3f5;
+        --shadow-color: rgba(255, 255, 255, 0.1);
+        --dropdown-hover-bg: #45475a;
+    }
+
+
+    /* Main Navigation Bar */
+    .ext-navigation {
+        font-family: var(--font-family);
+        position: fixed;
+        height: var(--navbar-height);
+        top: 0;
+        width: 100%;
+        background-color: var(--primary-bg);
+        z-index: 1000;
+        box-shadow: 0 2px 4px var(--shadow-color);
+        display: flex;
+        align-items: center;
+        padding: 0 1.0625rem;
+        transition: transform 0.3s, background-color 0.3s;
+    }
+
+    nav.ext-navigation .ext-navbar-logo {
+        margin-left: var(--logo-margin-left);
+        height: auto;
+        max-height: var(--logo-height);
+        width: auto;
+        padding-top: var(--logo-padding-top);
+    }
+    
+    /* Theme-aware logo text color */
+    .ext-navbar-logo .logo-text {
+        fill: var(--heading-color);
+    }
+    
+    .ext-navbar-title {
+        color: var(--heading-color) !important;
+        font-size: var(--turing-title-font-size) !important;
+        margin-left: var(--title-margin-left);
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+    
+    .ext-navbar-title:hover {
+        color: var(--hover-color) !important;
+    }
+
+    .ext-nav-links {
+        display: flex;
+        align-items: center;
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        flex-grow: 1;
+        margin-left: var(--title-nav-spacing);
+    }
+
+    .ext-nav-links li:first-child {
+        margin-left: 0 !important;
+    }
+
+    .ext-nav-links li {
+        margin-left: var(--nav-item-margin-left) !important;
+    }
+
+    .ext-nav-link {
+        color: var(--heading-color) !important;
+        text-decoration: none;
+        font-size: var(--nav-link-font-size) !important;
+        transition: color 0.2s ease;
+        cursor: pointer;
+    }
+
+    .ext-nav-link:hover,
+    .ext-navbar-item-single a:hover,
+    .ext-navbar-icons a:hover {
+        color: var(--hover-color) !important;
+    }
+
+    .ext-navbar-item-single a {
+        color: var(--heading-color) !important;
+    }
+    
+    .ext-navbar-icons {
+        display: flex;
+        align-items: center;
+    }
+
+    .ext-navbar-icons a {
+        color: var(--icon-color) !important;
+        font-size: var(--icon-font-size) !important;
+        transition: color 0.2s ease;
+        margin-left: var(--icon-margin-left);
+    }
+
+    .ext-menu-toggle {
+        display: none;
+        font-size: 1.5rem;
+        color: var(--heading-color);
+        cursor: pointer;
+    }
+
+    .ext-dropdown {
+        display: none;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        padding: var(--dropdown-padding);
+        position: absolute;
+        top: var(--navbar-height);
+        width: 100%;
+        left: 0;
+        background-color: var(--primary-bg);
+        line-height: 1.875rem;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, background-color 0.3s;
+        transform: translateY(-0.625rem);
+        box-shadow: 0 4px 6px var(--shadow-color);
+    }
+
+    #library-handler::after {
+        content: "▼";
+        font-size: var(--dropdown-arrow-font-size);
+        margin-left: 0.3125rem;
+        transition: transform 0.3s ease-in-out;
+    }
+
+    #library-handler.open::after {
+        content: "▲";
+    }
+
+    .ext-dropdown.show {
+        display: grid;
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .ext-dropdown ul {
+        width: var(--dropdown-item-width);
+        margin-bottom: 1.25rem;
+    }
+
+    .ext-dropdown ul li {
+        text-align: left;
+        display: flex;
+        align-items: center;
+    }
+
+    .ext-dropdown ul a li {
+        color: var(--item-color);
+        width: var(--dropdown-subitem-width);
+        border-radius: 3px;
+        padding: var(--dropdown-subitem-padding);
+        transition: background-color 0.2s ease;
+    }
+
+    .ext-dropdown ul a li:hover {
+        background-color: var(--dropdown-hover-bg);
+    }
+
+    .ext-dropdown-item-heading {
+        color: var(--heading-color);
+        text-align: center;
+    }
+
+    .deprecated-badge {
+        background-color: var(--deprecated-bg);
+        color: var(--deprecated-text);
+        font-size: var(--badge-font-size);
+        padding: .1rem;
+        border-radius: 3px;
+        margin-left: 0.5rem;
+        line-height: 1;
+    }
+
+    @media (max-width: 966px) {
+        .ext-dropdown {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .ext-nav-links {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            background-color: var(--primary-bg);
+            position: absolute;
+            top: var(--navbar-height);
+            left: 0;
+            padding: 0.625rem 0;
+            height: auto;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px var(--shadow-color);
+            margin-left: 0;
+        }
+
+        .ext-nav-links.show {
+            display: flex;
+        }
+
+        .ext-nav-links li {
+            margin: 0.625rem 0 !important;
+            text-align: center;
+        }
+        
+        .ext-menu-toggle {
+            display: block;
+            margin-left: auto;
+        }
+
+        .ext-navigation.hide {
+            transform: translateY(calc(-1 * var(--navbar-height)));
+        }
+
+        .ext-dropdown {
+            position: static;
+            display: block;
+            opacity: 1;
+            transform: none;
+            box-shadow: none;
+            grid-template-columns: 1fr;
+            padding: 0.625rem;
+            text-align: center;
+        }
+
+        .ext-dropdown ul {
+            width: auto;
+            display: inline-block;
+            margin: 0 auto 0.3125rem;
+            text-align: left;
+        }
+    }
+</style>
+<nav class="ext-navigation">
+    <a href="https://turinglang.org/">
+        <svg width="4333" height="1145" viewBox="0 0 4333 1145" fill="none" xmlns="http://www.w3.org/2000/svg" class="ext-navbar-logo">
+            <path class="logo-text" d="M0.44603 193.181V66.9868H663.471V193.181H406.62V898H257.297V193.181H0.44603ZM1097.24 635.874V274.74H1244.13V898H1101.7V787.225H1095.21C1081.14 822.121 1058.01 850.66 1025.82 872.842C993.902 895.024 954.542 906.115 907.744 906.115C866.896 906.115 830.783 897.053 799.403 878.929C768.295 860.534 743.948 833.889 726.365 798.993C708.782 763.826 699.99 721.356 699.99 671.581V274.74H846.878V648.858C846.878 688.353 857.699 719.733 879.34 742.997C900.981 766.261 929.385 777.893 964.551 777.893C986.192 777.893 1007.16 772.618 1027.45 762.068C1047.73 751.518 1064.37 735.828 1077.35 714.999C1090.61 693.899 1097.24 667.524 1097.24 635.874ZM1395.17 898V274.74H1537.6V378.617H1544.09C1555.45 342.639 1574.93 314.911 1602.52 295.434C1630.38 275.687 1662.17 265.813 1697.88 265.813C1705.99 265.813 1715.05 266.219 1725.06 267.031C1735.34 267.572 1743.86 268.518 1750.63 269.871V404.992C1744.4 402.828 1734.53 400.934 1721 399.311C1707.75 397.417 1694.9 396.471 1682.46 396.471C1655.68 396.471 1631.6 402.287 1610.23 413.919C1589.13 425.28 1572.49 441.105 1560.32 461.393C1548.15 481.682 1542.06 505.081 1542.06 531.591V898H1395.17ZM1848.21 898V274.74H1995.1V898H1848.21ZM1922.06 186.283C1898.8 186.283 1878.78 178.573 1862.01 163.154C1845.24 147.464 1836.85 128.664 1836.85 106.752C1836.85 84.5701 1845.24 65.7695 1862.01 50.3503C1878.78 34.6606 1898.8 26.8158 1922.06 26.8158C1945.6 26.8158 1965.61 34.6606 1982.12 50.3503C1998.89 65.7695 2007.27 84.5701 2007.27 106.752C2007.27 128.664 1998.89 147.464 1982.12 163.154C1965.61 178.573 1945.6 186.283 1922.06 186.283ZM2293.04 532.809V898H2146.15V274.74H2286.54V380.646H2293.85C2308.18 345.75 2331.04 318.022 2362.42 297.463C2394.07 276.904 2433.16 266.625 2479.69 266.625C2522.7 266.625 2560.17 275.822 2592.09 294.217C2624.28 312.612 2649.17 339.257 2666.75 374.153C2684.6 409.049 2693.39 451.385 2693.12 501.159V898H2546.24V523.882C2546.24 482.223 2535.41 449.626 2513.77 426.092C2492.4 402.557 2462.78 390.79 2424.91 390.79C2399.21 390.79 2376.35 396.471 2356.34 407.832C2336.59 418.923 2321.03 435.019 2309.67 456.119C2298.58 477.218 2293.04 502.782 2293.04 532.809ZM3113.5 1144.71C3060.75 1144.71 3015.44 1137.54 2977.57 1123.2C2939.7 1109.13 2909.26 1090.2 2886.27 1066.39C2863.28 1042.59 2847.32 1016.21 2838.39 987.269L2970.67 955.213C2976.62 967.386 2985.28 979.424 2996.64 991.327C3008 1003.5 3023.28 1013.51 3042.49 1021.35C3061.97 1029.47 3086.45 1033.53 3115.93 1033.53C3157.59 1033.53 3192.08 1023.38 3219.4 1003.09C3246.73 983.076 3260.39 950.074 3260.39 904.087V786.008H3253.08C3245.51 801.157 3234.42 816.711 3219.81 832.671C3205.47 848.632 3186.4 862.022 3162.6 872.842C3139.06 883.663 3109.44 889.073 3073.73 889.073C3025.85 889.073 2982.44 877.847 2943.48 855.394C2904.8 832.671 2873.96 798.857 2850.97 753.952C2828.24 708.777 2816.88 652.24 2816.88 584.341C2816.88 515.902 2828.24 458.147 2850.97 411.078C2873.96 363.739 2904.93 327.896 2943.89 303.55C2982.84 278.933 3026.26 266.625 3074.14 266.625C3110.66 266.625 3140.69 272.847 3164.22 285.29C3188.03 297.463 3206.96 312.206 3221.03 329.519C3235.09 346.561 3245.78 362.657 3253.08 377.805H3261.2V274.74H3406.06V908.144C3406.06 961.435 3393.34 1005.53 3367.92 1040.42C3342.49 1075.32 3307.73 1101.43 3263.63 1118.74C3219.54 1136.05 3169.5 1144.71 3113.5 1144.71ZM3114.72 773.835C3145.83 773.835 3172.34 766.261 3194.25 751.112C3216.16 735.963 3232.79 714.187 3244.16 685.783C3255.52 657.379 3261.2 623.295 3261.2 583.53C3261.2 544.305 3255.52 509.95 3244.16 480.465C3233.07 450.979 3216.56 428.12 3194.65 411.89C3173.01 395.389 3146.37 387.138 3114.72 387.138C3081.98 387.138 3054.66 395.659 3032.75 412.701C3010.84 429.744 2994.34 453.143 2983.25 482.899C2972.16 512.385 2966.61 545.929 2966.61 583.53C2966.61 621.672 2972.16 655.08 2983.25 683.754C2994.61 712.158 3011.25 734.34 3033.16 750.3C3055.34 765.99 3082.53 773.835 3114.72 773.835ZM3647.08 906.927C3622.47 906.927 3601.37 898.271 3583.78 880.958C3566.2 863.645 3557.54 842.545 3557.82 817.658C3557.54 793.312 3566.2 772.482 3583.78 755.17C3601.37 737.857 3622.47 729.2 3647.08 729.2C3670.89 729.2 3691.58 737.857 3709.17 755.17C3727.02 772.482 3736.08 793.312 3736.35 817.658C3736.08 834.159 3731.75 849.173 3723.37 862.698C3715.25 876.224 3704.43 887.044 3690.91 895.16C3677.65 903.004 3663.04 906.927 3647.08 906.927ZM3888.01 274.74H4034.9V933.708C4034.9 978.613 4026.38 1015.67 4009.33 1044.89C3992.29 1074.1 3967.67 1095.88 3935.48 1110.22C3903.29 1124.55 3864.2 1131.72 3818.22 1131.72C3812.81 1131.72 3807.8 1131.59 3803.2 1131.32C3798.6 1131.32 3793.6 1131.18 3788.19 1130.91V1011.21C3792.25 1011.48 3795.9 1011.62 3799.15 1011.62C3802.39 1011.89 3805.77 1012.02 3809.29 1012.02C3837.42 1012.02 3857.58 1005.12 3869.75 991.327C3881.92 977.801 3888.01 957.918 3888.01 931.679V274.74ZM3961.05 186.283C3937.51 186.283 3917.36 178.573 3900.59 163.154C3884.09 147.464 3875.84 128.664 3875.84 106.752C3875.84 84.5701 3884.09 65.7695 3900.59 50.3503C3917.36 34.6606 3937.51 26.8158 3961.05 26.8158C3984.31 26.8158 4004.19 34.6606 4020.7 50.3503C4037.47 65.7695 4045.85 84.5701 4045.85 106.752C4045.85 128.664 4037.47 147.464 4020.7 163.154C4004.19 178.573 3984.31 186.283 3961.05 186.283ZM4332.83 66.9868V898H4185.94V66.9868H4332.83Z" fill="currentColor"/>
+            <path d="M4076 108.5C4076 168.424 4027.42 217 3967.5 217C3907.58 217 3859 168.424 3859 108.5C3859 48.5762 3907.58 0 3967.5 0C4027.42 0 4076 48.5762 4076 108.5Z" fill="#389725"/>
+            <path d="M3755 814.5C3755 874.424 3706.42 923 3646.5 923C3586.58 923 3538 874.424 3538 814.5C3538 754.576 3586.58 706 3646.5 706C3706.42 706 3755 754.576 3755 814.5Z" fill="#9457B1"/>
+            <path d="M2030 108.5C2030 168.424 1981.42 217 1921.5 217C1861.58 217 1813 168.424 1813 108.5C1813 48.5762 1861.58 0 1921.5 0C1981.42 0 2030 48.5762 2030 108.5Z" fill="#CA3B33"/>
+        </svg>
+    </a>
+    <!-- <a class="ext-navbar-title" href="https://turinglang.org/">Turing.jl</a> -->
+    
+    <ul class="ext-nav-links">
+        <li><a class="ext-nav-link" href="https://turinglang.org/docs/getting-started/">Get Started</a></li>
+        <li><a class="ext-nav-link" href="https://turinglang.org/docs/tutorials/">Tutorials</a></li>
+        <li><a class="ext-nav-link" href="https://turinglang.org/docs/faq/">FAQ</a></li>
+        <li>
+            <p class="ext-nav-link" id="library-handler">Libraries</p>
+            <div class="ext-dropdown" id="ext-dropdown-items">
+                <ul>
+                    <li class="ext-dropdown-item-heading">Modelling Languages</li>
+                    <a href="https://turinglang.org/DynamicPPL.jl/"><li>DynamicPPL</li></a>
+                    <a href="https://turinglang.org/JuliaBUGS.jl/"><li>JuliaBUGS</li></a>
+                    <a href="https://turinglang.org/TuringGLM.jl/"><li>TuringGLM</li></a>
+                </ul>
+                <ul>
+                    <li class="ext-dropdown-item-heading">MCMC</li>
+                    <a href="https://turinglang.org/AdvancedHMC.jl/"><li>AdvancedHMC</li></a>
+                    <a href="https://turinglang.org/AbstractMCMC.jl/"><li>AbstractMCMC</li></a>
+                    <a href="https://github.com/theogf/ThermodynamicIntegration.jl"><li>ThermodynamicIntegration</li></a>
+                    <a href="https://turinglang.org/AdvancedPS.jl/"><li>AdvancedPS</li></a>
+                    <a href="https://turinglang.org/SliceSampling.jl/"><li>SliceSampling</li></a>
+                    <a href="https://turinglang.org/EllipticalSliceSampling.jl/"><li>EllipticalSliceSampling</li></a>
+                </ul>
+                <ul>
+                    <li class="ext-dropdown-item-heading">Diagnostics</li>
+                    <a href="https://turinglang.org/MCMCChains.jl/"><li>MCMCChains</li></a>
+                    <a href="https://turinglang.org/MCMCDiagnosticTools.jl/"><li>MCMCDiagnosticTools</li></a>
+                    <a href="https://chalk-lab.github.io/ParetoSmooth.jl/"><li>ParetoSmooth</li></a>
+                </ul>
+                <ul>
+                    <li class="ext-dropdown-item-heading">Gaussian Processes</li>
+                    <a href="https://juliagaussianprocesses.github.io/AbstractGPs.jl/"><li>AbstractGPs</li></a>
+                    <a href="https://juliagaussianprocesses.github.io/KernelFunctions.jl/"><li>KernelFunctions</li></a>
+                    <a href="https://juliagaussianprocesses.github.io/ApproximateGPs.jl/"><li>ApproximateGPs</li></a>
+                </ul>
+                <ul><li class="ext-dropdown-item-heading ext-navbar-item-single"><a href="https://turinglang.org/Bijectors.jl/">Bijectors</a></li></ul>
+                <ul><li class="ext-dropdown-item-heading ext-navbar-item-single"><a href="https://turinglang.org/TuringCallbacks.jl/">TuringCallbacks</a></li></ul>
+                <ul><li class="ext-dropdown-item-heading ext-navbar-item-single"><a href="https://turinglang.org/Deprecated/TuringBenchmarking/">TuringBenchmarking</a><span class="deprecated-badge">Deprecated</span></li></ul>
+            </div>
+        </li>
+        <li><a class="ext-nav-link" href="https://turinglang.org/news/">News</a></li>
+        <li><a class="ext-nav-link" href="https://turinglang.org/team/">Team</a></li>
+    </ul>
+
+    <div class="ext-navbar-icons">
+        <a href="https://x.com/TuringLang" aria-label="Turing on X"><i class="fa-brands fa-x-twitter"></i></a>
+        <a href="https://discourse.julialang.org/c/domain/probprog/48" aria-label="Turing on Discourse"><i class="fa-brands fa-discourse"></i></a>
+        <a href="https://julialang.slack.com/archives/CCYDC34A0" aria-label="Turing on Slack"><i class="fa-brands fa-slack"></i></a>
+        <a href="https://github.com/TuringLang/" aria-label="Turing.jl on GitHub"><i class="fa-brands fa-github"></i></a>
+    </div>
+
+    <span class="ext-menu-toggle"><i class="fa-solid fa-bars"></i></span>
+</nav>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const menuToggle = document.querySelector(".ext-menu-toggle");
+        const navLinks = document.querySelector(".ext-nav-links");
+        const nav = document.querySelector(".ext-navigation");
+        const libraryHandler = document.getElementById("library-handler");
+        const dropdownContainer = document.getElementById("ext-dropdown-items");
+        let lastScrollY = window.scrollY;
+
+        function closeDropdown() {
+            if (dropdownContainer.classList.contains("show")) {
+                libraryHandler.classList.remove("open");
+                dropdownContainer.classList.remove("show");
+                setTimeout(() => {
+                    if (!dropdownContainer.classList.contains("show")) {
+                        dropdownContainer.style.display = "none";
+                    }
+                }, 300);
+            }
+        }
+
+        function openDropdown() {
+            dropdownContainer.style.display = "grid";
+            libraryHandler.classList.add("open");
+            setTimeout(() => {
+                dropdownContainer.classList.add("show");
+            }, 10);
+        }
+
+        function setAppropriateHeight() {
+            if (window.innerWidth <= 768) {
+                const viewportHeight = window.innerHeight;
+                const navHeight = nav.offsetHeight;
+                navLinks.style.maxHeight = `${viewportHeight - navHeight}px`;
+                navLinks.style.overflowY = "auto";
+            } else {
+                navLinks.style.maxHeight = "";
+                navLinks.style.overflowY = "";
+            }
+        }
+
+        menuToggle.addEventListener("click", (event) => {
+            event.stopPropagation();
+            navLinks.classList.toggle("show");
+            if (navLinks.classList.contains("show")) {
+                setAppropriateHeight();
+                closeDropdown();
+                dropdownContainer.style.display = "none";
+            }
+        });
+
+        libraryHandler.addEventListener("click", (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            if (dropdownContainer.classList.contains("show")) {
+                closeDropdown();
+            } else {
+                openDropdown();
+            }
+            setAppropriateHeight();
+        });
+
+        // Close all menus if a click is registered outside the navigation bar.
+        document.addEventListener("click", (event) => {
+            if (!nav.contains(event.target)) {
+                navLinks.classList.remove("show");
+                closeDropdown();
+            }
+        });
+
+        // Hide navigation bar on scroll down in mobile view.
+        window.addEventListener("scroll", () => {
+            if (window.innerWidth <= 768) {
+                if (window.scrollY > lastScrollY && window.scrollY > nav.offsetHeight){
+                    nav.classList.add("hide");
+                } else {
+                    nav.classList.remove("hide");
+                }
+                lastScrollY = window.scrollY;
+            }
+        });
+
+        window.addEventListener("resize", setAppropriateHeight);
+    });
+</script>
+<!-- NAVBAR END -->
+
+
+<div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href>Libtask</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>Libtask</a><ul class="internal"><li><a class="tocitem" href="#Manipulation-of-[TapedTask](@ref)s"><span>Manipulation of <code>TapedTask</code>s</span></a></li><li><a class="tocitem" href="#Functions-for-use-inside-a-[TapedTask](@ref)s"><span>Functions for use inside a <code>TapedTask</code>s</span></a></li></ul></li><li><a class="tocitem" href="internals/">Internals</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Libtask</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Libtask</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/TuringLang/Libtask.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/TuringLang/Libtask.jl/blob/main/docs/src/index.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Libtask"><a class="docs-heading-anchor" href="#Libtask">Libtask</a><a id="Libtask-1"></a><a class="docs-heading-anchor-permalink" href="#Libtask" title="Permalink"></a></h1><p>Libtask is best explained by the docstring for <a href="#Libtask.TapedTask"><code>TapedTask</code></a>:</p><article><details class="docstring" open="true"><summary id="Libtask.TapedTask"><a class="docstring-binding" href="#Libtask.TapedTask"><code>Libtask.TapedTask</code></a> — <span class="docstring-category">Type</span></summary><section><div><pre><code class="language-julia hljs">TapedTask(taped_globals::Any, f, args...; kwargs...)</code></pre><p>Construct a <code>TapedTask</code> with the specified <code>taped_globals</code>, for function <code>f</code>, positional arguments <code>args</code>, and keyword argument <code>kwargs</code>.</p><p><strong>Extended Help</strong></p><p>There are three central features of a <code>TapedTask</code>, which we demonstrate via three examples.</p><p><strong>Resumption</strong></p><p>The function <a href="#Libtask.produce"><code>Libtask.produce</code></a> has a special meaning in Libtask. You can insert it into regular Julia functions anywhere that you like. For example</p><pre><code class="language-julia-repl hljs">julia&gt; function f()
+           for t in 1:2
+               produce(t)
+               t += 1
+           end
+           return nothing
+       end
+f (generic function with 1 method)</code></pre><p>If you construct a <code>TapedTask</code> from <code>f</code>, and call <a href="#Libtask.consume"><code>Libtask.consume</code></a> on it, you&#39;ll see</p><pre><code class="language-julia-repl hljs">julia&gt; t = TapedTask(nothing, f);
+
+julia&gt; consume(t)
+1</code></pre><p>The semantics of this are that <a href="#Libtask.consume"><code>Libtask.consume</code></a> runs the function <code>f</code> until it reaches the call to <a href="#Libtask.produce"><code>Libtask.produce</code></a>, at which point it will return the argument to <a href="#Libtask.produce"><code>Libtask.produce</code></a>.</p><p>Subsequent calls to <a href="#Libtask.produce"><code>Libtask.produce</code></a> will <em>resume</em> execution of <code>f</code> immediately after the last <a href="#Libtask.produce"><code>Libtask.produce</code></a> statement that was hit.</p><pre><code class="language-julia-repl hljs">julia&gt; consume(t)
+2</code></pre><p>When there are no more <a href="#Libtask.produce"><code>Libtask.produce</code></a> statements to hit, calling <a href="#Libtask.consume"><code>Libtask.consume</code></a> will return <code>nothing</code>:</p><pre><code class="language-julia-repl hljs">julia&gt; consume(t)
+</code></pre><p><strong>Copying</strong></p><p><a href="#Libtask.TapedTask"><code>TapedTask</code></a>s can be copied. Doing so creates a completely independent object. For example:</p><pre><code class="language-julia-repl hljs">julia&gt; t2 = TapedTask(nothing, f);
+
+julia&gt; consume(t2)
+1</code></pre><p>If we make a copy and advance its state, it produces the same value that the original would have produced:</p><pre><code class="language-julia-repl hljs">julia&gt; t3 = copy(t2);
+
+julia&gt; consume(t3)
+2</code></pre><p>Moreover, advancing the state of the copy has not advanced the state of the original, because they are completely independent copies:</p><pre><code class="language-julia-repl hljs">julia&gt; consume(t2)
+2</code></pre><p><strong>TapedTask-Specific Globals</strong></p><p>It is often desirable to permit a copy of a task and the original to differ in very specific ways. For example, in the context of Sequential Monte Carlo, you might want the only difference between two copies to be their random number generator.</p><p>A generic mechanism is available to achieve this. <a href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>Libtask.get_taped_globals</code></a> and <a href="#Libtask.set_taped_globals!"><code>Libtask.set_taped_globals!</code></a> let you set and retrieve a variable which is specific to a given <a href="#Libtask.TapedTask"><code>Libtask.TapedTask</code></a>. These functions can be called from <em>outside</em> a <code>TapedTask</code>, in order to get or set its taped globals.</p><p>However, <a href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>Libtask.get_taped_globals</code></a> can also be called from inside a <code>TapedTask</code> itself:</p><pre><code class="language-julia-repl hljs">julia&gt; function f()
+           produce(get_taped_globals(Int))
+           produce(get_taped_globals(Int))
+           return nothing
+       end
+f (generic function with 1 method)</code></pre><p>When constructing a <a href="#Libtask.TapedTask"><code>Libtask.TapedTask</code></a>, the first argument is the value that <a href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>Libtask.get_taped_globals</code></a> will return:</p><pre><code class="language-julia-repl hljs">julia&gt; t = TapedTask(1, f);
+
+julia&gt; consume(t)
+1</code></pre><p>The value that it returns can be changed between <a href="#Libtask.consume"><code>Libtask.consume</code></a> calls:</p><pre><code class="language-julia-repl hljs">julia&gt; set_taped_globals!(t, 2)
+
+julia&gt; consume(t)
+2</code></pre><p><code>Int</code>s have been used here, but it is permissible to set the value returned by <a href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>Libtask.get_taped_globals</code></a> to anything you like.</p><p><strong>Implementation Notes</strong></p><p>Under the hood, we implement a <code>TapedTask</code> by obtaining the <code>IRCode</code> associated to the original function, transforming it so that it implements the semantics required by the <code>produce</code> / <code>consume</code> interface, and placing it inside a <code>MistyClosure</code> to make it possible to execute.</p><p>There are two main considerations when transforming the <code>IRCode</code>. The first is to ensure that the &quot;state&quot; of a <code>TapedTask</code> can be copied, so that a <code>TapedTask</code> can be copied, and resumed later. The complete state of a <code>TapedTask</code> is given by its arguments, and the value associated to each ssa (these are initially undefined). To make it possible to copy the state of the ssa values, we place <code>Base.RefValue{T}</code>s into the captures of the <code>MistyClosure</code> which implements the <code>TapedTask</code>, one for each ssa in the IR (<code>T</code> is the type inferred for that ssa). A call is replaced by reading in values of ssas from these refs, applying the original operation, and writing the result to the ref associated to the instruction. For example, if the original snippet of <code>IRCode</code> is something like</p><pre><code class="language-julia hljs">%5 = f(%3, _1)</code></pre><p>the transformed IR would be something like</p><pre><code class="language-julia hljs">%5 = ref_for_%3[]
+%6 = f(%5, _1)
+ref_for_%5[] = %6</code></pre><p>Setting things up in this manner ensures that an independent copy is made by simply copying all of the refs. A <code>deepcopy</code> is required for correctness as, while the refs do not alias one another (by construction), their contents might. For example, two refs may contain the same <code>Array</code>, and in general the behaviour of a function depends on this relationship.</p><p>The second component of the transformation is implementing the <code>produce</code> mechanism, and the ability to resume computation from where we produced. Roughly speaking, the <code>IRCode</code> must be modified to ensure that whenever a <code>produce</code> call in encountered, the <code>MistyClosure</code> returns the argument to <code>produce</code>, and that subsequent calls resume computation immediately after the <code>produce</code> statement. This resumption is achieved by setting the value of a counter prior to returning following a <code>produce</code> statement – a sequence of comparisons against this counter, and <a href="https://docs.julialang.org/en/v1/devdocs/ast/#Lowered-form"><code>GotoIfNot</code></a> statement are inserted at the top of the IR. These are used to jump to the point in the code from which computation should resume. These are set up such that, when the <code>TapedTask</code> is first run, computation start froms the first statement. Observe that this is also facilitated by the ref mechanism discussed above, as it ensures that the state persists between calls to a <code>MistyClosure</code>.</p><p>The above gives the broad outline of how <code>TapedTask</code>s are implemented. We refer interested readers to the code, which is extensively commented to explain implementation details.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L215-L384">source</a></section></details></article><p>The functions discussed in the above docstring (in addition to <a href="#Libtask.TapedTask"><code>TapedTask</code></a> itself) form the public interface of Libtask.jl. They divide neatly into two kinds of functions: those which are used to manipulate <a href="#Libtask.TapedTask"><code>TapedTask</code></a>s, and those which are intended to be used <em>inside</em> a <a href="#Libtask.TapedTask"><code>TapedTask</code></a>.</p><h2 id="Manipulation-of-[TapedTask](@ref)s"><a class="docs-heading-anchor" href="#Manipulation-of-[TapedTask](@ref)s">Manipulation of <a href="#Libtask.TapedTask"><code>TapedTask</code></a>s</a><a id="Manipulation-of-[TapedTask](@ref)s-1"></a><a class="docs-heading-anchor-permalink" href="#Manipulation-of-[TapedTask](@ref)s" title="Permalink"></a></h2><article><details class="docstring" open="true"><summary id="Libtask.consume"><a class="docstring-binding" href="#Libtask.consume"><code>Libtask.consume</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">consume(t::TapedTask)</code></pre><p>Run <code>t</code> until it makes a call to <code>produce</code>. If this is the first time that <code>t</code> has been called, it starts execution from the entry point. If <code>consume</code> has previously been called on <code>t</code>, it will resume from the last <code>produce</code> call. If there are no more <code>produce</code> calls, <code>nothing</code> will be returned.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L462-L469">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Base.copy-Tuple{TapedTask}"><a class="docstring-binding" href="#Base.copy-Tuple{TapedTask}"><code>Base.copy</code></a> — <span class="docstring-category">Method</span></summary><section><div><pre><code class="language-julia hljs">Base.copy(t::TapedTask)</code></pre><p>Makes a completely independent copy of <code>t</code>. <code>consume</code> can be applied to either the copy of <code>t</code> or the original without advancing the state of the other.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L454-L459">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Libtask.get_taped_globals-Tuple{TapedTask}"><a class="docstring-binding" href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>Libtask.get_taped_globals</code></a> — <span class="docstring-category">Method</span></summary><section><div><pre><code class="language-julia hljs">get_taped_globals(tt::TapedTask)</code></pre><p>Extract the <code>taped_globals</code> field from a <code>TapedTask</code>.</p><p>This is the same as the value that will be returned by <a href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>get_taped_globals</code></a> when called from <em>inside</em> <code>tt</code>. However, this method can be called from outside <code>tt</code>.</p><p>See also <a href="#Libtask.set_taped_globals!"><code>set_taped_globals!</code></a>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L430-L439">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Libtask.set_taped_globals!"><a class="docstring-binding" href="#Libtask.set_taped_globals!"><code>Libtask.set_taped_globals!</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">set_taped_globals!(t::TapedTask, new_taped_globals)::Nothing</code></pre><p>Set the <code>taped_globals</code> of <code>t</code> to <code>new_taped_globals</code>. Any calls to <a href="#Libtask.get_taped_globals-Tuple{TapedTask}"><code>get_taped_globals</code></a> in future calls to <code>consume(t)</code> (either directly, or implicitly via iteration) will see this new value.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L442-L448">source</a></section></details></article><h2 id="Functions-for-use-inside-a-[TapedTask](@ref)s"><a class="docs-heading-anchor" href="#Functions-for-use-inside-a-[TapedTask](@ref)s">Functions for use inside a <a href="#Libtask.TapedTask"><code>TapedTask</code></a>s</a><a id="Functions-for-use-inside-a-[TapedTask](@ref)s-1"></a><a class="docs-heading-anchor-permalink" href="#Functions-for-use-inside-a-[TapedTask](@ref)s" title="Permalink"></a></h2><article><details class="docstring" open="true"><summary id="Libtask.produce"><a class="docstring-binding" href="#Libtask.produce"><code>Libtask.produce</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">produce(x)</code></pre><p>When run inside a <a href="#Libtask.TapedTask"><code>TapedTask</code></a>, will immediately yield to the caller, returning value <code>x</code>. Users will typically hit this function when calling <code>consume</code>.</p><p>See also: <a href="#Libtask.consume"><code>Libtask.consume</code></a></p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L50-L57">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Libtask.get_taped_globals-Union{Tuple{Type{T}}, Tuple{T}} where T"><a class="docstring-binding" href="#Libtask.get_taped_globals-Union{Tuple{Type{T}}, Tuple{T}} where T"><code>Libtask.get_taped_globals</code></a> — <span class="docstring-category">Method</span></summary><section><div><pre><code class="language-julia hljs">get_taped_globals(T::Type)</code></pre><p>When this method is called from <strong>inside a <code>TapedTask</code></strong>, this will return whatever is contained in its <code>taped_globals</code> field.</p><p>The type <code>T</code> is required for optimal performance. If you know that the result of this operation must return a specific type, specify <code>T</code>. If you do not know what type it will return, pass <code>Any</code> – this will typically yield type instabilities, but will run correctly.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L20-L29">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Libtask.NotInTapedTaskError"><a class="docstring-binding" href="#Libtask.NotInTapedTaskError"><code>Libtask.NotInTapedTaskError</code></a> — <span class="docstring-category">Type</span></summary><section><div><pre><code class="language-julia hljs">Libtask.NotInTapedTaskError &lt;: Exception</code></pre><p>This error is thrown when attempting to call <code>Libtask.get_taped_globals(::Type{T}) where {T}</code> from outside of a <code>TapedTask</code>.</p><p>Note that the other method, <code>Libtask.get_taped_globals(t::TapedTask)</code>, can be called from outside a <code>TapedTask</code>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L1-L9">source</a></section></details></article><p>An opt-in mechanism marks functions that might contain <code>Libtask.produce</code> statements.</p><article><details class="docstring" open="true"><summary id="Libtask.might_produce-Tuple{Type{&lt;:Tuple}}"><a class="docstring-binding" href="#Libtask.might_produce-Tuple{Type{&lt;:Tuple}}"><code>Libtask.might_produce</code></a> — <span class="docstring-category">Method</span></summary><section><div><pre><code class="language-julia hljs">might_produce(sig::Type{&lt;:Tuple})::Bool</code></pre><p><code>true</code> if a call to method with signature <code>sig</code> is permitted to contain <code>Libtask.produce</code> statements.</p><p>This is an opt-in mechanism. The fallback method of this function returns <code>false</code> indicating that, by default, we assume that calls do not contain <code>Libtask.produce</code> statements.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L476-L484">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Libtask.@might_produce"><a class="docstring-binding" href="#Libtask.@might_produce"><code>Libtask.@might_produce</code></a> — <span class="docstring-category">Macro</span></summary><section><div><pre><code class="language-julia hljs">@might_produce(f)</code></pre><p>If <code>f</code> is a function that may call <code>Libtask.produce</code> inside it, then <code>@might_produce(f)</code> will generate the appropriate methods needed to ensure that <code>Libtask.might_produce</code> returns <code>true</code> for <strong>all</strong> relevant signatures of <code>f</code>. This works even if <code>f</code> has methods with keyword arguments.</p><div class="admonition is-info" id="Note-8fd8d62dd33c788c"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-8fd8d62dd33c788c" title="Permalink"></a></header><div class="admonition-body"><p>Because <code>@might_produce f</code> is applied to all possible signatures, there are performance penalties associated with marking all methods of <code>f</code> as produceable if only one method can actually call <code>produce</code>. If performance is critical, please use the <a href="#Libtask.might_produce-Tuple{Type{&lt;:Tuple}}"><code>might_produce</code></a> function directly.</p></div></div><pre><code class="language-julia-repl hljs">julia&gt; # For this demonstration we need to mark `g` as not being inlineable.
+       @noinline function g(x; y, z=0)
+           produce(x + y + z)
+       end
+g (generic function with 1 method)
+
+julia&gt; function f()
+           g(1; y=2, z=3)
+       end
+f (generic function with 1 method)
+
+julia&gt; # This returns nothing because `g` isn&#39;t yet marked as being able to `produce`.
+       consume(Libtask.TapedTask(nothing, f))
+
+julia&gt; Libtask.@might_produce(g)
+
+julia&gt; # Now it works!
+       consume(Libtask.TapedTask(nothing, f))
+6</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L506-L541">source</a></section></details></article><article><details class="docstring" open="true"><summary id="Libtask.might_produce_if_sig_contains"><a class="docstring-binding" href="#Libtask.might_produce_if_sig_contains"><code>Libtask.might_produce_if_sig_contains</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">might_produce_if_sig_contains(::Type{T})::Bool</code></pre><p>Mark <em>any</em> method as being able to <code>produce</code> if <code>T</code> is found anywhere in its signature.</p><p>Note that if <code>T</code> is an abstract type, you will have to use <code>might_produce_if_sig_contains(::Type{&lt;:T})</code> to mark methods which have subtypes of <code>T</code> in their signature as being able to <code>produce</code>.</p><p>For example, if <code>might_produce_if_sig_contains(::Type{&lt;:AbstractFoo}) = true</code>, then any method that takes an argument of <code>Foo &lt;: AbstractFoo</code> will be treated as having <code>might_produce = true</code>.</p><div class="admonition is-warning" id="Warning-d4feb6fab876223a"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-d4feb6fab876223a" title="Permalink"></a></header><div class="admonition-body"><p>This method should be used with caution, as it is a very broad brush. It is only really intended for use with Turing.jl.</p></div></div></div><a class="docs-sourcelink" target="_blank" href="https://github.com/TuringLang/Libtask.jl/blob/79a5e5c22616ac282d3ce1eec5b259143a876144/src/copyable_task.jl#L487-L503">source</a></section></details></article></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="internals/">Internals »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 2 March 2026 12:44">Monday 2 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
