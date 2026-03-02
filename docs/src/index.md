@@ -31,4 +31,5 @@ An opt-in mechanism marks functions that might contain `Libtask.produce` stateme
 ```@docs; canonical=true
 Libtask.might_produce(::Type{<:Tuple})
 Libtask.@might_produce
+Libtask.might_produce_if_sig_contains
 ```

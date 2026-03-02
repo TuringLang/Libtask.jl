@@ -1,3 +1,7 @@
+# 0.9.14
+
+Added the `Libtask.might_produce_if_sig_contains` method.
+
 # 0.9.13
 
 Fix a bug where SSA registers in `throw_undef_if_not` expressions were not being correctly handled.

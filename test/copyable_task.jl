@@ -403,6 +403,79 @@ using Test
         t = TapedTask(nothing, tuin_f, 2)
         @test_throws UndefVarError consume(t)
     end
+
+    @testset "might_produce_if_sig_contains" begin
+        @testset "concrete type" begin
+            struct MyType end
+            @noinline function mp_g(x::Int, ::MyType)
+                produce(x)
+                return nothing
+            end
+            @noinline function mp_g(::MyType; x::Int=3)
+                produce(x)
+                return nothing
+            end
+            @noinline function mp_g(x::Int)
+                produce(x)
+                return nothing
+            end
+
+            # Use function reference to ensure that mp_g doesn't get inlined.
+            function mp_f(x, gref)
+                gref[](x, MyType())    # Should produce
+                gref[](MyType(); x=4)  # Should produce
+                gref[](x)              # Should not produce
+                return nothing
+            end
+            # Before marking it as might_produce, nothing should produce.
+            t = TapedTask(nothing, mp_f, 1, Ref(mp_g))
+            @test consume(t) === nothing
+
+            # Now marking `MyType` as causing produces should make the first two calls
+            # produce, but not the third.
+            Libtask.might_produce_if_sig_contains(::Type{MyType}) = true
+            t = TapedTask(nothing, mp_f, 1, Ref(mp_g))
+            @test consume(t) == 1
+            @test consume(t) == 4
+            @test consume(t) === nothing
+        end
+
+        @testset "abstract type" begin
+            abstract type AbstractTT end
+            struct MyType2 <: AbstractTT end
+            @noinline function abs_mp_g(x::Int, ::MyType2)
+                produce(x)
+                return nothing
+            end
+            @noinline function abs_mp_g(::MyType2; x::Int=3)
+                produce(x)
+                return nothing
+            end
+            @noinline function abs_mp_g(x::Int)
+                produce(x)
+                return nothing
+            end
+
+            # Use function reference to ensure that mp_g doesn't get inlined.
+            function abs_mp_f(x, gref)
+                gref[](x, MyType2())    # Should produce
+                gref[](MyType2(); x=4)  # Should produce
+                gref[](x)              # Should not produce
+                return nothing
+            end
+            # Before marking it as might_produce, nothing should produce.
+            t = TapedTask(nothing, abs_mp_f, 1, Ref(abs_mp_g))
+            @test consume(t) === nothing
+
+            # Now marking `AbstractTT` as causing produces should make the first two calls
+            # produce, but not the third.
+            Libtask.might_produce_if_sig_contains(::Type{<:AbstractTT}) = true
+            t = TapedTask(nothing, abs_mp_f, 1, Ref(abs_mp_g))
+            @test consume(t) == 1
+            @test consume(t) == 4
+            @test consume(t) === nothing
+        end
+    end
 end
 
 end # module
