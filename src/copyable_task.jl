@@ -485,6 +485,26 @@ that, by default, we assume that calls do not contain `Libtask.produce` statemen
 might_produce(::Type{<:Tuple}) = false
 
 """
+    might_produce_if_sig_contains(::Type{T})::Bool
+
+Mark *any* method as being able to `produce` if `T` is found anywhere in its signature.
+
+Note that if `T` is an abstract type, you will have to use
+`might_produce_if_sig_contains(::Type{<:T})` to mark methods which have subtypes of `T` in
+their signature as being able to `produce`.
+
+For example, if `might_produce_if_sig_contains(::Type{<:AbstractFoo}) = true`, then any
+method that takes an argument of `Foo <: AbstractFoo` will be treated as having
+`might_produce = true`.
+
+!!! warning
+    This method should be used with caution, as it is a very broad brush.
+    It is only really intended for use with Turing.jl.
+"""
+might_produce_if_sig_contains(::Type) = false
+might_produce_if_sig_contains(::typeof(Vararg)) = false
+
+"""
     @might_produce(f)
 
 If `f` is a function that may call `Libtask.produce` inside it, then `@might_produce(f)`
@@ -593,7 +613,12 @@ function stmt_might_produce(x, ret_type::Type)::Bool
 
     # Statement will terminate in the usual fashion, so _do_ bother recusing.
     is_produce_stmt(x) && return true
-    Meta.isexpr(x, :invoke) && return might_produce(get_mi(x.args[1]).specTypes)
+    if Meta.isexpr(x, :invoke)
+        mi_sig = get_mi(x.args[1]).specTypes
+        return (
+            might_produce(mi_sig) || any(might_produce_if_sig_contains, mi_sig.parameters)
+        )
+    end
     if Meta.isexpr(x, :call)
         # This is a hack -- it's perfectly possible for `DataType` calls to produce in general.
         f = get_function(x.args[1])
