@@ -501,7 +501,8 @@ method that takes an argument of `Foo <: AbstractFoo` will be treated as having
     This method should be used with caution, as it is a very broad brush.
     It is only really intended for use with Turing.jl.
 """
-might_produce_if_sig_contains(::Type{<:Any}) = false
+might_produce_if_sig_contains(::Type) = false
+might_produce_if_sig_contains(::typeof(Vararg)) = false
 
 """
     @might_produce(f)
