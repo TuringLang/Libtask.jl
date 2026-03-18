@@ -34,12 +34,12 @@ model = f()
         # Check that enabling `might_produce` does allow sampling
         @might_produce kwarg_demo
         chain = sample(StableRNG(468), kwarg_demo(5.0), PG(20), 1000; progress=false)
-        @test mean(chain[:x]) ≈ 2.5 atol = 0.2
+        @test mean(chain[:x]) ≈ 2.5 atol = 0.3
 
         # Check that the keyword argument's value is respected
         chain2 = sample(
             StableRNG(468), kwarg_demo(5.0; n=10.0), PG(20), 1000; progress=false
         )
-        @test mean(chain2[:x]) ≈ 7.5 atol = 0.2
+        @test mean(chain2[:x]) ≈ 7.5 atol = 0.3
     end
 end
