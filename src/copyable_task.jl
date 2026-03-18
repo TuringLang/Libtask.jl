@@ -1027,7 +1027,17 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     push!(inst_pairs, (id, inst))
                 elseif stmt isa GlobalRef
                     ref_ind = ssa_id_to_ref_index_map[id]
-                    expr = Expr(:call, set_ref_at!, refs_id, ref_ind, stmt)
+                    # We can only use `stmt` as an argument to `set_ref_at!` if it is a
+                    # `const` binding. If it's not const, then we need to generate a new SSA
+                    # value for it.
+                    set_ref_at_arg = if isconst(stmt)
+                        stmt
+                    else
+                        new_id = ID()
+                        push!(inst_pairs, (new_id, new_inst(stmt)))
+                        new_id
+                    end
+                    expr = Expr(:call, set_ref_at!, refs_id, ref_ind, set_ref_at_arg)
                     push!(inst_pairs, (id, new_inst(expr)))
                 elseif stmt isa Core.PiNode
                     if stmt.val isa ID
