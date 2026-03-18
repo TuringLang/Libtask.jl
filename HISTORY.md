@@ -1,3 +1,9 @@
+# 0.9.15
+
+Improve Libtask's handling of non-const global variables.
+Previously, usage of non-const globals in a TapedTask would cause Libtask to throw an "Unbound GlobalRef not allowed in value position" error. 
+They should now work, and you can mutate global variables between calls to `consume`.
+
 # 0.9.14
 
 Added the `Libtask.might_produce_if_sig_contains` method.
