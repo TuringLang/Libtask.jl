@@ -3,6 +3,9 @@ module CopyableTaskTests
 using Libtask
 using Test
 
+# Used later.
+__global_a = 1.0
+
 @testset "copyable_task" begin
     @testset "get_taped_globals outside of a task" begin
         # This testset must come first because subsequent calls to get_taped_globals /
@@ -475,6 +478,23 @@ using Test
             @test consume(t) == 4
             @test consume(t) === nothing
         end
+    end
+
+    @testset "(non-const) global variables in TapedTasks" begin
+        function global_f()
+            produce(__global_a + 1.0)
+            produce(__global_a + 1.0)
+            return nothing
+        end
+        # TapedTask construction used to error:
+        # https://github.com/TuringLang/Libtask.jl/issues/211
+        t = TapedTask(nothing, global_f)
+        @test consume(t) == 2.0
+        # Check that you can mutate the variable between `produce`s.
+        global __global_a
+        __global_a = 10.0
+        @test consume(t) == 11.0
+        @test consume(t) === nothing
     end
 end
 
