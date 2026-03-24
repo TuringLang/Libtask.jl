@@ -14,6 +14,7 @@ include("bbcode.jl")
 using .BasicBlockCode
 
 include("copyable_task.jl")
+include("transformation.jl")
 include("test_utils.jl")
 
 export TapedTask,
