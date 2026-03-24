@@ -100,23 +100,33 @@ function _throw_ir_error(@nospecialize(sig::Type{<:Tuple}))
 end
 
 """
-    generate_ir(optimise::Bool, f, args...; kwargs...)
+    generate_ir(stage::Symbol, f, args...; kwargs...)
 
-Returns `(original_ir, transformed_ir)` for the call `f(args...; kwargs...)`.
+Returns an IR output for the call `f(args...; kwargs...)`.
 
-The first element is the original `IRCode` that Julia generates for the call. The second is
-the transformed `IRCode` that Libtask would use to implement the `produce`/`consume`
-interface in a `TapedTask`.
+`stage` controls the form of the IR that is returned, and corresponds to each stage in the
+generation of a `TapedTask`. The options are:
 
-`optimise` controls whether the transformed IR (i.e. for the `TapedTask`) is optimised or
-not. Apart from inspecting the effects of optimisation, setting `optimise` to `false` can
-also be useful for debugging, because the optimisation pass will also perform verification,
-and will error if the IR is malformed (which can happen if Libtask's transformation pass has
-bugs).
+- `:original` - no transformations applied, this generates a `Core.Compiler.IRCode`
+  corresponding to the original function call.
 
-This is intended purely as a debugging tool, and is not exported.
+- `:originalbb`: same as `:original` but converted to `Libtask.BasicBlock.BBCode`
+
+- `:transformedbb`: same as `originalbb` but with transformations applied to convert it
+  into a form that supports the `produce`-`consume` interface.
+
+- `:toptbb`: same as `transformedbb` but with Libtask optimisations to reduce the number of
+  stored references
+
+- `:transformed`: same as `toptbb` but converted back to `Core.Compiler.IRCode`
+
+- `:final`: same as `transformed` but with Julia's builtin SSA IR optimisations applied
+  to it. This is the IRCode that is eventually wrapped in the `MistyClosure`.
+
+This is intended purely as a debugging tool, and is not exported. Breaking changes to the
+interface may occur at any time.
 """
-function generate_ir(optimise::Bool, fargs...; kwargs...)
+function generate_ir(stage::Symbol, fargs...; kwargs...)
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
     sig = typeof(all_args)
     ir_results = Base.code_ircode_by_type(sig)
@@ -124,14 +134,19 @@ function generate_ir(optimise::Bool, fargs...; kwargs...)
         _throw_ir_error(sig)
     end
     original_ir = ir_results[1][1]
+    stage == :original && return original_ir
     seed_id!()
-    bb, _, _ = derive_copyable_task_ir(BBCode(original_ir))
-    transformed_ir = if optimise
-        optimise_ir!(IRCode(bb))
-    else
-        IRCode(bb)
-    end
-    return original_ir, transformed_ir
+    original_bb = BBCode(original_ir)
+    stage == :originalbb && return original_bb
+    transformed_bb, refs, _ = derive_copyable_task_ir(BBCode(original_ir))
+    stage == :transformedbb && return transformed_bb
+    topt_bb, refs = eliminate_refs(transformed_bb, refs)
+    stage == :toptbb && return topt_bb
+    transformed_ir = IRCode(transformed_bb)
+    stage == :transformed && return transformed_ir
+    optimise_ir!(transformed_ir)
+    stage == :final && return transformed_ir
+    throw(ArgumentError("unknown stage $stage"))
 end
 
 """
