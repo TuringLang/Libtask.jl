@@ -569,4 +569,107 @@ end
 _find_id_uses!(d::Dict{ID,Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID,Bool}, x) = nothing
 
+# Pretty-printing
+
+_id_str(id::ID) = string("%", id.id)
+_block_str(id::ID) = string("#", id.id)
+
+_val_str(x::ID) = _id_str(x)
+_val_str(x::Argument) = string("_", x.n)
+_val_str(x::QuoteNode) = repr(x)
+_val_str(x::GlobalRef) = string(x)
+_val_str(x::Nothing) = "nothing"
+_val_str(x) = repr(x)
+
+function Base.show(io::IO, id::ID)
+    return print(io, _id_str(id))
+end
+
+function Base.show(io::IO, node::IDPhiNode)
+    print(io, "φ (")
+    for (i, edge) in enumerate(node.edges)
+        print(io, _block_str(edge), " => ")
+        if isassigned(node.values, i)
+            print(io, _val_str(node.values[i]))
+        else
+            print(io, "#undef")
+        end
+        i < length(node.edges) && print(io, ", ")
+    end
+    return print(io, ")")
+end
+
+function Base.show(io::IO, node::IDGotoNode)
+    return print(io, "goto ", _block_str(node.label))
+end
+
+function Base.show(io::IO, node::IDGotoIfNot)
+    return print(io, "goto ", _block_str(node.dest), " if not ", _val_str(node.cond))
+end
+
+function Base.show(io::IO, sw::Switch)
+    print(io, "switch ")
+    for (i, (cond, dest)) in enumerate(zip(sw.conds, sw.dests))
+        print(io, _val_str(cond), " => ", _block_str(dest))
+        i < length(sw.conds) && print(io, ", ")
+    end
+    return print(io, ", fallthrough ", _block_str(sw.fallthrough_dest))
+end
+
+function _stmt_str(stmt)
+    stmt isa Union{IDPhiNode,IDGotoNode,IDGotoIfNot,Switch} && return sprint(show, stmt)
+    stmt isa ReturnNode &&
+        return isdefined(stmt, :val) ? string("return ", _val_str(stmt.val)) : "unreachable"
+    stmt isa Expr && return _expr_str(stmt)
+    stmt isa PiNode && return string("π (", _val_str(stmt.val), ", ", stmt.typ, ")")
+    return _val_str(stmt)
+end
+
+function _expr_str(x::Expr)
+    if x.head === :call
+        f = _val_str(x.args[1])
+        args = join((_val_str(a) for a in x.args[2:end]), ", ")
+        return string(f, "(", args, ")")
+    end
+    args = join((_val_str(a) for a in x.args), ", ")
+    return string("Expr(:", x.head, ", ", args, ")")
+end
+
+function _type_str(@nospecialize(t))
+    t === Any && return ""
+    t === Union{} && return "::Union{}"
+    return string("::", t)
+end
+
+_is_terminator_stmt(stmt) = stmt isa Terminator || stmt isa ReturnNode
+
+function Base.show(io::IO, bb::BBlock)
+    print(io, _block_str(bb.id), " ─")
+    n = length(bb.insts)
+    for (i, (id, inst)) in enumerate(zip(bb.inst_ids, bb.insts))
+        println(io)
+        prefix = i < n ? "│  " : "└──"
+        stmt = inst.stmt
+        if _is_terminator_stmt(stmt) && i == n
+            print(io, prefix, " ", _stmt_str(stmt))
+        else
+            print(
+                io, prefix, " ", _id_str(id), " = ", _stmt_str(stmt), _type_str(inst.type)
+            )
+        end
+    end
+end
+
+function Base.show(io::IO, ir::BBCode)
+    println(io, "BBCode (", length(ir.argtypes), " args, ", length(ir.blocks), " blocks)")
+    for (i, block) in enumerate(ir.blocks)
+        show(io, block)
+        i < length(ir.blocks) && println(io)
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", ir::BBCode)
+    return show(io, ir)
+end
+
 end
