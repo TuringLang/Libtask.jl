@@ -239,6 +239,9 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                             #     %1 = set_ref_at!(_1, refid, Main.a)
                             # can be replaced with
                             #     %1 = Main.a
+                            # In theory we could eliminate the SSA ID entirely and replace
+                            # all uses of it with the GlobalRef/Argument directly. We'll
+                            # leave that optimisation to the Julia compiler though.
                             refid_to_ssaid_map[refid] = id
                             push!(new_insts, (id, new_inst(value_arg)))
                         else
@@ -253,7 +256,7 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                             ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
                             refid_to_ssaid_map[refid] = ssaid
                         elseif value_arg isa GlobalRef || value_arg isa Argument
-                            # Create a new SSA ID that points to the GlobalRef.
+                            # Create a new SSA ID that points to the thing.
                             new_id = ID()
                             push!(new_insts, (new_id, new_inst(value_arg)))
                             refid_to_ssaid_map[refid] = new_id
