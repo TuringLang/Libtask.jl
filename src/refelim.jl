@@ -173,10 +173,17 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                         # SSA ID contains the value that we would have set in this ref, so
                         # that if we encounter a get_ref_at, we can replace it with this
                         # value.
-                        ssaid = inst.stmt.args[4]
-                        # That value might itself be something that needs to be replaced.
-                        ssaid = get(old_ssaid_to_new_ssaid_map, ssaid, ssaid)
-                        old_refid_to_ssaid_map[old_refid] = inst.stmt.args[4]
+                        value_arg = inst.stmt.args[4]
+                        if value_arg isa ID
+                            # That value might itself be something that needs to be replaced.
+                            ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
+                            old_refid_to_ssaid_map[old_refid] = inst.stmt.args[4]
+                        elseif value_arg isa GlobalRef
+                            # If it's a GlobalRef that's being stored in the ref, we just
+                            # need to store the GlobalRef itself inside the SSA ID.
+                            old_refid_to_ssaid_map[old_refid] = id
+                            push!(new_insts, (id, new_inst(value_arg)))
+                        end
                     else
                         # It's a set that we still need.
                         push!(new_insts, (id, inst))
