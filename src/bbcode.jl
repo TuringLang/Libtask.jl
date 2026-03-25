@@ -30,6 +30,7 @@ export ID,
     insert_before_terminator!,
     collect_stmts,
     compute_all_predecessors,
+    compute_all_successors,
     BBCode,
     characterise_used_ids,
     characterise_unique_predecessor_blocks,
@@ -37,7 +38,8 @@ export ID,
     IDInstPair,
     __line_numbers_to_block_numbers!,
     is_reachable_return_node,
-    new_inst
+    new_inst,
+    replace_ids
 
 const _id_count::Dict{Int,Int32} = Dict{Int,Int32}()
 
@@ -364,6 +366,44 @@ _block_num_to_ids(d::BlockNumToIdDict, x::GotoNode) = IDGotoNode(d[x.label])
 _block_num_to_ids(d::BlockNumToIdDict, x::GotoIfNot) = IDGotoIfNot(x.cond, d[x.dest])
 _block_num_to_ids(d::BlockNumToIdDict, x) = x
 
+# A map from IDs to IDs; useful when generically replacing IDs in BBCode statements
+const IdToIdDict = Dict{ID,ID}
+function replace_ids(d::IdToIdDict, inst::NewInstruction)
+    return NewInstruction(inst; stmt=replace_ids(d, inst.stmt))
+end
+function replace_ids(d::IdToIdDict, x::ReturnNode)
+    return isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
+end
+replace_ids(d::IdToIdDict, x::Expr) = Expr(x.head, map(a -> get(d, a, a), x.args)...)
+replace_ids(d::IdToIdDict, x::PiNode) = PiNode(get(d, x.val, x.val), get(d, x.typ, x.typ))
+replace_ids(d::IdToIdDict, x::QuoteNode) = x
+replace_ids(d::IdToIdDict, x) = x
+function replace_ids(d::IdToIdDict, x::IDPhiNode)
+    new_ids = [get(d, e, e) for e in x.edges]
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = get(d, x.values[n], x.values[n])
+        end
+    end
+    return IDPhiNode(new_ids, new_values)
+end
+replace_ids(d::IdToIdDict, x::IDGotoNode) = x
+function replace_ids(d::IdToIdDict, x::IDGotoIfNot)
+    return IDGotoIfNot(get(d, x.cond, x.cond), get(d, x.dest, x.dest))
+end
+function replace_ids(d::IdToIdDict, x::Switch)
+    new_conds = Vector{Any}(undef, length(x.conds))
+    for n in eachindex(x.conds)
+        if isassigned(x.conds, n)
+            new_conds[n] = get(d, x.conds[n], x.conds[n])
+        end
+    end
+    new_dests = [get(d, dest, dest) for dest in x.dests]
+    new_fallthrough_dest = get(d, x.fallthrough_dest, x.fallthrough_dest)
+    return Switch(new_conds, new_dests, new_fallthrough_dest)
+end
+
 #
 # Converting from BBCode to IRCode
 #
@@ -568,5 +608,108 @@ function _find_id_uses!(d::Dict{ID,Bool}, x::ReturnNode)
 end
 _find_id_uses!(d::Dict{ID,Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID,Bool}, x) = nothing
+
+# Pretty-printing
+
+_id_str(id::ID) = string("%", id.id)
+_block_str(id::ID) = string("#", id.id)
+
+_val_str(x::ID) = _id_str(x)
+_val_str(x::Argument) = string("_", x.n)
+_val_str(x::QuoteNode) = repr(x)
+_val_str(x::GlobalRef) = string(x)
+_val_str(x::Nothing) = "nothing"
+_val_str(x) = repr(x)
+
+function Base.show(io::IO, id::ID)
+    return print(io, _id_str(id))
+end
+
+function Base.show(io::IO, node::IDPhiNode)
+    print(io, "φ (")
+    for (i, edge) in enumerate(node.edges)
+        print(io, _block_str(edge), " => ")
+        if isassigned(node.values, i)
+            print(io, _val_str(node.values[i]))
+        else
+            print(io, "#undef")
+        end
+        i < length(node.edges) && print(io, ", ")
+    end
+    return print(io, ")")
+end
+
+function Base.show(io::IO, node::IDGotoNode)
+    return print(io, "goto ", _block_str(node.label))
+end
+
+function Base.show(io::IO, node::IDGotoIfNot)
+    return print(io, "goto ", _block_str(node.dest), " if not ", _val_str(node.cond))
+end
+
+function Base.show(io::IO, sw::Switch)
+    print(io, "switch ")
+    for (i, (cond, dest)) in enumerate(zip(sw.conds, sw.dests))
+        print(io, _val_str(cond), " => ", _block_str(dest))
+        i < length(sw.conds) && print(io, ", ")
+    end
+    return print(io, ", fallthrough ", _block_str(sw.fallthrough_dest))
+end
+
+function _stmt_str(stmt)
+    stmt isa Union{IDPhiNode,IDGotoNode,IDGotoIfNot,Switch} && return sprint(show, stmt)
+    stmt isa ReturnNode &&
+        return isdefined(stmt, :val) ? string("return ", _val_str(stmt.val)) : "unreachable"
+    stmt isa Expr && return _expr_str(stmt)
+    stmt isa PiNode && return string("π (", _val_str(stmt.val), ", ", stmt.typ, ")")
+    return _val_str(stmt)
+end
+
+function _expr_str(x::Expr)
+    if x.head === :call
+        f = _val_str(x.args[1])
+        args = join((_val_str(a) for a in x.args[2:end]), ", ")
+        return string(f, "(", args, ")")
+    end
+    args = join((_val_str(a) for a in x.args), ", ")
+    return string("Expr(:", x.head, ", ", args, ")")
+end
+
+function _type_str(@nospecialize(t))
+    t === Any && return ""
+    t === Union{} && return "::Union{}"
+    return string("::", t)
+end
+
+_is_terminator_stmt(stmt) = stmt isa Terminator || stmt isa ReturnNode
+
+function Base.show(io::IO, bb::BBlock)
+    print(io, _block_str(bb.id), " ─")
+    n = length(bb.insts)
+    for (i, (id, inst)) in enumerate(zip(bb.inst_ids, bb.insts))
+        println(io)
+        prefix = i < n ? "│  " : "└──"
+        stmt = inst.stmt
+        if _is_terminator_stmt(stmt) && i == n
+            print(io, prefix, " ", _stmt_str(stmt))
+        else
+            print(
+                io, prefix, " ", _id_str(id), " = ", _stmt_str(stmt), _type_str(inst.type)
+            )
+        end
+    end
+end
+
+function Base.show(io::IO, ir::BBCode)
+    println(io, "BBCode (", length(ir.argtypes), " args, ", length(ir.blocks), " blocks)")
+    for (i, block) in enumerate(ir.blocks)
+        show(io, block)
+        i < length(ir.blocks) && println(io)
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", ir::BBCode)
+    return show(io, ir)
+end
 
 end
