@@ -107,20 +107,20 @@ Returns an IR output for the call `f(args...; kwargs...)`.
 `stage` controls the form of the IR that is returned, and corresponds to each stage in the
 generation of a `TapedTask`. The options are:
 
-- `:original` - no transformations applied, this generates a `Core.Compiler.IRCode`
+- `:input_ir` - no transformations applied, this generates a `Core.Compiler.IRCode`
   corresponding to the original function call.
 
-- `:originalbb`: same as `:original` but converted to `Libtask.BasicBlock.BBCode`
+- `:input_bb`: same as `:input_ir` but converted to `Libtask.BasicBlock.BBCode`
 
-- `:transformedbb`: same as `originalbb` but with transformations applied to convert it
+- `:transformed_bb`: same as `:input_bb` but with transformations applied to convert it
   into a form that supports the `produce`-`consume` interface.
 
-- `:toptbb`: same as `transformedbb` but with Libtask optimisations to reduce the number of
-  stored references
+- `:optimised_bb`: same as `:transformed_bb` but with Libtask optimisations to reduce the
+  number of stored references
 
-- `:transformed`: same as `toptbb` but converted back to `Core.Compiler.IRCode`
+- `:optimised_ir`: same as `:optimised_bb` but converted back to `Core.Compiler.IRCode`
 
-- `:final`: same as `transformed` but with Julia's builtin SSA IR optimisations applied
+- `:final`: same as `:optimised_ir` but with Julia's builtin SSA IR optimisations applied
   to it. This is the IRCode that is eventually wrapped in the `MistyClosure`.
 
 This is intended purely as a debugging tool, and is not exported. Breaking changes to the
@@ -134,16 +134,16 @@ function generate_ir(stage::Symbol, fargs...; kwargs...)
         _throw_ir_error(sig)
     end
     original_ir = ir_results[1][1]
-    stage == :original && return original_ir
+    stage == :input_ir && return original_ir
     seed_id!()
     original_bb = BBCode(original_ir)
-    stage == :originalbb && return original_bb
+    stage == :input_bb && return original_bb
     transformed_bb, refs, _ = derive_copyable_task_ir(BBCode(original_ir))
-    stage == :transformedbb && return transformed_bb
+    stage == :transformed_bb && return transformed_bb
     topt_bb, refs = eliminate_refs(transformed_bb, refs)
-    stage == :toptbb && return topt_bb
+    stage == :optimised_bb && return topt_bb
     transformed_ir = IRCode(topt_bb)
-    stage == :transformed && return transformed_ir
+    stage == :optimised_ir && return transformed_ir
     optimise_ir!(transformed_ir)
     stage == :final && return transformed_ir
     throw(ArgumentError("unknown stage $stage"))
