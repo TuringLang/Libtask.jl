@@ -38,8 +38,6 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
     #
     # Furthermore, we also construct the set of `Ref`s for which the value is written to in
     # that basic block. This is `VarKill[i]` in C&T, or `DEF[i]`, or KILL[i] on Wikipedia.
-    #
-    # TODO: Handle phi nodes.
     use = Dict{ID,Set{Int}}()
     def = Dict{ID,Set{Int}}()
     # In this pass through the IR, we also capture the resume blocks that Libtask sets in
@@ -53,25 +51,31 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
             if Meta.isexpr(inst.stmt, :call)
                 call_func = inst.stmt.args[1]
                 if call_func == Libtask.set_ref_at!
-                    push!(def_i, inst.stmt.args[3])
+                    ref_n = inst.stmt.args[3]
+                    push!(def_i, ref_n)
                 elseif call_func == Libtask.get_ref_at
-                    if !(inst.stmt.args[3] in def_i)
-                        push!(use_i, inst.stmt.args[3])
+                    ref_n = inst.stmt.args[3]
+                    if !(ref_n in def_i)
+                        push!(use_i, ref_n)
                     end
                 elseif call_func == Libtask.set_resume_block!
                     return_block = inst.stmt.args[3]
                     # A return block of `-1` means the function is ending naturally, and not
-                    # resuming again.
+                    # resuming again, so we don't need to add a synthetic edge.
                     if return_block != -1
                         push!(resume_block_i, get_block_id_from_int(return_block))
                     end
                 end
             elseif inst.stmt isa IDPhiNode
-                # For a phi node, we might have wrapped a ref value inside a TupleRef. These
-                # also count as uses of the ref, so we need to add those to the use set.
-                for val in inst.stmt.values
-                    if val isa Libtask.TupleRef
-                        push!(use_i, val.n)
+                # We might have wrapped a ref value inside a TupleRef as one of the phi
+                # node's values. These also count as uses of the ref, so we need to add
+                # those to the use set.
+                for i in eachindex(inst.stmt.values)
+                    if isassigned(inst.stmt.values, i)
+                        val = inst.stmt.values[i]
+                        if val isa Libtask.TupleRef
+                            push!(use_i, val.n)
+                        end
                     end
                 end
             end
@@ -149,7 +153,7 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
     # new_refs = tuple(
     #     [ref for (i, ref) in enumerate(refs) if !(i in unnecessary_ref_ids)]...
     # )
-    # old_refid_to_new_refid_map = Dict{Int,Int}(
+    # refid_to_new_refid_map = Dict{Int,Int}(
     #     necessary_ref_ids[i] => i for i in eachindex(necessary_ref_ids)
     # )
 
@@ -158,7 +162,7 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
         new_insts = IDInstPair[]
         # Map, from ref numbers, to the SSA ID that contains the definition of the value
         # that would have been stored in that ref.
-        old_refid_to_ssaid_map = Dict{Int,ID}()
+        refid_to_ssaid_map = Dict{Int,ID}()
         # Map, from SSA IDs that used to contain get_ref_at(refid) values, to the new SSA
         # IDs that contain the value itself.
         old_ssaid_to_new_ssaid_map = Dict{ID,ID}()
@@ -168,35 +172,57 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                 call_func = inst.stmt.args[1]
 
                 if call_func == Libtask.set_ref_at!
-                    old_refid = inst.stmt.args[3]
-                    if old_refid in unnecessary_ref_ids
+                    refid = inst.stmt.args[3]
+                    value_arg = inst.stmt.args[4]
+                    if refid in unnecessary_ref_ids
                         # We can skip this instruction, but first we need to record which
                         # SSA ID contains the value that we would have set in this ref, so
                         # that if we encounter a get_ref_at, we can replace it with this
                         # value.
-                        value_arg = inst.stmt.args[4]
                         if value_arg isa ID
-                            # That value might itself be something that needs to be replaced.
+                            # That value might itself be something that needs to be
+                            # replaced.
                             ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
-                            old_refid_to_ssaid_map[old_refid] = ssaid
+                            refid_to_ssaid_map[refid] = ssaid
                         elseif value_arg isa GlobalRef
                             # If it's a GlobalRef that's being stored in the ref, we just
-                            # need to store the GlobalRef itself inside the SSA ID.
-                            old_refid_to_ssaid_map[old_refid] = id
+                            # need to store the GlobalRef itself inside the SSA ID. In other
+                            # words:
+                            #     %1 = set_ref_at!(_1, refid, Main.a)
+                            # can be replaced with
+                            #     %1 = Main.a
+                            refid_to_ssaid_map[refid] = id
                             push!(new_insts, (id, new_inst(value_arg)))
                         end
                     else
-                        # It's a set that we still need.
+                        # It's a set that we still need. However, we additionally want to
+                        # track the SSA ID that contains the value being set, so that if we
+                        # encounter a get_ref_at in the same block, we can replace the
+                        # get_ref_at with that value directly.
+                        if value_arg isa ID
+                            refid_to_ssaid_map[refid] = value_arg
+                        elseif value_arg isa GlobalRef
+                            # Create a new SSA ID that points to the GlobalRef.
+                            new_id = ID()
+                            push!(new_insts, (new_id, new_inst(value_arg)))
+                            refid_to_ssaid_map[refid] = new_id
+                        end
                         ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
                         push!(new_insts, (id, ninst))
                     end
                 elseif call_func == Libtask.get_ref_at
-                    old_refid = inst.stmt.args[3]
-                    if old_refid in unnecessary_ref_ids
-                        # Eliminate it entirely.
-                        old_ssaid_to_new_ssaid_map[id] = old_refid_to_ssaid_map[old_refid]
+                    refid = inst.stmt.args[3]
+                    if haskey(refid_to_ssaid_map, refid)
+                        # If `refid` was found in the `refid_to_ssaid_map`, that means we
+                        # have an SSA ID that contains the value that `get_ref_at` would
+                        # have returned anyway. So, we can skip this instruction entirely.
+                        #
+                        # However, we need to record that the SSA ID of the current
+                        # `get_ref_at` instruction should be replaced with that SSA ID, so
+                        # that future instructions don't reference the current ID.
+                        old_ssaid_to_new_ssaid_map[id] = refid_to_ssaid_map[refid]
                     else
-                        # It's a get that we still need.
+                        # It's a get that we legitimately still need.
                         ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
                         push!(new_insts, (id, ninst))
                     end
