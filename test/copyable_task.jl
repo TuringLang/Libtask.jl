@@ -293,10 +293,18 @@ __global_a = 1.0
     end
     @testset "Return produce" begin
         # Test calling a function that does something with the return value of `produce`.
-        # In this case it just returns it. This used to error, see
-        # https://github.com/TuringLang/Libtask.jl/issues/190.
-        f(obs) = produce(obs)
+        # This used to error, see https://github.com/TuringLang/Libtask.jl/issues/190.
+        function f(obs)
+            x = produce(obs)
+            # produce(x) returns x
+            return if isnothing(x)
+                produce(1.0)
+            else
+                produce(x)
+            end
+        end
         tt = Libtask.TapedTask(nothing, f, :a)
+        @test Libtask.consume(tt) === :a
         @test Libtask.consume(tt) === :a
         @test Libtask.consume(tt) === nothing
     end
