@@ -113,7 +113,8 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
     )
 
     # Now we have all the information needed to run the live variable analysis, which is a
-    # fixed-point iteration. This algorithm is lifted straight from Cooper & Torczon.
+    # fixed-point iteration. This algorithm is lifted straight from Cooper & Torczon (figure
+    # 8.15).
     changed = true
     live_out = Dict{ID,Set{Int}}(id => Set{Int}() for id in all_block_ids)
     while (changed)
