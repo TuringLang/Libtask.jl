@@ -178,7 +178,7 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                         if value_arg isa ID
                             # That value might itself be something that needs to be replaced.
                             ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
-                            old_refid_to_ssaid_map[old_refid] = inst.stmt.args[4]
+                            old_refid_to_ssaid_map[old_refid] = ssaid
                         elseif value_arg isa GlobalRef
                             # If it's a GlobalRef that's being stored in the ref, we just
                             # need to store the GlobalRef itself inside the SSA ID.
@@ -187,7 +187,8 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                         end
                     else
                         # It's a set that we still need.
-                        push!(new_insts, (id, inst))
+                        ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
+                        push!(new_insts, (id, ninst))
                     end
                 elseif call_func == Libtask.get_ref_at
                     old_refid = inst.stmt.args[3]
@@ -196,18 +197,18 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                         old_ssaid_to_new_ssaid_map[id] = old_refid_to_ssaid_map[old_refid]
                     else
                         # It's a get that we still need.
-                        inst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
-                        push!(new_insts, (id, inst))
+                        ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
+                        push!(new_insts, (id, ninst))
                     end
                 else
                     # Some other call instruction.
-                    inst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
-                    push!(new_insts, (id, inst))
+                    ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
+                    push!(new_insts, (id, ninst))
                 end
             else
                 # Some other (non-call) instruction.
-                inst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
-                push!(new_insts, (id, inst))
+                ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
+                push!(new_insts, (id, ninst))
             end
         end
         return BBlock(block.id, new_insts)
