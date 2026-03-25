@@ -30,6 +30,7 @@ export ID,
     insert_before_terminator!,
     collect_stmts,
     compute_all_predecessors,
+    compute_all_successors,
     BBCode,
     characterise_used_ids,
     characterise_unique_predecessor_blocks,
@@ -37,7 +38,8 @@ export ID,
     IDInstPair,
     __line_numbers_to_block_numbers!,
     is_reachable_return_node,
-    new_inst
+    new_inst,
+    replace_ids
 
 const _id_count::Dict{Int,Int32} = Dict{Int,Int32}()
 
@@ -363,6 +365,44 @@ end
 _block_num_to_ids(d::BlockNumToIdDict, x::GotoNode) = IDGotoNode(d[x.label])
 _block_num_to_ids(d::BlockNumToIdDict, x::GotoIfNot) = IDGotoIfNot(x.cond, d[x.dest])
 _block_num_to_ids(d::BlockNumToIdDict, x) = x
+
+# A map from IDs to IDs; useful when generically replacing IDs in BBCode statements
+const IdToIdDict = Dict{ID,ID}
+function replace_ids(d::IdToIdDict, inst::NewInstruction)
+    return NewInstruction(inst; stmt=replace_ids(d, inst.stmt))
+end
+function replace_ids(d::IdToIdDict, x::ReturnNode)
+    return isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
+end
+replace_ids(d::IdToIdDict, x::Expr) = Expr(x.head, map(a -> get(d, a, a), x.args)...)
+replace_ids(d::IdToIdDict, x::PiNode) = PiNode(get(d, x.val, x.val), get(d, x.typ, x.typ))
+replace_ids(d::IdToIdDict, x::QuoteNode) = x
+replace_ids(d::IdToIdDict, x) = x
+function replace_ids(d::IdToIdDict, x::IDPhiNode)
+    new_ids = [get(d, e, e) for e in x.edges]
+    new_values = Vector{Any}(undef, length(x.values))
+    for n in eachindex(x.values)
+        if isassigned(x.values, n)
+            new_values[n] = get(d, x.values[n], x.values[n])
+        end
+    end
+    return IDPhiNode(new_ids, new_values)
+end
+replace_ids(d::IdToIdDict, x::IDGotoNode) = x
+function replace_ids(d::IdToIdDict, x::IDGotoIfNot)
+    return IDGotoIfNot(get(d, x.cond, x.cond), get(d, x.dest, x.dest))
+end
+function replace_ids(d::IdToIdDict, x::Switch)
+    new_conds = Vector{Any}(undef, length(x.conds))
+    for n in eachindex(x.conds)
+        if isassigned(x.conds, n)
+            new_conds[n] = get(d, x.conds[n], x.conds[n])
+        end
+    end
+    new_dests = [get(d, dest, dest) for dest in x.dests]
+    new_fallthrough_dest = get(d, x.fallthrough_dest, x.fallthrough_dest)
+    return Switch(new_conds, new_dests, new_fallthrough_dest)
+end
 
 #
 # Converting from BBCode to IRCode

@@ -142,7 +142,7 @@ function generate_ir(stage::Symbol, fargs...; kwargs...)
     stage == :transformedbb && return transformed_bb
     topt_bb, refs = eliminate_refs(transformed_bb, refs)
     stage == :toptbb && return topt_bb
-    transformed_ir = IRCode(transformed_bb)
+    transformed_ir = IRCode(topt_bb)
     stage == :transformed && return transformed_ir
     optimise_ir!(transformed_ir)
     stage == :final && return transformed_ir
@@ -178,6 +178,7 @@ function build_callable(sig::Type{<:Tuple})
         # Check whether this is a varargs call.
         isva = which(sig).isva
         bb, refs, types = derive_copyable_task_ir(BBCode(ir))
+        bb, refs = eliminate_refs(bb, refs)
         unoptimised_ir = IRCode(bb)
         @static if VERSION > v"1.12-"
             # This is a performance optimisation, copied over from Mooncake, where setting
