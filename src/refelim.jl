@@ -111,6 +111,8 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                 # those to the use set.
                 for i in eachindex(inst.stmt.values)
                     if isassigned(inst.stmt.values, i)
+                        # We don't need to check def_i because phi nodes always occur at the
+                        # start of a block, so they can't have been defined before this.
                         val = inst.stmt.values[i]
                         if val isa Libtask.TupleRef
                             push!(use_i, val.n)
@@ -160,9 +162,16 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
     # 8.15).
     changed = true
     live_out = Dict{ID,Set{Int}}(id => Set{Int}() for id in all_block_ids)
+    # Inside the next loop, the 'correct' iteration order over blocks is reverse postorder
+    # on the reverse CFG (see Cooper & Torczon's sections on efficiency of iterative
+    # dataflow analysis). This does not affect correctness (there is a guaranteed unique
+    # solution regardless of iteration order) but impacts how quickly we will converge to
+    # the solution. Note that we need to pass the 'augmented' successors map constructed
+    # above.
+    ordered_block_ids = rpo_reverse_cfg(successors)
     while (changed)
         changed = false
-        for i in all_block_ids
+        for i in ordered_block_ids
             # Recompute live_out
             live_out_i_new = Set{Int}()
             for succ_id in successors[i]
@@ -232,6 +241,8 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                             #     %1 = Main.a
                             refid_to_ssaid_map[refid] = id
                             push!(new_insts, (id, new_inst(value_arg)))
+                        else
+                            error("Unexpected value argument to set_ref_at!: $value_arg")
                         end
                     else
                         # It's a set that we still need. However, we additionally want to
@@ -239,12 +250,15 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                         # encounter a get_ref_at in the same block, we can replace the
                         # get_ref_at with that value directly.
                         if value_arg isa ID
-                            refid_to_ssaid_map[refid] = value_arg
+                            ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
+                            refid_to_ssaid_map[refid] = ssaid
                         elseif value_arg isa GlobalRef
                             # Create a new SSA ID that points to the GlobalRef.
                             new_id = ID()
                             push!(new_insts, (new_id, new_inst(value_arg)))
                             refid_to_ssaid_map[refid] = new_id
+                        else
+                            error("Unexpected value argument to set_ref_at!: $value_arg")
                         end
                         ninst = replace_ids(old_ssaid_to_new_ssaid_map, inst)
                         push!(new_insts, (id, ninst))
@@ -286,4 +300,46 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
     end
     # return ir, refs
     return new_ir, refs
+end
+
+# Return a vector of block IDs in reverse postorder on the reverse CFG (i.e., the CFG where
+# all edges are reversed). Postorder means that children are visited before their parents;
+# reverse postorder just takes that order and reverses it. A good resource:
+# https://eli.thegreenplace.net/2015/directed-graph-traversal-orderings-and-applications-to-data-flow-analysis/
+function rpo_reverse_cfg(successor_map::Dict{ID,Set{ID}})
+    # If block A has a successor (i.e., 'child') B in the original IR, then in the reverse
+    # IR, block B will have a 'child' A. We can calculate this by inverting the successor
+    # map. (Note that we can't use `compute_all_predecessors` here, because that only
+    # computes the 'natural' predecessors, and doesn't capture the synthetic edges from
+    # `set_resume_block!` calls.)
+    predecessor_map = Dict{ID,Set{ID}}(id => Set{ID}() for id in keys(successor_map))
+    for (id, succs) in pairs(successor_map)
+        for succ in succs
+            push!(predecessor_map[succ], id)
+        end
+    end
+    all_ids = Set(keys(successor_map))
+    exit_blocks = filter(id -> isempty(successor_map[id]), all_ids)
+    all_other_blocks = setdiff(all_ids, exit_blocks)
+
+    # This function constructs a postorder traversal of the reverse CFG
+    order = ID[]
+    visited = Set{ID}()
+    function visit(id::ID)
+        id in visited && return nothing
+        push!(visited, id)
+        for pred in predecessor_map[id]
+            visit(pred)
+        end
+        return push!(order, id)
+    end
+    # Visit the exit blocks first, because they are the 'roots' of the reverse CFG
+    for id in exit_blocks
+        visit(id)
+    end
+    for id in all_other_blocks
+        visit(id)
+    end
+    # Then reverse it to get RPO on the reverse CFG
+    return reverse(order)
 end
