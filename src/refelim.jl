@@ -232,7 +232,7 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                             # replaced.
                             ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
                             refid_to_ssaid_map[refid] = ssaid
-                        elseif value_arg isa GlobalRef
+                        elseif value_arg isa GlobalRef || value_arg isa Argument
                             # If it's a GlobalRef that's being stored in the ref, we just
                             # need to store the GlobalRef itself inside the SSA ID. In other
                             # words:
@@ -252,7 +252,7 @@ function eliminate_refs(ir::BBCode, refs::Tuple)
                         if value_arg isa ID
                             ssaid = get(old_ssaid_to_new_ssaid_map, value_arg, value_arg)
                             refid_to_ssaid_map[refid] = ssaid
-                        elseif value_arg isa GlobalRef
+                        elseif value_arg isa GlobalRef || value_arg isa Argument
                             # Create a new SSA ID that points to the GlobalRef.
                             new_id = ID()
                             push!(new_insts, (new_id, new_inst(value_arg)))
