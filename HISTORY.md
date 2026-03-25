@@ -1,3 +1,7 @@
+# 0.9.16
+
+Improve performance by removing unnecessary `set_ref_at!` / `get_ref_at` calls.
+
 # 0.9.15
 
 Improve Libtask's handling of non-const global variables.
