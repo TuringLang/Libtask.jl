@@ -1,11 +1,50 @@
 """
-    eliminate_refs(ir::BBCode, refs::Vector)
+    eliminate_refs(ir::BBCode, refs::Tuple)
 
 Transform the `BBCode` to remove redundant `get_ref_at` / `set_ref_at!` calls.
 
-TODO: Explain more about how this happens
+This optimises both within a single basic block, and across basic blocks. As an example of
+the former, if we have something like
 
-Returns a tuple of the modified `BBCode` and the modified `refs` vector.
+    %11 = set_ref_at!(_1, 1, %1)
+    %12 = get_ref_at(_1, 1)
+    %13 = f(%12)
+
+then we can replace `%12` with `%1`, and eliminate the load entirely:
+
+    %11 = set_ref_at!(_1, 1, %1)
+    %13 = f(%1)
+
+As for an example of optimising across basic blocks, consider a function like
+
+    function f(x)
+        a = x + 1
+        b = a + 2
+        produce(b)
+        c = b * 3
+        produce(c)
+        return nothing
+    end
+
+Libtask's transformation pass recognises that `a`, `b`, and `c` all constitute the state of
+the function, and creates `Ref`s to store all of those values, and to read/write from them
+across produce boundaries. However, in this example, `a` is actually not needed after the
+first produce, because it is only used to compute `b`. Thus, it is not necessary to retain
+its state.
+
+This function performs a classic live-variable analysis to identify which `Ref`s are
+actually needed across boundaries, and eliminates all calls to `set_ref_at!` that don't need
+to be retained.
+
+Returns a tuple of the modified `BBCode` and the modified `refs` tuple.
+
+!!! note
+    Right now, `eliminate_refs` does not remove dead refs from the `refs` tuple itself (so the 
+    TapedTask will be constructed with the same `refs` tuple as before). We simply leave those
+    refs as unused (i.e., they will be initialised with nothing, and never read from or
+    written to.) In principle, we could also slim down the `refs` tuple itself by removing
+    the dead refs from it. This is left as a future optimisation (and the signature of this
+    function is designed to allow for this in the future).
 """
 function eliminate_refs(ir::BBCode, refs::Tuple)
     # The `refs` tuple contains a series of `Ref`s which are used to maintain function state
