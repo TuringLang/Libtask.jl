@@ -226,7 +226,7 @@ function test_cases()
             "default kwarg tester", nothing, (default_kwarg_tester, 4.0), (;), [], allocs
         ),
         Testcase(
-            "final statment produce",
+            "final statement produce",
             nothing,
             (final_statement_produce,),
             nothing,
