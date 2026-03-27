@@ -371,6 +371,7 @@ const IdToIdDict = Dict{ID,ID}
 function replace_ids(d::IdToIdDict, inst::NewInstruction)
     return NewInstruction(inst; stmt=replace_ids(d, inst.stmt))
 end
+replace_ids(d::IdToIdDict, x::ID) = get(d, x, x)
 function replace_ids(d::IdToIdDict, x::ReturnNode)
     return isdefined(x, :val) ? ReturnNode(get(d, x.val, x.val)) : x
 end
