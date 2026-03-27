@@ -1,3 +1,7 @@
+# 0.9.17
+
+Further improve performance by dropping unused `Ref`s from the tape entirely.
+
 # 0.9.16
 
 Improve performance by removing unnecessary `set_ref_at!` / `get_ref_at` calls.
