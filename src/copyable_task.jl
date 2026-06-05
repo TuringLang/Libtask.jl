@@ -149,6 +149,8 @@ function generate_ir(stage::Symbol, fargs...; kwargs...)
     throw(ArgumentError("unknown stage $stage"))
 end
 
+const build_callable_lock = ReentrantLock()
+
 """
     build_callable(sig::Type{<:Tuple})
 
@@ -157,8 +159,6 @@ Returns a `MistyClosure` which is used by `TapedTask` to implement the
 the current world age, will make a copy of an existing `MistyClosure`. If not,
 will derive it from scratch (derive the IR + compile it etc).
 """
-const build_callable_lock = ReentrantLock()
-
 function build_callable(sig::Type{<:Tuple})
     if sig <: Tuple{typeof(produce),Any}
         msg = """
@@ -192,7 +192,9 @@ function build_callable(sig::Type{<:Tuple})
             end
             optimised_ir = optimise_ir!(unoptimised_ir)
             mc_ret_type = callable_ret_type(sig, types)
-            mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
+            mc = misty_closure(
+                mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true
+            )
             mc_cache[key] = mc
             return mc, refs[end]
         end
