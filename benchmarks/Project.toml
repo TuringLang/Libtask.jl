@@ -5,3 +5,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [sources]
 Libtask = {path = "../"}
+
+[compat]
+Chairmarks = "1.3.1"
+Libtask = "0.9.17"
