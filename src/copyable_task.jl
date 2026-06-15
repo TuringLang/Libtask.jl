@@ -149,6 +149,8 @@ function generate_ir(stage::Symbol, fargs...; kwargs...)
     throw(ArgumentError("unknown stage $stage"))
 end
 
+const build_callable_lock = ReentrantLock()
+
 """
     build_callable(sig::Type{<:Tuple})
 
@@ -165,32 +167,42 @@ function build_callable(sig::Type{<:Tuple})
              TapedTask from that function."""
         throw(ArgumentError(msg))
     end
-    world_age = Base.get_world_counter()
-    key = CacheKey(world_age, sig)
-    if haskey(mc_cache, key)
-        return fresh_copy(mc_cache[key])
-    else
-        ir_results = Base.code_ircode_by_type(sig)
-        if isempty(ir_results)
-            _throw_ir_error(sig)
+    lock(build_callable_lock)
+    try
+        world_age = Base.get_world_counter()
+        key = CacheKey(world_age, sig)
+        if haskey(mc_cache, key)
+            return fresh_copy(mc_cache[key])
+        else
+            # Reset the ID counter under the lock: only this (cache-miss) branch generates
+            # `ID`s, and both `seed_id!` and `ID()` mutate the shared `_id_count`.
+            seed_id!()
+            ir_results = Base.code_ircode_by_type(sig)
+            if isempty(ir_results)
+                _throw_ir_error(sig)
+            end
+            ir = ir_results[1][1]
+            # Check whether this is a varargs call.
+            isva = which(sig).isva
+            bb, refs, types = derive_copyable_task_ir(BBCode(ir))
+            bb, refs = eliminate_refs(bb, refs)
+            unoptimised_ir = IRCode(bb)
+            @static if VERSION > v"1.12-"
+                # This is a performance optimisation, copied over from Mooncake, where setting
+                # the valid world age to be very strictly just the current age allows the
+                # compiler to do more inlining and other optimisation.
+                unoptimised_ir = set_valid_world!(unoptimised_ir, world_age)
+            end
+            optimised_ir = optimise_ir!(unoptimised_ir)
+            mc_ret_type = callable_ret_type(sig, types)
+            mc = misty_closure(
+                mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true
+            )
+            mc_cache[key] = mc
+            return mc, refs[end]
         end
-        ir = ir_results[1][1]
-        # Check whether this is a varargs call.
-        isva = which(sig).isva
-        bb, refs, types = derive_copyable_task_ir(BBCode(ir))
-        bb, refs = eliminate_refs(bb, refs)
-        unoptimised_ir = IRCode(bb)
-        @static if VERSION > v"1.12-"
-            # This is a performance optimisation, copied over from Mooncake, where setting
-            # the valid world age to be very strictly just the current age allows the
-            # compiler to do more inlining and other optimisation.
-            unoptimised_ir = set_valid_world!(unoptimised_ir, world_age)
-        end
-        optimised_ir = optimise_ir!(unoptimised_ir)
-        mc_ret_type = callable_ret_type(sig, types)
-        mc = misty_closure(mc_ret_type, optimised_ir, refs...; isva=isva, do_compile=true)
-        mc_cache[key] = mc
-        return mc, refs[end]
+    finally
+        unlock(build_callable_lock)
     end
 end
 
@@ -407,7 +419,6 @@ function TapedTask(taped_globals::Any, fargs...; kwargs...)
             """
     end
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
-    seed_id!() # a BBCode thing.
     mc, count_ref = build_callable(typeof(all_args))
     return TapedTask(taped_globals, all_args, mc, count_ref)
 end

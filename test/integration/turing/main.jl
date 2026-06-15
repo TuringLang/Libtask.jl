@@ -15,7 +15,7 @@ model = f()
     @testset "SMC" begin
         chain = sample(StableRNG(468), model, SMC(), 100; progress=false)
         @test size(chain, 1) == 100
-        @test size(chain, 3) == 1
+        @test size(chain, 2) == 1
     end
 
     @testset "PG" begin
