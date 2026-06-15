@@ -174,6 +174,9 @@ function build_callable(sig::Type{<:Tuple})
         if haskey(mc_cache, key)
             return fresh_copy(mc_cache[key])
         else
+            # Reset the ID counter under the lock: only this (cache-miss) branch generates
+            # `ID`s, and both `seed_id!` and `ID()` mutate the shared `_id_count`.
+            seed_id!()
             ir_results = Base.code_ircode_by_type(sig)
             if isempty(ir_results)
                 _throw_ir_error(sig)
@@ -416,7 +419,6 @@ function TapedTask(taped_globals::Any, fargs...; kwargs...)
             """
     end
     all_args = isempty(kwargs) ? fargs : (Core.kwcall, getfield(kwargs, :data), fargs...)
-    seed_id!() # a BBCode thing.
     mc, count_ref = build_callable(typeof(all_args))
     return TapedTask(taped_globals, all_args, mc, count_ref)
 end
