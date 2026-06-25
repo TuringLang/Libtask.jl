@@ -27,17 +27,24 @@ function is_produce_stmt(x)::Bool
 end
 
 """
-    stmt_might_produce(x, ret_type::Type)::Bool
+    stmt_might_produce(x, ret_type::Type; assume_returns::Bool=false)::Bool
 
 `true` if `x` might contain a call to `produce`, and `false` otherwise.
+
+By default, a statement whose inferred return type is `Union{}` is assumed not to produce:
+it terminates in an unusual fashion (e.g. by throwing), so the splitting logic does not need
+to treat it as a possible `produce` site. Pass `assume_returns=true` to skip this
+short-circuit -- a call which produces *and then* throws still produces, which matters when
+deciding whether a `produce` could suspend inside an exception handler (see
+[`assert_can_handle_control_flow`](@ref)).
 """
-function stmt_might_produce(x, ret_type::Type)::Bool
+function stmt_might_produce(x, ret_type::Type; assume_returns::Bool=false)::Bool
 
     # Statement will terminate in an unusual fashion, so don't bother recursing.
     # This isn't _strictly_ correct (there could be a `produce` statement before the
-    # `throw` call is hit), but this seems unlikely to happen in practice. If it does, the
-    # user should get a sensible error message anyway.
-    ret_type == Union{} && return false
+    # `throw` call is hit), but for the splitting logic this seems unlikely to happen in
+    # practice. Exception-handler safety analysis sets `assume_returns` to be exact here.
+    !assume_returns && ret_type == Union{} && return false
 
     # Statement will terminate in the usual fashion, so _do_ bother recusing.
     is_produce_stmt(x) && return true
@@ -105,6 +112,7 @@ end
 inc_args(::Nothing) = nothing
 inc_args(x::GlobalRef) = x
 inc_args(x::Core.PiNode) = Core.PiNode(__inc(x.val), __inc(x.typ))
+inc_args(x::IDEnterNode) = remake_enter(x, x.catch_id, __inc)
 
 __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
@@ -146,6 +154,170 @@ function get_type(::TypeInfo, x::Expr)
     return error("Unrecognised expression $x found in argument slot.")
 end
 
+"""
+    assert_can_handle_control_flow(ir::BBCode)
+
+Check that any `try` / `catch` / `finally` control flow in `ir` is something a `TapedTask`
+can faithfully reproduce, throwing an informative `ArgumentError` otherwise.
+
+A `TapedTask` is a suspend/resume state machine: a `produce` returns from the underlying
+`OpaqueClosure`, and the next `consume` re-enters it and jumps straight to the resumption
+point. The exception-handler frame established by an `enter` lives on that closure's call
+stack, so it does not survive a suspend/resume boundary. This splits exception handling
+into three cases:
+
+  - Safe — every `enter` and its matching `pop_exception` / `leave` execute within a single
+    `consume` call (no `produce` suspends while a handler is active). The handler frame is
+    created and torn down within one closure invocation, so the control flow can be
+    reproduced directly. This is the case we support.
+
+  - Unsafe — a `produce` can suspend while a handler is active (a `produce` in the `try`
+    body, or in the `catch` before `pop_exception`). On resume the handler frame is gone and
+    the stale exception token would be used, so this cannot work without re-architecting how
+    task state is captured. This is the case in issue #194's MWE; we reject it here.
+
+  - Already fine — a `try` / `catch` the compiler can prove never throws is optimised away
+    before we ever see it, so it generates no exception IR and needs no handling.
+
+The design decision is therefore to support the safe subset and reject the unsafe subset
+with a clear error rather than miscompile it. Value-carrying `catch` blocks (which lower to
+`UpsilonNode` / `PhiCNode`) are not yet supported even when safe, and are rejected too; see
+the follow-up tracked alongside issue #194.
+
+Detection works directly on the `BBCode`, which represents every `enter` (`Core.EnterNode`
+on Julia 1.11+, `Expr(:enter)` on Julia 1.10) uniformly as an `IDEnterNode` and
+already carries the exception (catch) edges in its CFG. We run a forward data-flow pass over
+the blocks tracking how many exception-handler frames are live; a `produce` (or a call which
+might `produce`) reached while at least one frame is live is unsafe. This is version-
+agnostic and handles `try` / `catch` inside loops, unlike `Core.Compiler.compute_trycatch`
+whose shape and handler-region marking differ across the supported Julia versions.
+"""
+function assert_can_handle_control_flow(ir::BBCode)
+    # Single pass to detect the start of a `try` (`IDEnterNode`) and whether a value flows out
+    # of one (`UpsilonNode` / `PhiCNode`, which only arise from exception handling).
+    has_enter = false
+    has_value_carrying = false
+    for blk in ir.blocks, inst in blk.insts
+        stmt = inst.stmt
+        stmt isa IDEnterNode && (has_enter = true)
+        (stmt isa Core.UpsilonNode || stmt isa Core.PhiCNode) && (has_value_carrying = true)
+    end
+
+    # No exception-handling control flow at all (the common case).
+    has_enter || return nothing
+
+    # Before Julia 1.12 the compiler passes we run over the derived IR (constant propagation,
+    # inlining, codegen) do not reliably handle exception-handling nodes -- depending on the
+    # control-flow shape they either error or miscompile to a crash. Rather than risk that,
+    # reject `try` / `catch` outright on those versions with a clear message. From 1.12 the
+    # compiler handles these nodes and the safe subset below is supported.
+    @static if VERSION < v"1.12-"
+        throw(ArgumentError(_TRY_CATCH_VERSION_MSG))
+    end
+
+    # Not-yet-supported case: a value defined in a `try` / `catch` and used afterwards lowers
+    # to `UpsilonNode` / `PhiCNode`, which the transformation does not yet handle.
+    has_value_carrying && throw(ArgumentError(_VALUE_CARRYING_CATCH_MSG))
+
+    # Unsafe case: a `produce` (or a call which might `produce`) which can run while an
+    # exception-handler frame is live cannot be reproduced across a suspend/resume boundary.
+    # Compute, by forward data-flow to a fixed point, the number of handler frames live on
+    # entry to each block, then scan for an offending `produce`.
+    handler_depth_in = _handler_depth_on_entry(ir)
+    for blk in ir.blocks
+        depth = handler_depth_in[blk.id]
+        for inst in blk.insts
+            stmt = inst.stmt
+            if depth > 0 && (
+                is_produce_stmt(stmt) ||
+                stmt_might_produce(stmt, CC.widenconst(inst.type); assume_returns=true)
+            )
+                throw(ArgumentError(_PRODUCE_IN_HANDLER_MSG))
+            end
+            depth = _apply_handler_delta(depth, stmt)
+        end
+    end
+    return nothing
+end
+
+# Number of exception-handler frames opened (`enter`) minus closed (`leave` /
+# `:pop_exception`) by `stmt`, applied to a running `depth` (clamped at zero).
+function _apply_handler_delta(depth::Int, @nospecialize(stmt))
+    stmt isa IDEnterNode && return depth + 1
+    if Meta.isexpr(stmt, :leave)
+        # On Julia 1.12+ (the only versions on which this data-flow runs -- earlier versions
+        # reject `try` / `catch` before reaching here) a `:leave` lists one enter token per
+        # frame it closes, so the number of frames closed is the token count. The integer
+        # form `Expr(:leave, n)` is the older lowering and is handled defensively only.
+        n = if length(stmt.args) == 1 && stmt.args[1] isa Integer
+            Int(stmt.args[1])
+        else
+            count(a -> a !== nothing, stmt.args)
+        end
+        return max(depth - n, 0)
+    end
+    Meta.isexpr(stmt, :pop_exception) && return max(depth - 1, 0)
+    return depth
+end
+
+# Forward data-flow: the number of handler frames live on entry to each block. At a join we
+# take the maximum over predecessors -- structured exception handling keeps the depth equal
+# across merging paths, and the maximum is the conservative (never-under-count) choice.
+function _handler_depth_on_entry(ir::BBCode)
+    preds = compute_all_predecessors(ir)
+    depth_in = Dict{ID,Int}(blk.id => 0 for blk in ir.blocks)
+    depth_out = Dict{ID,Int}(blk.id => 0 for blk in ir.blocks)
+    changed = true
+    while changed
+        changed = false
+        for blk in ir.blocks
+            new_in = isempty(preds[blk.id]) ? 0 : maximum(p -> depth_out[p], preds[blk.id])
+            d = new_in
+            for inst in blk.insts
+                d = _apply_handler_delta(d, inst.stmt)
+            end
+            if new_in != depth_in[blk.id] || d != depth_out[blk.id]
+                depth_in[blk.id] = new_in
+                depth_out[blk.id] = d
+                changed = true
+            end
+        end
+    end
+    return depth_in
+end
+
+const _PRODUCE_IN_HANDLER_MSG = """
+    `TapedTask` does not support a `produce` inside a `try` / `catch` / `finally` block \
+    (including a `produce` in the `try` body or in the `catch` before the block finishes). \
+    A `produce` suspends the task, but the exception-handler frame set up by the `try` \
+    cannot be restored when the task is resumed, so this cannot be reproduced faithfully. \
+    Move the `produce` outside the `try` / `catch` block (for example, by capturing a value \
+    inside the block and calling `produce` after it). See \
+    https://github.com/TuringLang/Libtask.jl/issues/194 for details."""
+
+const _VALUE_CARRYING_CATCH_MSG = """
+    `TapedTask` does not yet support a `try` / `catch` / `finally` block that defines a \
+    value used after the block (such code lowers to `UpsilonNode` / `PhiCNode` IR nodes). \
+    `try` / `catch` blocks which do not feed a value into later code are supported. See \
+    https://github.com/TuringLang/Libtask.jl/issues/194 for details."""
+
+const _TRY_CATCH_VERSION_MSG = """
+    `TapedTask` only supports functions containing `try` / `catch` / `finally` blocks on \
+    Julia 1.12 or later; the Julia compiler does not reliably handle exception-handling IR \
+    in the derived task on earlier versions. Upgrade to Julia 1.12+, or rewrite the function \
+    to avoid `try` / `catch` (for example, by using explicit conditional checks). See \
+    https://github.com/TuringLang/Libtask.jl/issues/194 for details."""
+
+# `true` for statements which Julia's IR verifier treats as block-terminating but which
+# `BBCode` does not model as `Terminator`s, namely `IDEnterNode` (the start of a `try`) and
+# `Expr(:leave)` (the normal exit from a `try`). Both must remain the final statement of
+# their block, falling through to the next block (an `enter` additionally branches to its
+# catch block). We therefore neither append a `GotoNode` after them nor read their operands
+# from `Ref`s.
+function ends_block_implicitly(@nospecialize(stmt))
+    return stmt isa IDEnterNode || Meta.isexpr(stmt, :leave)
+end
+
 function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # The location from which all state can be retrieved. Since we're using `OpaqueClosure`s
     # to implement `TapedTask`s, this appears via the first argument.
@@ -175,6 +347,11 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
             stmt.stmt isa IDGotoIfNot && continue
             stmt.stmt === nothing && continue
             stmt.stmt isa ReturnNode && continue
+            # The token produced by an `enter` identifies a live exception-handler frame. It
+            # is meaningful only within a single execution of the closure (a `:leave` /
+            # `:pop_exception` consuming it always runs in the same `consume` call), so it is
+            # referenced directly as an SSA rather than round-tripped through a `Ref`.
+            stmt.stmt isa IDEnterNode && continue
             is_used_dict[id] || continue
             n += 1
             ssa_id_to_ref_index_map[id] = n
@@ -191,6 +368,17 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # necessary, but simplifies later stages of the pipeline, as discussed variously below.
     for (n, block) in enumerate(ir.blocks)
         if terminator(block) === nothing
+            # A block ending in an `IDEnterNode` or `:leave` is left as-is: Julia's IR
+            # verifier treats both as block-terminating, so they must remain the final
+            # statement of their block (each with an implicit fall-through edge to the next
+            # block; an `enter` additionally has its catch edge). We must not append a
+            # `GotoNode` after them. Such a block always falls through to post-`try` code, so
+            # it is never the structurally-final block; assert that so any future change which
+            # broke the invariant fails loudly here rather than silently dropping the edge.
+            if !isempty(block.insts) && ends_block_implicitly(block.insts[end].stmt)
+                @assert n < length(ir.blocks) "`enter` / `:leave` in the final basic block"
+                continue
+            end
             # Fall-through terminator, so next block in `ir.blocks` is the unique successor
             # block of `block`. Final block cannot have a fall-through terminator, so asking
             # for element `n + 1` is always going to be valid.
@@ -265,13 +453,23 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # 2. Construct a map between the ID of each block and the ID associated to its split.
     top_split_id_map = Dict{ID,ID}(b.id => x[1] for (b, x) in zip(ir.blocks, all_split_ids))
 
-    # 3. Update all `GotoNode`s and `GotoIfNot`s to refer to these new names.
+    # 3. Update all `GotoNode`s, `GotoIfNot`s, and `IDEnterNode` catch edges to refer to
+    #   these new names. An `enter`'s catch edge points at the catch block, which must be
+    #   re-pointed at that block's top split if it was split (a no-op when it was not).
     for block in ir.blocks
         t = terminator(block)
         if t isa IDGotoNode
             block.insts[end] = new_inst(IDGotoNode(top_split_id_map[t.label]))
         elseif t isa IDGotoIfNot
             block.insts[end] = new_inst(IDGotoIfNot(t.cond, top_split_id_map[t.dest]))
+        end
+        for (i, inst) in enumerate(block.insts)
+            s = inst.stmt
+            s isa IDEnterNode || continue
+            # A scope-only `enter` (`catch_id === nothing`) has no catch edge to relabel.
+            s.catch_id === nothing && continue
+            new_enter = remake_enter(s, top_split_id_map[s.catch_id])
+            block.insts[i] = new_inst(new_enter, inst.type)
         end
     end
 
@@ -483,6 +681,13 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     # do nothing -- we've already handled any `PhiNode`s.
                 elseif Meta.isexpr(stmt, :loopinfo)
                     push!(inst_pairs, (id, inst))
+                elseif Meta.isexpr(stmt, :pop_exception)
+                    # Pops the exception stack at the end of a `catch`. Its token argument is
+                    # the SSA produced by the corresponding `enter`; it is left as a direct
+                    # reference rather than read from a `Ref`. (An `IDEnterNode` and a
+                    # `:leave` are always block-terminating, so they are handled in the
+                    # terminator branch below rather than here.)
+                    push!(inst_pairs, (id, inst))
                 else
                     throw(error("Unhandled stmt $stmt of type $(typeof(stmt))"))
                 end
@@ -532,6 +737,31 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                         push!(inst_pairs, (id, inst))
                     end
                 elseif stmt isa IDGotoNode
+                    push!(inst_pairs, (id, inst))
+                elseif stmt isa IDEnterNode
+                    # The `enter` terminates its block with an implicit fall-through to the
+                    # next block plus a catch edge (encoded in the `IDEnterNode` itself). It
+                    # must remain the final statement of the block, so we emit it without
+                    # appending a `GotoNode`; the fall-through is provided by block layout.
+                    # If the enter carries a `scope` that is an SSA, restore it from storage.
+                    if isdefined(stmt, :scope) && stmt.scope isa ID
+                        ref_ind = ssa_id_to_ref_index_map[stmt.scope]
+                        scope_id = ID()
+                        expr = Expr(:call, get_ref_at, refs_id, ref_ind)
+                        push!(inst_pairs, (scope_id, new_inst(expr)))
+                        push!(
+                            inst_pairs,
+                            (id, new_inst(IDEnterNode(stmt.catch_id, scope_id))),
+                        )
+                    else
+                        push!(inst_pairs, (id, inst))
+                    end
+                elseif Meta.isexpr(stmt, :leave)
+                    # The normal exit from a `try`. Like `enter`, it terminates its block (it
+                    # must be the block's final statement) and falls through to the next block
+                    # by layout, so we emit it without appending a `GotoNode`. Its token
+                    # operand is the SSA produced by the corresponding `enter` and is left as a
+                    # direct reference.
                     push!(inst_pairs, (id, inst))
                 else
                     error("Unexpected terminator $stmt")

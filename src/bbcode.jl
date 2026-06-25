@@ -23,6 +23,8 @@ export ID,
     IDPhiNode,
     IDGotoNode,
     IDGotoIfNot,
+    IDEnterNode,
+    remake_enter,
     Switch,
     BBlock,
     phi_nodes,
@@ -86,6 +88,47 @@ struct IDGotoIfNot
 end
 
 Base.copy(node::IDGotoIfNot) = IDGotoIfNot(copy(node.cond), copy(node.dest))
+
+"""
+    IDEnterNode
+
+The `ID`-based analogue of the IR node which marks the start of a `try` block. It plays the
+same role for exception-handling control flow that `IDGotoNode` plays for
+unconditional branches: `catch_id` refers to the catch block by its `ID`, so that the
+reference survives block splitting / re-ordering during the IR transformation. `catch_id` is
+`nothing` for a scope-only `enter` that has no catch block (`Core.EnterNode` with
+`catch_dest == 0`, e.g. the dynamic-scope `enter` emitted by `Base.ScopedValues.@with`).
+
+This is the single representation used throughout `BBCode`, regardless of Julia version: it
+is produced from a `Core.EnterNode` on Julia versions where that type exists (1.11+) and
+from an `Expr(:enter, ...)` on Julia 1.10, and converted back to the version-appropriate
+node when lowering to `IRCode`. The optional `scope` field mirrors `Core.EnterNode`'s
+optional `scope`.
+"""
+struct IDEnterNode
+    catch_id::Union{ID,Nothing}
+    scope::Any
+    IDEnterNode(catch_id::Union{ID,Nothing}) = new(catch_id)
+    IDEnterNode(catch_id::Union{ID,Nothing}, @nospecialize(scope)) = new(catch_id, scope)
+end
+
+"""
+    remake_enter(node::IDEnterNode, catch_id, scope_map=identity)
+
+Rebuild `node` with catch block `catch_id`, mapping its `scope` (if present) through
+`scope_map`. Centralises the optional-`scope` handling that the transformations of an
+`IDEnterNode` (`copy`, `replace_ids`, `inc_args`, catch-edge relabelling) would otherwise
+each repeat.
+"""
+function remake_enter(node::IDEnterNode, catch_id::Union{ID,Nothing}, scope_map=identity)
+    return if isdefined(node, :scope)
+        IDEnterNode(catch_id, scope_map(node.scope))
+    else
+        IDEnterNode(catch_id)
+    end
+end
+
+Base.copy(node::IDEnterNode) = remake_enter(node, node.catch_id)
 
 struct Switch
     conds::Vector{Any}
@@ -192,20 +235,35 @@ compute_all_successors(ir::BBCode)::Dict{ID,Vector{ID}} = _compute_all_successor
         is_final_block = n == length(blks)
         t = terminator(blk)
         if t === nothing
-            return is_final_block ? ID[] : ID[blks[n + 1].id]
+            normal_succs = is_final_block ? ID[] : ID[blks[n + 1].id]
         elseif t isa IDGotoNode
-            return [t.label]
+            normal_succs = [t.label]
         elseif t isa IDGotoIfNot
-            return is_final_block ? ID[t.dest] : ID[t.dest, blks[n + 1].id]
+            normal_succs = is_final_block ? ID[t.dest] : ID[t.dest, blks[n + 1].id]
         elseif t isa ReturnNode
-            return ID[]
+            normal_succs = ID[]
         elseif t isa Switch
-            return vcat(t.dests, t.fallthrough_dest)
+            normal_succs = vcat(t.dests, t.fallthrough_dest)
         else
             error("Unhandled terminator $t")
         end
+        # A block containing an `IDEnterNode` has an extra (exception) edge to its catch
+        # block, in addition to whatever its terminator dictates. Unlike a terminator, the
+        # `enter` may sit anywhere in the block, so we scan for it explicitly.
+        return _append_catch_edge(normal_succs, blk)
     end
     return Dict{ID,Vector{ID}}((b.id, succ) for (b, succ) in zip(blks, succs))
+end
+
+function _append_catch_edge(succs::Vector{ID}, blk::BBlock)
+    for inst in blk.insts
+        if inst.stmt isa IDEnterNode
+            catch_id = inst.stmt.catch_id
+            # A scope-only `enter` (`catch_id === nothing`) has no catch block, hence no edge.
+            catch_id isa ID && !in(catch_id, succs) && push!(succs, catch_id)
+        end
+    end
+    return succs
 end
 
 function compute_all_predecessors(ir::BBCode)::Dict{ID,Vector{ID}}
@@ -288,8 +346,17 @@ function __line_numbers_to_block_numbers!(insts::Vector{Any}, cfg::CC.CFG)
                 Int32[CC.block_for_inst(cfg, Int(edge)) for edge in stmt.edges], stmt.values
             )
         elseif Meta.isexpr(stmt, :enter)
-            stmt.args[1] = CC.block_for_inst(cfg, stmt.args[1]::Int)
+            # `catch_dest == 0` marks a scope-only `enter` with no catch block; leave it.
+            if stmt.args[1]::Int != 0
+                stmt.args[1] = CC.block_for_inst(cfg, stmt.args[1]::Int)
+            end
             insts[i] = stmt
+        else
+            @static if isdefined(Core, :EnterNode)
+                if isa(stmt, Core.EnterNode) && stmt.catch_dest != 0
+                    insts[i] = Core.EnterNode(stmt, CC.block_for_inst(cfg, stmt.catch_dest))
+                end
+            end
         end
     end
     return insts
@@ -349,6 +416,12 @@ function _ssa_to_ids(d::SSAToIdDict, x::PhiNode)
 end
 _ssa_to_ids(d::SSAToIdDict, x::GotoNode) = x
 _ssa_to_ids(d::SSAToIdDict, x::GotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), x.dest)
+@static if isdefined(Core, :EnterNode)
+    function _ssa_to_ids(d::SSAToIdDict, x::Core.EnterNode)
+        isdefined(x, :scope) || return x
+        return Core.EnterNode(x.catch_dest, get(d, x.scope, x.scope))
+    end
+end
 
 function _block_nums_to_ids(insts::InstVector, cfg::CC.CFG)::Tuple{Vector{ID},InstVector}
     ids = map(_ -> ID(), cfg.blocks)
@@ -364,7 +437,23 @@ function _block_num_to_ids(d::BlockNumToIdDict, x::PhiNode)
 end
 _block_num_to_ids(d::BlockNumToIdDict, x::GotoNode) = IDGotoNode(d[x.label])
 _block_num_to_ids(d::BlockNumToIdDict, x::GotoIfNot) = IDGotoIfNot(x.cond, d[x.dest])
+function _block_num_to_ids(d::BlockNumToIdDict, x::Expr)
+    # On Julia 1.10 a `try` block begins with `Expr(:enter, catch_block_number)`; a
+    # `catch_block_number` of 0 is a scope-only `enter` with no catch block.
+    if Meta.isexpr(x, :enter)
+        catch_id = x.args[1]::Int == 0 ? nothing : d[x.args[1]::Int]
+        return IDEnterNode(catch_id)
+    end
+    return x
+end
 _block_num_to_ids(d::BlockNumToIdDict, x) = x
+@static if isdefined(Core, :EnterNode)
+    function _block_num_to_ids(d::BlockNumToIdDict, x::Core.EnterNode)
+        # `catch_dest == 0` is a scope-only `enter` (no catch block); record `nothing`.
+        catch_id = x.catch_dest == 0 ? nothing : d[x.catch_dest]
+        return isdefined(x, :scope) ? IDEnterNode(catch_id, x.scope) : IDEnterNode(catch_id)
+    end
+end
 
 # A map from IDs to IDs; useful when generically replacing IDs in BBCode statements
 const IdToIdDict = Dict{ID,ID}
@@ -392,6 +481,9 @@ end
 replace_ids(d::IdToIdDict, x::IDGotoNode) = x
 function replace_ids(d::IdToIdDict, x::IDGotoIfNot)
     return IDGotoIfNot(get(d, x.cond, x.cond), get(d, x.dest, x.dest))
+end
+function replace_ids(d::IdToIdDict, x::IDEnterNode)
+    return remake_enter(x, get(d, x.catch_id, x.catch_id), s -> get(d, s, s))
 end
 function replace_ids(d::IdToIdDict, x::Switch)
     new_conds = Vector{Any}(undef, length(x.conds))
@@ -510,6 +602,24 @@ function _to_ssas(d::Dict, x::IDPhiNode)
 end
 _to_ssas(d::Dict, x::IDGotoNode) = GotoNode(d[x.label].id)
 _to_ssas(d::Dict, x::IDGotoIfNot) = GotoIfNot(get(d, x.cond, x.cond), d[x.dest].id)
+@static if isdefined(Core, :EnterNode)
+    # `d[x.catch_id].id` is the SSAValue index of the catch block's first statement; it is
+    # mapped to a block number later by `__line_numbers_to_block_numbers!`, exactly as for
+    # the destination of an `IDGotoNode`. A scope-only `enter` (`catch_id === nothing`) maps
+    # back to `catch_dest == 0`.
+    function _to_ssas(d::Dict, x::IDEnterNode)
+        dest = x.catch_id === nothing ? 0 : d[x.catch_id].id
+        return if isdefined(x, :scope)
+            Core.EnterNode(dest, get(d, x.scope, x.scope))
+        else
+            Core.EnterNode(dest)
+        end
+    end
+else
+    function _to_ssas(d::Dict, x::IDEnterNode)
+        return Expr(:enter, x.catch_id === nothing ? 0 : d[x.catch_id].id)
+    end
+end
 
 function _remove_double_edges(ir::BBCode)
     new_blks = map(enumerate(ir.blocks)) do (n, blk)
@@ -607,6 +717,9 @@ end
 function _find_id_uses!(d::Dict{ID,Bool}, x::ReturnNode)
     return isdefined(x, :val) && in(x.val, keys(d)) && setindex!(d, true, x.val)
 end
+function _find_id_uses!(d::Dict{ID,Bool}, x::IDEnterNode)
+    return isdefined(x, :scope) && in(x.scope, keys(d)) && setindex!(d, true, x.scope)
+end
 _find_id_uses!(d::Dict{ID,Bool}, x::QuoteNode) = nothing
 _find_id_uses!(d::Dict{ID,Bool}, x) = nothing
 
@@ -642,6 +755,14 @@ end
 
 function Base.show(io::IO, node::IDGotoNode)
     return print(io, "goto ", _block_str(node.label))
+end
+
+function Base.show(io::IO, node::IDEnterNode)
+    print(
+        io, "enter ", node.catch_id === nothing ? "(no catch)" : _block_str(node.catch_id)
+    )
+    isdefined(node, :scope) && print(io, " (scope ", _val_str(node.scope), ")")
+    return nothing
 end
 
 function Base.show(io::IO, node::IDGotoIfNot)

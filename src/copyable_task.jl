@@ -138,7 +138,8 @@ function generate_ir(stage::Symbol, fargs...; kwargs...)
     seed_id!()
     original_bb = BBCode(original_ir)
     stage == :input_bb && return original_bb
-    transformed_bb, refs, _ = derive_copyable_task_ir(BBCode(original_ir))
+    assert_can_handle_control_flow(original_bb)
+    transformed_bb, refs, _ = derive_copyable_task_ir(original_bb)
     stage == :transformed_bb && return transformed_bb
     topt_bb, refs = eliminate_refs(transformed_bb, refs)
     stage == :optimised_bb && return topt_bb
@@ -184,7 +185,10 @@ function build_callable(sig::Type{<:Tuple})
             ir = ir_results[1][1]
             # Check whether this is a varargs call.
             isva = which(sig).isva
-            bb, refs, types = derive_copyable_task_ir(BBCode(ir))
+            input_bb = BBCode(ir)
+            # Reject `try` / `catch` control flow that we cannot faithfully reproduce.
+            assert_can_handle_control_flow(input_bb)
+            bb, refs, types = derive_copyable_task_ir(input_bb)
             bb, refs = eliminate_refs(bb, refs)
             unoptimised_ir = IRCode(bb)
             @static if VERSION > v"1.12-"
@@ -362,6 +366,25 @@ julia> consume(t)
 
 `Int`s have been used here, but it is permissible to set the value returned by
 [`Libtask.get_taped_globals`](@ref) to anything you like.
+
+## Control flow and `try` / `catch`
+
+Ordinary control flow -- branches, loops, and so on -- is fully supported inside a
+`TapedTask`. `try` / `catch` / `finally` blocks are supported with some restrictions, because
+a `TapedTask` suspends at each [`Libtask.produce`](@ref) and resumes later, whereas the
+exception-handler state set up by a `try` does not survive such a suspension:
+
+  - `try` / `catch` / `finally` is supported on Julia 1.12 and later. On earlier versions a
+    function containing one is rejected with an informative error.
+  - A [`Libtask.produce`](@ref) must not be reachable while an exception handler is active
+    (i.e. inside a `try` body, or inside a `catch` before the block finishes). Such a
+    `produce` is rejected. Capture any value you need inside the block and call
+    [`Libtask.produce`](@ref) *after* it instead.
+  - A `try` / `catch` whose result is a value used after the block (code that lowers to
+    `UpsilonNode` / `PhiCNode` IR nodes) is not yet supported, and is rejected.
+
+In every unsupported case a clear `ArgumentError` is thrown when the `TapedTask` is
+constructed, rather than producing incorrect results.
 
 # Implementation Notes
 

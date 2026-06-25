@@ -5,11 +5,13 @@ Libtask.generate_ir
 Libtask.produce_value
 Libtask.is_produce_stmt
 Libtask.stmt_might_produce
+Libtask.assert_can_handle_control_flow
 Libtask.inc_args
 Libtask.get_type
 Libtask._typeof
 Libtask.replace_captures
 Libtask.BasicBlockCode
+Libtask.BasicBlockCode.IDEnterNode
 Libtask.opaque_closure
 Libtask.misty_closure
 Libtask.optimise_ir!
