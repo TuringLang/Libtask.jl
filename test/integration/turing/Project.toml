@@ -10,4 +10,4 @@ Libtask = {path = "../../../"}
 [compat]
 Libtask = "0.9.17"
 StableRNGs = "1.0.4"
-Turing = "0.45.0"
+Turing = "0.45.0, 0.46"
