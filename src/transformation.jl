@@ -27,19 +27,21 @@ function is_produce_stmt(x)::Bool
 end
 
 """
-    stmt_might_produce(x, ret_type::Type)::Bool
+    stmt_might_produce(x, ret_type::Type; assume_returns::Bool=false)::Bool
 
 `true` if `x` might contain a call to `produce`, and `false` otherwise.
+
+By default, a statement whose inferred return type is `Union{}` is assumed not to produce:
+it terminates by throwing or otherwise cannot return to the caller. `assume_returns=true`
+keeps such calls eligible when checking whether they may suspend before terminating.
 """
-function stmt_might_produce(x, ret_type::Type)::Bool
+function stmt_might_produce(x, ret_type::Type; assume_returns::Bool=false)::Bool
 
-    # Statement will terminate in an unusual fashion, so don't bother recursing.
-    # This isn't _strictly_ correct (there could be a `produce` statement before the
-    # `throw` call is hit), but this seems unlikely to happen in practice. If it does, the
-    # user should get a sensible error message anyway.
-    ret_type == Union{} && return false
+    # The transform need not split after a call that cannot return. Safety analysis still
+    # checks whether it may suspend before terminating.
+    !assume_returns && ret_type == Union{} && return false
 
-    # Statement will terminate in the usual fashion, so _do_ bother recusing.
+    # Statement will terminate in the usual fashion, so _do_ bother recursing.
     is_produce_stmt(x) && return true
     if Meta.isexpr(x, :invoke)
         mi_sig = get_mi(x.args[1]).specTypes
@@ -105,6 +107,7 @@ end
 inc_args(::Nothing) = nothing
 inc_args(x::GlobalRef) = x
 inc_args(x::Core.PiNode) = Core.PiNode(__inc(x.val), __inc(x.typ))
+inc_args(x::IDEnterNode) = remake_enter(x, x.catch_id, __inc)
 
 __inc(x::Argument) = Argument(x.n + 1)
 __inc(x) = x
@@ -146,7 +149,137 @@ function get_type(::TypeInfo, x::Expr)
     return error("Unrecognised expression $x found in argument slot.")
 end
 
+"""
+    assert_can_handle_control_flow(ir::BBCode)
+
+Reject exception or dynamic-scope control flow that a `TapedTask` cannot reproduce.
+
+`produce` must not suspend while a native handler or dynamic-scope frame is active because
+that frame does not survive the return from the underlying closure. Exception edges that
+carry SSA values through `UpsilonNode` / `PhiCNode` are also unsupported.
+"""
+function assert_can_handle_control_flow(ir::BBCode)
+    # Detect exception or dynamic-scope regions and catch-carried SSA values.
+    has_enter = false
+    has_value_carrying = false
+    for blk in ir.blocks, inst in blk.insts
+        stmt = inst.stmt
+        stmt isa IDEnterNode && (has_enter = true)
+        (stmt isa Core.UpsilonNode || stmt isa Core.PhiCNode) && (has_value_carrying = true)
+    end
+
+    # No exception-handling control flow at all (the common case).
+    has_enter || return nothing
+
+    # Before Julia 1.12, later compiler passes may error or crash on these nodes.
+    @static if VERSION < v"1.12-"
+        throw(ArgumentError(_REGION_VERSION_MSG))
+    end
+
+    # The transform does not yet handle SSA values carried into a catch handler.
+    has_value_carrying && throw(ArgumentError(_VALUE_CARRYING_CATCH_MSG))
+
+    # Unsafe case: a `produce` (or a call which might `produce`) which can run while an
+    # exception-handler frame is live cannot be reproduced across a suspend/resume boundary.
+    # Compute, by forward data-flow to a fixed point, the number of handler frames live on
+    # entry to each block, then scan for an offending `produce`.
+    handler_depth_in = _handler_depth_on_entry(ir)
+    for blk in ir.blocks
+        depth = handler_depth_in[blk.id]
+        for inst in blk.insts
+            stmt = inst.stmt
+            if depth > 0 && (
+                is_produce_stmt(stmt) ||
+                stmt_might_produce(stmt, CC.widenconst(inst.type); assume_returns=true)
+            )
+                throw(ArgumentError(_PRODUCE_IN_HANDLER_MSG))
+            end
+            depth = _apply_handler_delta(depth, stmt)
+        end
+    end
+    return nothing
+end
+
+# Change in active exception or dynamic-scope frames caused by `stmt`.
+function _handler_delta(@nospecialize(stmt))
+    stmt isa IDEnterNode && return 1
+    if Meta.isexpr(stmt, :leave)
+        n = if length(stmt.args) == 1 && stmt.args[1] isa Integer
+            Int(stmt.args[1])
+        else
+            count(a -> a !== nothing, stmt.args)
+        end
+        return -n
+    end
+    Meta.isexpr(stmt, :pop_exception) && return -1
+    return 0
+end
+
+_apply_handler_delta(depth::Int, @nospecialize(stmt)) = max(depth + _handler_delta(stmt), 0)
+
+# Forward data-flow for the number of active frames on entry to each block.
+function _handler_depth_on_entry(ir::BBCode)
+    preds = compute_all_predecessors(ir)
+    depth_in = Dict{ID,Int}(blk.id => 0 for blk in ir.blocks)
+    depth_out = Dict{ID,Int}(blk.id => 0 for blk in ir.blocks)
+    changed = true
+    while changed
+        changed = false
+        for blk in ir.blocks
+            new_in = isempty(preds[blk.id]) ? 0 : maximum(p -> depth_out[p], preds[blk.id])
+            d = new_in
+            for inst in blk.insts
+                d = _apply_handler_delta(d, inst.stmt)
+            end
+            if new_in != depth_in[blk.id] || d != depth_out[blk.id]
+                depth_in[blk.id] = new_in
+                depth_out[blk.id] = d
+                changed = true
+            end
+        end
+    end
+    _assert_handler_depths(ir, preds, depth_in, depth_out)
+    return depth_in
+end
+
+function _assert_handler_depths(ir::BBCode, preds, depth_in, depth_out)
+    for blk in ir.blocks
+        incoming = [depth_out[p] for p in preds[blk.id]]
+        @assert isempty(incoming) || all(==(first(incoming)), incoming) "mismatched handler depths"
+
+        depth = depth_in[blk.id]
+        for inst in blk.insts
+            depth += _handler_delta(inst.stmt)
+            @assert depth >= 0 "handler depth underflow"
+        end
+        @assert depth == depth_out[blk.id]
+    end
+    return nothing
+end
+
+const _PRODUCE_IN_HANDLER_MSG = """
+    `TapedTask` does not support `produce` while an exception handler or dynamic scope is \
+    active. This includes `produce` in a `try`, `catch`, or `finally` body and in a \
+    `Base.ScopedValues.@with` body. These frames cannot be restored after `produce` suspends \
+    the task. Move `produce` after the enclosing region, capturing its result first if \
+    necessary. See \
+    https://github.com/TuringLang/Libtask.jl/issues/194 for details."""
+
+const _VALUE_CARRYING_CATCH_MSG = """
+    `TapedTask` does not yet support exception regions that lower to `UpsilonNode` / \
+    `PhiCNode`, which Julia uses to carry SSA values into catch handlers. See \
+    https://github.com/TuringLang/Libtask.jl/issues/194 for details."""
+
+const _REGION_VERSION_MSG = """
+    `TapedTask` only supports exception-handling and dynamically scoped regions on Julia \
+    1.12 or later; the Julia compiler does not reliably handle their IR in the derived task \
+    on earlier versions. Upgrade to Julia 1.12+, or rewrite the function to avoid `try` / \
+    `catch` / `finally` and `Base.ScopedValues.@with`. See \
+    https://github.com/TuringLang/Libtask.jl/issues/194 for details."""
+
 function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
+    assert_can_handle_control_flow(ir)
+
     # The location from which all state can be retrieved. Since we're using `OpaqueClosure`s
     # to implement `TapedTask`s, this appears via the first argument.
     refs_id = Argument(1)
@@ -175,6 +308,11 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
             stmt.stmt isa IDGotoIfNot && continue
             stmt.stmt === nothing && continue
             stmt.stmt isa ReturnNode && continue
+            # The token produced by an `enter` identifies a live exception-handler frame. It
+            # is meaningful only within a single execution of the closure (a `:leave` /
+            # `:pop_exception` consuming it always runs in the same `consume` call), so it is
+            # referenced directly as an SSA rather than round-tripped through a `Ref`.
+            stmt.stmt isa IDEnterNode && continue
             is_used_dict[id] || continue
             n += 1
             ssa_id_to_ref_index_map[id] = n
@@ -191,6 +329,11 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # necessary, but simplifies later stages of the pipeline, as discussed variously below.
     for (n, block) in enumerate(ir.blocks)
         if terminator(block) === nothing
+            # `enter` and `:leave` terminate their blocks with an implicit fallthrough.
+            if !isempty(block.insts) && is_implicit_terminator(block.insts[end].stmt)
+                @assert n < length(ir.blocks) "`enter` / `:leave` in the final basic block"
+                continue
+            end
             # Fall-through terminator, so next block in `ir.blocks` is the unique successor
             # block of `block`. Final block cannot have a fall-through terminator, so asking
             # for element `n + 1` is always going to be valid.
@@ -265,13 +408,21 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
     # 2. Construct a map between the ID of each block and the ID associated to its split.
     top_split_id_map = Dict{ID,ID}(b.id => x[1] for (b, x) in zip(ir.blocks, all_split_ids))
 
-    # 3. Update all `GotoNode`s and `GotoIfNot`s to refer to these new names.
+    # 3. Update branch destinations to refer to the top split of each block.
     for block in ir.blocks
         t = terminator(block)
         if t isa IDGotoNode
             block.insts[end] = new_inst(IDGotoNode(top_split_id_map[t.label]))
         elseif t isa IDGotoIfNot
             block.insts[end] = new_inst(IDGotoIfNot(t.cond, top_split_id_map[t.dest]))
+        end
+        for (i, inst) in enumerate(block.insts)
+            s = inst.stmt
+            s isa IDEnterNode || continue
+            # A scope-only `enter` (`catch_id === nothing`) has no catch edge to relabel.
+            s.catch_id === nothing && continue
+            new_enter = remake_enter(s, top_split_id_map[s.catch_id])
+            block.insts[i] = new_inst(new_enter, inst.type)
         end
     end
 
@@ -483,6 +634,9 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                     # do nothing -- we've already handled any `PhiNode`s.
                 elseif Meta.isexpr(stmt, :loopinfo)
                     push!(inst_pairs, (id, inst))
+                elseif Meta.isexpr(stmt, :pop_exception)
+                    # The matching `enter` executes within this closure invocation.
+                    push!(inst_pairs, (id, inst))
                 else
                     throw(error("Unhandled stmt $stmt of type $(typeof(stmt))"))
                 end
@@ -532,6 +686,22 @@ function derive_copyable_task_ir(ir::BBCode)::Tuple{BBCode,Tuple,Vector{Any}}
                         push!(inst_pairs, (id, inst))
                     end
                 elseif stmt isa IDGotoNode
+                    push!(inst_pairs, (id, inst))
+                elseif stmt isa IDEnterNode
+                    # Restore an SSA-valued scope before entering it.
+                    if isdefined(stmt, :scope) && stmt.scope isa ID
+                        ref_ind = ssa_id_to_ref_index_map[stmt.scope]
+                        scope_id = ID()
+                        expr = Expr(:call, get_ref_at, refs_id, ref_ind)
+                        push!(inst_pairs, (scope_id, new_inst(expr)))
+                        push!(
+                            inst_pairs,
+                            (id, new_inst(IDEnterNode(stmt.catch_id, scope_id))),
+                        )
+                    else
+                        push!(inst_pairs, (id, inst))
+                    end
+                elseif Meta.isexpr(stmt, :leave)
                     push!(inst_pairs, (id, inst))
                 else
                     error("Unexpected terminator $stmt")

@@ -138,7 +138,7 @@ function generate_ir(stage::Symbol, fargs...; kwargs...)
     seed_id!()
     original_bb = BBCode(original_ir)
     stage == :input_bb && return original_bb
-    transformed_bb, refs, _ = derive_copyable_task_ir(BBCode(original_ir))
+    transformed_bb, refs, _ = derive_copyable_task_ir(original_bb)
     stage == :transformed_bb && return transformed_bb
     topt_bb, refs = eliminate_refs(transformed_bb, refs)
     stage == :optimised_bb && return topt_bb
@@ -362,6 +362,23 @@ julia> consume(t)
 
 `Int`s have been used here, but it is permissible to set the value returned by
 [`Libtask.get_taped_globals`](@ref) to anything you like.
+
+## Exception handling and dynamic scopes
+
+Ordinary control flow -- branches, loops, and so on -- is fully supported inside a
+`TapedTask`. Exception handling and `Base.ScopedValues.@with` are supported with some
+restrictions because their runtime state does not survive when [`Libtask.produce`](@ref)
+suspends the task:
+
+  - `try` / `catch` / `finally` and `Base.ScopedValues.@with` are supported on Julia 1.12 and
+    later. A function containing one is rejected on earlier versions.
+  - [`Libtask.produce`](@ref) must not be reachable while an exception handler or dynamic
+    scope is active. Capture the required value within the region and call `produce` after it.
+  - Some catch handlers that read local values lower to `UpsilonNode` / `PhiCNode`. These IR
+    nodes are not yet supported and are rejected.
+
+In every unsupported case a clear `ArgumentError` is thrown when the `TapedTask` is
+constructed, rather than producing incorrect results.
 
 # Implementation Notes
 
