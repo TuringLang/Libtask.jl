@@ -6,13 +6,21 @@ using Test
 # Used later.
 __global_a = 1.0
 
-# Functions exercising `try` / `catch` support (#194). Defined at module scope (rather than
+# Functions exercising exception-region support (#194). Defined at module scope (rather than
 # inside the testset) so they are lowered like ordinary top-level functions -- a nested
 # closure can capture variables in a way that changes the exception IR (e.g. introducing
 # `UpsilonNode` / `PhiCNode`), which would not reflect normal usage.
 @noinline _tc_mayfail() = error("boom")
 @noinline _tc_maybe(i) = i == 999 ? error("x") : i
 @noinline _tc_risky(y) = y > 0 ? y * 2 : error("neg")
+const TC_FINALLY_EVENTS = Symbol[]
+@noinline _tc_record_cleanup() = push!(TC_FINALLY_EVENTS, :cleanup)
+
+@noinline function _tc_produce_then_throw()
+    produce(1)
+    return error("boom")
+end
+Libtask.@might_produce _tc_produce_then_throw
 
 # produce outside the handler extent -- supported on 1.12+.
 function tc_safe()
@@ -22,17 +30,6 @@ function tc_safe()
     catch
     end
     produce(3)
-    return nothing
-end
-# the exception is genuinely caught (else `_tc_mayfail` would escape the task).
-function tc_caught()
-    ok = false
-    try
-        _tc_mayfail()
-    catch
-        ok = true
-    end
-    produce(ok)
     return nothing
 end
 # try/catch inside a producing loop: exercises a `:leave` (normal try exit) followed by a
@@ -49,8 +46,7 @@ function tc_loop()
     end
     return nothing
 end
-# a value defined in the try/catch and consumed afterwards which lowers to a plain `PhiNode`
-# (not `PhiCNode`): supported, unlike the `UpsilonNode` / `PhiCNode` case.
+# Values selected after normal and caught paths use an ordinary `PhiNode` and are supported.
 function tc_phi(y)
     local x
     try
@@ -59,6 +55,29 @@ function tc_phi(y)
         x = -1.0
     end
     produce(x + 1)
+    return nothing
+end
+function tc_finally(should_throw)
+    try
+        should_throw && _tc_mayfail()
+    finally
+        _tc_record_cleanup()
+    end
+    produce(4)
+    return nothing
+end
+function tc_nested_rethrow()
+    caught = false
+    try
+        try
+            _tc_mayfail()
+        catch
+            rethrow()
+        end
+    catch
+        caught = true
+    end
+    produce(caught)
     return nothing
 end
 # unsafe: produce inside the try body (the issue's MWE).
@@ -71,6 +90,14 @@ function tc_in_try()
     end
     return nothing
 end
+# unsafe: an annotated nested call can produce and then throw inside the try body.
+function tc_indirect_in_try()
+    try
+        _tc_produce_then_throw()
+    catch
+    end
+    return nothing
+end
 # unsafe: produce inside the catch.
 function tc_in_catch()
     try
@@ -80,9 +107,16 @@ function tc_in_catch()
     end
     return nothing
 end
-# not yet supported: a value defined in the try/catch and used afterwards lowers to
-# `UpsilonNode` / `PhiCNode`.
-function tc_value(x)
+function tc_in_finally(i)
+    try
+        _tc_maybe(i)
+    finally
+        produce(2)
+    end
+    return nothing
+end
+# Reading `x` in the catch carries it across the exceptional edge via Upsilon/PhiC nodes.
+function tc_phic(x)
     y = 0.0
     try
         x > 0 && error("b")
@@ -94,17 +128,13 @@ function tc_value(x)
     return nothing
 end
 
-# A `try` / `catch` inside a `Base.ScopedValues.@with` body produces a scope-only `enter`
-# (`Core.EnterNode` with `catch_dest == 0`); this must not crash IR construction (#194).
+# `Base.ScopedValues.@with` produces a scope-only `enter` (`Core.EnterNode` with
+# `catch_dest == 0`); this must not crash IR construction (#194).
 @static if isdefined(Base, :ScopedValues)
     const TC_SCOPED = Base.ScopedValues.ScopedValue(10)
-    # produce AFTER the scope block -- supported on 1.12+.
     function tc_with_after()
         Base.ScopedValues.@with TC_SCOPED => 5 begin
-            try
-                _tc_mayfail()
-            catch
-            end
+            _tc_maybe(1)
         end
         produce(TC_SCOPED[])
         return nothing
@@ -307,14 +337,7 @@ end
         end
     end
 
-    # try / catch / finally support (#194). The supported ("safe") subset is any try / catch
-    # whose handler is set up and torn down within a single `consume` -- i.e. no `produce`
-    # suspends while a handler is active. Cases where a `produce` could suspend inside a
-    # handler, or where the block feeds a value into later code (UpsilonNode / PhiCNode), are
-    # rejected with an informative error rather than miscompiled. Support requires the Julia
-    # 1.12+ compiler to handle exception-handling IR in the derived task; on earlier versions
-    # any `try` / `catch` that survives into the IR is rejected with a clear message.
-    @testset "try/catch (#194)" begin
+    @testset "exception regions (#194)" begin
         @static if VERSION >= v"1.12-"
             # Safe cases run through the `Testcase` driver, which also copies the task after
             # every iteration and checks each copy resumes to the same remaining results --
@@ -325,14 +348,6 @@ end
                 (tc_safe,),
                 nothing,
                 [0, 3],
-                Libtask.TestUtils.none,
-            )()
-            Libtask.TestUtils.Testcase(
-                "trycatch: exception is genuinely caught",
-                nothing,
-                (tc_caught,),
-                nothing,
-                [true],
                 Libtask.TestUtils.none,
             )()
             Libtask.TestUtils.Testcase(
@@ -359,24 +374,55 @@ end
                 [9.0],
                 Libtask.TestUtils.none,
             )()
+            Libtask.TestUtils.Testcase(
+                "trycatch: nested catch and rethrow",
+                nothing,
+                (tc_nested_rethrow,),
+                nothing,
+                [true],
+                Libtask.TestUtils.none,
+            )()
+
+            @testset "finally runs on normal and exceptional exits" begin
+                empty!(TC_FINALLY_EVENTS)
+                @test collect(TapedTask(nothing, tc_finally, false)) == [4]
+                @test TC_FINALLY_EVENTS == [:cleanup]
+
+                empty!(TC_FINALLY_EVENTS)
+                task = TapedTask(nothing, tc_finally, true)
+                @test_throws ErrorException collect(task)
+                @test TC_FINALLY_EVENTS == [:cleanup]
+            end
 
             @testset "unsafe: produce inside try body (issue MWE)" begin
                 @test_throws ArgumentError TapedTask(nothing, tc_in_try)
-                @test_throws "does not support a `produce` inside" TapedTask(
+                @test_throws "does not support `produce` while" TapedTask(
                     nothing, tc_in_try
                 )
             end
 
             @testset "unsafe: produce inside catch" begin
                 @test_throws ArgumentError TapedTask(nothing, tc_in_catch)
-                @test_throws "does not support a `produce` inside" TapedTask(
+                @test_throws "does not support `produce` while" TapedTask(
                     nothing, tc_in_catch
                 )
             end
 
-            @testset "not yet supported: value-carrying catch" begin
-                @test_throws ArgumentError TapedTask(nothing, tc_value, 1.0)
-                @test_throws "does not yet support" TapedTask(nothing, tc_value, 1.0)
+            @testset "unsafe: produce inside finally" begin
+                @test_throws "does not support `produce` while" TapedTask(
+                    nothing, tc_in_finally, 1
+                )
+            end
+
+            @testset "unsafe: annotated producing call inside try" begin
+                @test_throws "does not support `produce` while" TapedTask(
+                    nothing, tc_indirect_in_try
+                )
+            end
+
+            @testset "unsupported: SSA value carried into catch" begin
+                @test_throws ArgumentError TapedTask(nothing, tc_phic, 1.0)
+                @test_throws "carry SSA values into catch" TapedTask(nothing, tc_phic, 1.0)
             end
 
             @static if isdefined(Base, :ScopedValues)
@@ -385,27 +431,20 @@ end
                     @test collect(TapedTask(nothing, tc_with_after)) == [10]
                 end
                 @testset "scope-only enter (@with): produce inside scope is unsafe" begin
-                    @test_throws "does not support a `produce` inside" TapedTask(
+                    @test_throws "does not support `produce` while" TapedTask(
                         nothing, tc_with_inside
                     )
                 end
             end
         else
-            @testset "try/catch rejected before Julia 1.12" begin
-                for f in (tc_safe, tc_caught, tc_loop, tc_in_try, tc_in_catch)
-                    @test_throws ArgumentError TapedTask(nothing, f)
-                    @test_throws "only supports functions containing `try`" TapedTask(
-                        nothing, f
-                    )
-                end
-                @test_throws ArgumentError TapedTask(nothing, tc_value, 1.0)
-                @test_throws "only supports functions containing `try`" TapedTask(
-                    nothing, tc_value, 1.0
+            @testset "exception regions rejected before Julia 1.12" begin
+                @test_throws ArgumentError TapedTask(nothing, tc_safe)
+                @test_throws "only supports exception-handling" TapedTask(nothing, tc_safe)
+                @test_throws "only supports exception-handling" TapedTask(
+                    nothing, tc_finally, false
                 )
-                # A scope-only `enter` from `@with` must give the clean version error here,
-                # not crash IR construction with a `KeyError` (#194).
                 @static if isdefined(Base, :ScopedValues)
-                    @test_throws "only supports functions containing `try`" TapedTask(
+                    @test_throws "only supports exception-handling" TapedTask(
                         nothing, tc_with_after
                     )
                 end

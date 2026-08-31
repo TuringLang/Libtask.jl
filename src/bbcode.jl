@@ -29,6 +29,7 @@ export ID,
     BBlock,
     phi_nodes,
     terminator,
+    is_implicit_terminator,
     insert_before_terminator!,
     collect_stmts,
     compute_all_predecessors,
@@ -92,18 +93,8 @@ Base.copy(node::IDGotoIfNot) = IDGotoIfNot(copy(node.cond), copy(node.dest))
 """
     IDEnterNode
 
-The `ID`-based analogue of the IR node which marks the start of a `try` block. It plays the
-same role for exception-handling control flow that `IDGotoNode` plays for
-unconditional branches: `catch_id` refers to the catch block by its `ID`, so that the
-reference survives block splitting / re-ordering during the IR transformation. `catch_id` is
-`nothing` for a scope-only `enter` that has no catch block (`Core.EnterNode` with
-`catch_dest == 0`, e.g. the dynamic-scope `enter` emitted by `Base.ScopedValues.@with`).
-
-This is the single representation used throughout `BBCode`, regardless of Julia version: it
-is produced from a `Core.EnterNode` on Julia versions where that type exists (1.11+) and
-from an `Expr(:enter, ...)` on Julia 1.10, and converted back to the version-appropriate
-node when lowering to `IRCode`. The optional `scope` field mirrors `Core.EnterNode`'s
-optional `scope`.
+Represent an exception or dynamic-scope `enter` using stable block IDs. `catch_id` is
+`nothing` for a scope-only `enter`; the optional `scope` field mirrors `Core.EnterNode`.
 """
 struct IDEnterNode
     catch_id::Union{ID,Nothing}
@@ -112,14 +103,6 @@ struct IDEnterNode
     IDEnterNode(catch_id::Union{ID,Nothing}, @nospecialize(scope)) = new(catch_id, scope)
 end
 
-"""
-    remake_enter(node::IDEnterNode, catch_id, scope_map=identity)
-
-Rebuild `node` with catch block `catch_id`, mapping its `scope` (if present) through
-`scope_map`. Centralises the optional-`scope` handling that the transformations of an
-`IDEnterNode` (`copy`, `replace_ids`, `inc_args`, catch-edge relabelling) would otherwise
-each repeat.
-"""
 function remake_enter(node::IDEnterNode, catch_id::Union{ID,Nothing}, scope_map=identity)
     return if isdefined(node, :scope)
         IDEnterNode(catch_id, scope_map(node.scope))
@@ -142,12 +125,19 @@ end
 
 const Terminator = Union{Switch,IDGotoIfNot,IDGotoNode,ReturnNode}
 
+is_implicit_terminator(x) = x isa IDEnterNode || Meta.isexpr(x, :leave)
+
 mutable struct BBlock
     id::ID
     inst_ids::Vector{ID}
     insts::InstVector
     function BBlock(id::ID, inst_ids::Vector{ID}, insts::InstVector)
         @assert length(inst_ids) == length(insts)
+        if length(insts) > 1
+            @assert all(
+                inst -> !is_implicit_terminator(inst.stmt), @view(insts[begin:(end - 1)])
+            ) "`enter` and `:leave` must terminate their basic block"
+        end
         return new(id, inst_ids, insts)
     end
 end
@@ -247,21 +237,16 @@ compute_all_successors(ir::BBCode)::Dict{ID,Vector{ID}} = _compute_all_successor
         else
             error("Unhandled terminator $t")
         end
-        # A block containing an `IDEnterNode` has an extra (exception) edge to its catch
-        # block, in addition to whatever its terminator dictates. Unlike a terminator, the
-        # `enter` may sit anywhere in the block, so we scan for it explicitly.
+        # `enter` has a catch edge in addition to its implicit fallthrough.
         return _append_catch_edge(normal_succs, blk)
     end
     return Dict{ID,Vector{ID}}((b.id, succ) for (b, succ) in zip(blks, succs))
 end
 
 function _append_catch_edge(succs::Vector{ID}, blk::BBlock)
-    for inst in blk.insts
-        if inst.stmt isa IDEnterNode
-            catch_id = inst.stmt.catch_id
-            # A scope-only `enter` (`catch_id === nothing`) has no catch block, hence no edge.
-            catch_id isa ID && !in(catch_id, succs) && push!(succs, catch_id)
-        end
+    enter = blk.insts[end].stmt
+    if enter isa IDEnterNode && enter.catch_id isa ID && !in(enter.catch_id, succs)
+        push!(succs, enter.catch_id)
     end
     return succs
 end
