@@ -41,7 +41,7 @@ function stmt_might_produce(x, ret_type::Type; assume_returns::Bool=false)::Bool
     # checks whether it may suspend before terminating.
     !assume_returns && ret_type == Union{} && return false
 
-    # Statement will terminate in the usual fashion, so _do_ bother recusing.
+    # Statement will terminate in the usual fashion, so _do_ bother recursing.
     is_produce_stmt(x) && return true
     if Meta.isexpr(x, :invoke)
         mi_sig = get_mi(x.args[1]).specTypes
